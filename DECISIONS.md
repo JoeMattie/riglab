@@ -214,3 +214,73 @@ no-op.)
 - Spike-harness settle criterion is 1e-6 m/step (engines never quiesce below
   ~1e-7); correctness is asserted on positions/forces, not on the settle
   criterion.
+
+## Phase 2 — forces (UI)
+
+_This heading is kept separate from the solver agent's Phase 2 notes to ease
+merging the two worktrees._
+
+### Element rendering vocabulary (wireframe-simple, §8.1)
+
+- **rope**: thin (1.5 px) grey dashed polyline through its path nodes; interior
+  path nodes are eyelets. **elastic**: green triangle-wave "coil" hint between
+  its two ends (amplitude in screen px so it stays legible at any zoom).
+  **bowden**: two dash-dot purple segments (the two coupled node-pairs) plus a
+  faint dotted tie between their midpoints to signal they are coupled but
+  routing-independent. **torsionCable**: magenta dotted line between the two
+  coupled pivots' nodes. A cord highlights red when selected-violated or (rope)
+  required to carry compression.
+
+### Force labels anchor at the element, gated behind an explicit toggle
+
+- The sketch face hides forces (§8.1), so all force UI is behind the bottom-bar
+  **Equilibrium (forces)** toggle. When on, `solve(mechanism, inputs,
+  'equilibrium')` runs on edit/scrub (not per drag frame — labels refresh on
+  release) and readouts render as small Konva labels near each rope/elastic/
+  bowden (elastic/rope at path midpoint, bowden at segment-A midpoint), with a
+  white halo for legibility. Forces are drawn at the current sketch/pose
+  positions, **not** re-rendered into the settled equilibrium pose — full
+  design-face force treatment is Phase 3; this keeps Phase 2 minimal.
+- Units follow the project preference: newtons always, plus lbf when imperial
+  (§5.2 "N and lbf"); required-input is torque (N·m) for angle channels.
+
+### Solver status + `unavailable` degradation
+
+- Bottom-bar status shows converged / settling / non-converged (§8.3). A fourth
+  `unavailable` status is shown when `solve('equilibrium')` throws — this
+  worktree's solver equilibrium mode lands in a parallel branch, so the UI
+  degrades gracefully (`readEquilibrium` catches and returns empty forces)
+  instead of crashing. Once merged, real data drives the same code path.
+
+### Input channels: a minimal generic authoring affordance
+
+- Phase 2 requires input-channel sliders with lock toggles (§8.3, §11). Nothing
+  created channels yet (channel→driven-node geometry is deferred to the example
+  phase, per the Phase 1 note). To make the required slider/lock/required-force
+  UI usable and testable, a minimal **+ input** button adds a generic
+  displacement channel (name, range, value, lock); binding a channel to
+  geometry remains deferred. Channel values are passed to `solve()` for both
+  modes. Value-slider drags bracket one undo entry via begin/endGesture (the
+  DECISIONS drag-gesture convention); single-commit tools (rope/elastic/bowden/
+  torsion draws, add/lock/remove channel, gravity) are one `updateCurrent` =
+  one undo entry, matching the pipe tool.
+
+### Rope finish vs Konva's time-based double-click (interaction bug fixed)
+
+- Konva's `dblclick` is purely time-based (any two clicks within its ~400 ms
+  window, regardless of position), so rapid sequential rope-waypoint clicks each
+  fired `onDblClick` and prematurely committed/reset the draft — interior
+  waypoints were lost. Fix: rope finishes only when the last two clicks are
+  **coincident** (a genuine same-spot double-click); a time-based dblclick
+  between two distinct waypoints is ignored and drafting continues. (The Phase 1
+  polyline tool finishes the same way and likely shares this latent bug; left
+  untouched as out-of-scope, flagged here.)
+
+### Test seam
+
+- `window.__riglab.setEquilibrium(readout)` (alongside the existing debug hook)
+  lets the Playwright forces spec exercise the force-overlay plumbing with a
+  mocked readout while the real equilibrium solver is unavailable in this
+  worktree. UI logic is otherwise unit-tested with mocked `SolveResult` values
+  (`forces.test.ts`) since no React testing-library dependency is available and
+  none may be added.
