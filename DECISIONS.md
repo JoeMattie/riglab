@@ -214,3 +214,133 @@ no-op.)
 - Spike-harness settle criterion is 1e-6 m/step (engines never quiesce below
   ~1e-7); correctness is asserted on positions/forces, not on the settle
   criterion.
+
+## Phase 2 — forces
+
+Static equilibrium mode + force extraction now live behind the same
+`solve(mechanism, inputs, 'equilibrium')` interface. Implementation in
+`src/solver/equilibrium.ts`; acceptance/unit tests in
+`src/solver/acceptance/{hangingMass,forces}.acceptance.test.ts`.
+
+### Equilibrium settle (§5.1 mode 2)
+
+Pseudo-dynamic relaxation: each step applies gravity + spring forces to the
+free particles' velocities, integrates, projects the rigid constraints
+(Gauss–Seidel, constraints in id order), then recomputes velocity from the
+position change and multiplies by the damping factor. Runs until the fastest
+particle drops below ε or the step cap. Fixed constants (all chosen for a
+stable, deterministic settle, not tuned per-scenario): `DT = 0.01 s`,
+`DAMPING = 0.85/step` (planfile's suggested value), `ITERS = 40`,
+`MAX_STEPS = 6000`, `SETTLE_SPEED_EPS = 1e-6 m/s`, `RESIDUAL_TOL = 1e-4 m`
+(a rigid constraint above this at the settled pose ⇒ not `converged`). The
+equilibrium pose is Δt-independent (it is a force balance), so `DT` only sets
+the convergence rate.
+
+**Constraint-only warm start.** Before the dynamic phase the solver runs
+`WARM_ITERS = 200` pure position-projection iterations (no gravity, no
+velocity). This propagates driven-input steps and any drawn rigid-constraint
+violation onto the constraint manifold *without* the velocity ringing a hard
+step would otherwise inject — the ringing was sending a torsion-cable output
+clear across its backlash dead-zone to clamp on the wrong edge. Gauss–Seidel
+projection approaches each coupling's near boundary monotonically, so the warm
+start lands on the physically correct side.
+
+### [deviation] Springs modelled as explicit forces, not compliant constraints
+
+§5.1 describes two things: elements as "constraints with compliance α (0 for
+rigid, 1/k for springs)" **and** mode 2 as "integrate under gravity + spring
+forces." I implement elastics and pivot torsion springs as explicit **forces**
+(velocity impulses each step), reacted by the rigid XPBD projection — not as
+compliant position constraints. Reason: a compliant spring in an
+un-substepped relaxation is very soft and creeps so slowly the relaxation can
+quiesce (`maxSpeed < ε`) before reaching equilibrium, giving a wrong pose; as
+a force the spring injects real velocity and the settle is well-behaved. This
+also makes force read-out work for gravity-free coupling mechanisms (the load
+on a torsion cable is its return spring, not gravity). Flagged as a deviation
+from the literal "compliance for springs" phrasing, though consistent with the
+"+ spring forces" phrasing in the same section.
+
+### Force extraction (§5.2)
+
+Forces are read from the XPBD Lagrange multipliers via **one loaded
+measurement substep** from the settled pose (`force = λ/Δt²` per unit
+gradient): at equilibrium the present gravity + spring loads are exactly what
+the rigid constraints react, so their λ is the static force. Reported:
+element axial tensions (links, telescopes, taut ropes — tension positive),
+elastic force (`k·(len−rest_eff)` from geometry, clamped ≥0 when tension-only),
+bowden cable tension, torsion-cable transmitted torque, and torsion-spring
+moment — all keyed by element id in `forces.elements` (unit is N for linear
+elements, N·m for the rotational ones). **Pivot reaction** =
+−(net constraint force on the pivot node). **Required input** per driven
+channel = the holding force/torque the operator must supply to keep the driven
+node at its prescribed value (net constraint force + gravity on the held node,
+projected onto the channel's drive DOF — a force for `displacement`, a moment
+about the rail pivot for `angle`). Massless free nodes take unit
+inverse-mass for conditioning but **zero** gravity, so keel/geometry-only
+nodes never corrupt a reaction (the lever settles to a 3·g reaction exactly).
+
+### [deviation] Rope-compression diagnostic uses the as-drawn pose
+
+`diagnostics.ropesRequiringCompression` cannot come from the free
+tension-only settle: a tension-only rope is always either slack (0 tension) or
+taut (≥0 tension), so the settle *by construction* never shows compression —
+it just collapses into a different pose. "The design relies on a rope pushing"
+is therefore evaluated against the **as-drawn pose**: a least-squares nodal
+static force balance over the two-force members (links, telescopes, and ropes
+drawn taut, i.e. path length ≥ L0), with gravity + elastic loads as the
+right-hand side. A taut rope whose axial force comes out compressive (< −1e-3 N)
+is flagged; a rope drawn slack carries nothing and is never flagged (this is
+what keeps the hanging-mass-on-a-rigid-rod case clean). Deviation noted because
+the planfile implies the flag falls out of "the solution"; in a pure static
+tool it has to be computed against the intended (drawn) geometry. **Open
+question for review below.**
+
+### Driven-node input channels (deferred from Phase 1 — semantics chosen here)
+
+A `driven` node is a **prescribed particle**, held (inverse mass 0) at a
+position computed from its channel value, in *both* solve modes (drag and
+settle share one `drivenTargets()` helper, so a channel drives identical
+geometry either way). The value maps to a position through a reference frame:
+the lowest-id `link`/`telescope` incident to the node gives a rail — its far
+endpoint is the pivot (for `angle`) / axis origin (for `displacement`);
+failing that, the lowest-id anchor node; failing that, world +x through the
+drawn point.
+- `angle` channel: the node is rotated about the pivot by `value` radians from
+  its drawn position (0 ⇒ drawn pose). Models the steer-handle joint.
+- `displacement` channel: the node slides along the rail axis by `value`
+  metres from drawn. Models the jaw trigger / linear actuator.
+A **locked** channel ignores `inputs.channelValues` and holds its stored
+`value` (the set-screw / jaw-lock analogue, §4.2); an unlocked channel takes
+the override for its name, else its stored value. **Open question for review
+below** (the schema does not carry an explicit drive axis/pivot, so the "rail"
+convention is my choice).
+
+### [deviation] `SolveInputs.linkDensityKgPerM` added (backward-compatible)
+
+Link self-weight is `developed length × linear density`, half to each
+endpoint (§5.1). The materials DB (which holds the generic-pipe default
+density) lives in the `Project`, outside the pure `solve()` interface, so the
+caller passes the configured generic density as a new **optional** field on
+`SolveInputs`. Omitted ⇒ links carry no self-weight and all mass comes from
+explicit point masses — which is what keeps the §11 analytic values exact (a
+massless-armed lever reacts exactly 3·g). This is an additive, non-breaking
+extension of the frozen interface (the `SolveForces`/`SolveDiagnostics` output
+shapes are untouched); kinematic mode ignores it. Per-material (engineered)
+densities need the full DB and are deferred to the Phase 3 materials
+integration.
+
+### Open questions for the Phase 2 solver-correctness review
+
+1. **Rope-compression semantics** — is "as-drawn static force balance"
+   (above) the intended meaning of `ropesRequiringCompression`, or should it
+   be evaluated at a driven/held pose, or against the free-settle collapse?
+2. **Driven-node drive frame** — is the "lowest-id incident link ⇒ rail,
+   else lowest-id anchor" convention acceptable, or should the schema gain an
+   explicit drive axis/pivot per driven node (schema change, would bump to v3)?
+3. **Springs-as-forces** — confirm the deviation from compliant-constraint
+   springs is acceptable (it is what makes the relaxation converge without
+   substepping).
+4. **Backlash under an unloaded output** is indeterminate within the dead
+   band; the torsion acceptance test loads the output with a light return
+   spring so it resolves to the physical trailing edge. Confirm this is the
+   intended modelling of backlash.

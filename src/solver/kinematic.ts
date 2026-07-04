@@ -7,6 +7,7 @@
 // Determinism: fixed iteration count, constraints sorted by element id,
 // drags sorted by node id, no randomness (§12).
 import type { Mechanism, Vec2 } from '../schema';
+import { drivenTargets } from './equilibrium';
 import type { SolveInputs, SolveResult } from './types';
 
 const ITERATIONS = 300;
@@ -247,11 +248,16 @@ function adjacentNodeId(
 }
 
 export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): SolveResult {
+  // driven nodes are prescribed by their input channel (§4.2) and held fixed
+  // there, exactly like equilibrium mode — so a channel drives the same
+  // geometry in drag and settle. No driven nodes ⇒ this is empty and inert.
+  const driven = drivenTargets(mechanism, inputs);
   const particles = new Map<string, P>(
-    mechanism.nodes.map((n) => [
-      n.id,
-      { id: n.id, x: n.position.x, y: n.position.y, w: n.kind === 'anchor' ? 0 : 1 },
-    ]),
+    mechanism.nodes.map((n) => {
+      const target = n.kind === 'driven' ? driven[n.id] : undefined;
+      const p = target ?? n.position;
+      return [n.id, { id: n.id, x: p.x, y: p.y, w: n.kind === 'anchor' || n.kind === 'driven' ? 0 : 1 }];
+    }),
   );
   const pos = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const get = (id: string): P => {
@@ -260,7 +266,7 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     return p;
   };
   const elementById = new Map(mechanism.elements.map((e) => [e.id, e]));
-  const free = new Set(mechanism.nodes.filter((n) => n.kind !== 'anchor').map((n) => n.id));
+  const free = new Set(mechanism.nodes.filter((n) => n.kind === 'free').map((n) => n.id));
   // an equality only reduces mobility if it touches at least one free node
   const mob = (...ids: string[]): 0 | 1 => (ids.some((id) => free.has(id)) ? 1 : 0);
 

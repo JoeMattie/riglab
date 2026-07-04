@@ -1,9 +1,7 @@
 // Phase 2 acceptance (§11a): a hanging mass on a tension-only rope reports
 // tension = m·g ± 2%, and a slack rope reports ~zero tension, never
-// compression.
-//
-// SKIP-MARKED until Phase 2 implements equilibrium mode + force extraction
-// (DECISIONS.md convention). UNSKIP at the START of Phase 2.
+// compression. Un-skipped at the start of Phase 2 (equilibrium mode +
+// force extraction now implemented).
 import { describe, expect, it } from 'vitest';
 import type { Mechanism } from '../../schema';
 import { solve } from '..';
@@ -37,7 +35,7 @@ export function hangingMassMechanism(): Mechanism {
   };
 }
 
-describe.skip('ACCEPTANCE Phase 2 — hanging mass on a rope', () => {
+describe('ACCEPTANCE Phase 2 — hanging mass on a rope', () => {
   it('settles with the rope taut and tension = m·g ±2%', () => {
     const result = solve(hangingMassMechanism(), { channelValues: {} }, 'equilibrium');
     expect(result.diagnostics.converged).toBe(true);

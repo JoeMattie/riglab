@@ -12,6 +12,12 @@ export interface SolveInputs {
   channelValues: Record<string, number>;
   /** transient drag targets keyed by node id (kinematic drag, §5.1) */
   dragTargets?: Record<string, Vec2>;
+  /** Generic-pipe linear density (kg/m) used for sketch-maturity link
+   * self-weight in equilibrium mode (§4.2, §5.1). The materials DB lives in
+   * the Project (outside this pure interface), so the caller passes the
+   * configured generic default here; omitted ⇒ links carry no self-weight and
+   * mass comes only from explicit point masses. Ignored in kinematic mode. */
+  linkDensityKgPerM?: number;
 }
 
 export interface SolveForces {
