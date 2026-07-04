@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { assemblySchema, emptyAssembly } from './assembly';
 import { idSchema, unitsPreferenceSchema, vec3Schema, wearerAnchorSchema } from './common';
-import { emptyMaterialsDb, materialsDbSchema } from './materials';
+import { materialsDbSchema } from './materials';
 import { mechanismSchema } from './mechanism';
+import { seedMaterialsDb } from './seedMaterials';
 
 export const SCHEMA_VERSION = 3;
 
@@ -66,7 +67,8 @@ export function createEmptyProject(id: string, name: string): Project {
     id,
     name,
     unitsPreference: 'imperial',
-    materials: emptyMaterialsDb(),
+    // Each project owns its complete materials DB, seeded on creation (§6.1).
+    materials: seedMaterialsDb(),
     mechanisms: [],
     assembly: emptyAssembly(),
     wearer: { ...DEFAULT_WEARER },
