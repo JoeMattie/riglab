@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
 import { useAppStore } from '../state/appStore';
-import { useEditorStore } from '../state/editorStore';
+import { type Face, useEditorStore } from '../state/editorStore';
 import { Badge } from './components/badge';
 import { Button } from './components/button';
+import { ToggleGroup, ToggleGroupItem } from './components/toggle-group';
 import { ConnectMenu } from './editor/ConnectMenu';
 import { ForcesPanel } from './editor/ForcesPanel';
 import { MechanismTabs } from './editor/MechanismTabs';
@@ -20,6 +21,8 @@ export function EditorShell() {
   const redo = useAppStore((s) => s.redo);
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
+  const face = useEditorStore((s) => s.face);
+  const setFace = useEditorStore((s) => s.setFace);
 
   // keep an active mechanism selected whenever one exists
   useEffect(() => {
@@ -52,7 +55,13 @@ export function EditorShell() {
     hook.getDoc = () => useAppStore.getState().current;
     hook.getEditor = () => {
       const s = useEditorStore.getState();
-      return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
+      return {
+        activeMechanismId: s.activeMechanismId,
+        dof: s.dof,
+        tool: s.tool,
+        face: s.face,
+        selectedElementIds: s.selectedElementIds,
+      };
     };
     // seam for exercising the equilibrium force-overlay plumbing while the
     // solver's equilibrium mode lands in a parallel branch (§5.2)
@@ -108,6 +117,23 @@ export function EditorShell() {
         <button type="button" data-testid="redo" onClick={redo} title="Ctrl/Cmd+Shift+Z">
           ↷ redo
         </button>
+        {/* Sketch/Design face toggle (§8): two lenses on one document —
+            switching never destroys data */}
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={face}
+          onValueChange={(v) => v && setFace(v as Face)}
+          data-testid="face-toggle"
+        >
+          <ToggleGroupItem value="sketch" data-testid="face-sketch">
+            Sketch
+          </ToggleGroupItem>
+          <ToggleGroupItem value="design" data-testid="face-design">
+            Design
+          </ToggleGroupItem>
+        </ToggleGroup>
         <span style={{ flex: 1 }} />
         <Button
           type="button"

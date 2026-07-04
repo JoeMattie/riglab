@@ -107,8 +107,10 @@ export function SketchCanvas() {
   const endGesture = useAppStore((s) => s.endGesture);
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const tool = useEditorStore((s) => s.tool);
-  const selectedElementId = useEditorStore((s) => s.selectedElementId);
+  const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const select = useEditorStore((s) => s.select);
+  const toggleSelect = useEditorStore((s) => s.toggleSelect);
+  const clearSelection = useEditorStore((s) => s.clearSelection);
   const posePositions = useEditorStore((s) => s.posePositions);
   const setPosePositions = useEditorStore((s) => s.setPosePositions);
   const playback = useEditorStore((s) => s.playback);
@@ -143,11 +145,22 @@ export function SketchCanvas() {
   const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap } | null>(null);
   const [torsionA, setTorsionA] = useState<{ pivotId: string; nodeId: string } | null>(null);
   const panRef = useRef<{ x: number; y: number } | null>(null);
+  /** where the last mousedown landed, to tell a click from a drag/pan */
+  const mouseDownScreenRef = useRef<Vec2 | null>(null);
 
   const pivotAtNode = useCallback(
     (nodeId: string) =>
       mech?.elements.find((e) => e.type === 'pivot' && e.nodeId === nodeId)?.id ?? null,
     [mech],
+  );
+
+  // shift/cmd-click toggles membership in the selection; plain click replaces
+  const clickSelect = useCallback(
+    (elementId: string, evt: MouseEvent) => {
+      if (evt.shiftKey || evt.metaKey || evt.ctrlKey) toggleSelect(elementId);
+      else select(elementId);
+    },
+    [select, toggleSelect],
   );
 
   const resetForceDrafts = useCallback(() => {
@@ -354,6 +367,7 @@ export function SketchCanvas() {
   const onMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
     if (!screen || !mech) return;
+    mouseDownScreenRef.current = screen;
     const snap = snapAt(screen);
 
     if (tool === 'select') {
@@ -479,8 +493,19 @@ export function SketchCanvas() {
     if (!screen || !mech) return;
 
     if (tool === 'select' && dragNode) {
+      const start = mouseDownScreenRef.current;
+      const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
+      const nodeId = dragNode;
       setDragNode(null);
       endGesture();
+      // a stationary click on a node selects the joint element living there —
+      // pivots/sliders have no stroke of their own to click on the canvas
+      if (movedPx < 4) {
+        const joint = mech.elements.find(
+          (el) => (el.type === 'pivot' || el.type === 'slider') && el.nodeId === nodeId,
+        );
+        if (joint) clickSelect(joint.id, e.evt);
+      }
       return;
     }
     if ((tool === 'elastic' || tool === 'bowden') && dragCord) {
@@ -518,6 +543,17 @@ export function SketchCanvas() {
       }
       finishPipe(draft, endSnap, screen);
     }
+  };
+
+  // a stationary click on empty canvas (the Stage itself, not a shape) clears
+  // the selection; modifier-clicks keep it so shift-click accumulation works
+  const onStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (tool !== 'select' || e.target !== e.target.getStage()) return;
+    if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey) return;
+    const screen = stagePointer(e);
+    const start = mouseDownScreenRef.current;
+    if (!screen || !start || Math.hypot(screen.x - start.x, screen.y - start.y) >= 4) return;
+    clearSelection();
   };
 
   const onDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -589,16 +625,30 @@ export function SketchCanvas() {
         setPendingConnect(null);
         resetForceDrafts();
       }
-      if ((ev.key === 'Delete' || ev.key === 'Backspace') && selectedElementId && mech) {
+      if (
+        (ev.key === 'Delete' || ev.key === 'Backspace') &&
+        selectedElementIds.length > 0 &&
+        mech
+      ) {
         const target = ev.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-        updateCurrent((cur) => deleteElement(cur, mech.id, selectedElementId));
-        select(null);
+        // one updateCurrent = one undo entry for the whole selection
+        updateCurrent((cur) =>
+          selectedElementIds.reduce((d, id) => deleteElement(d, mech.id, id), cur),
+        );
+        clearSelection();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedElementId, mech, updateCurrent, select, setPendingConnect, resetForceDrafts]);
+  }, [
+    selectedElementIds,
+    mech,
+    updateCurrent,
+    clearSelection,
+    setPendingConnect,
+    resetForceDrafts,
+  ]);
 
   if (!doc || !mech) {
     return (
@@ -653,14 +703,15 @@ export function SketchCanvas() {
   const boundNodes = new Set(mech.skeletonBindings.map((b) => b.nodeId));
   const showSilhouettePoints = tool !== 'select' || bindFrom !== null;
 
+  const selectedSet = new Set(selectedElementIds);
   const strokeFor = (id: string): string =>
-    violated.includes(id) ? '#d22' : selectedElementId === id ? '#d80' : '#324';
+    violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : '#324';
 
   const compressionRopes = new Set(equilibrium.ropesRequiringCompression);
   const cordStroke = (id: string, base: string): string =>
     compressionRopes.has(id) || violated.includes(id)
       ? '#d22'
-      : selectedElementId === id
+      : selectedSet.has(id)
         ? '#d80'
         : base;
   const showForces =
@@ -679,6 +730,7 @@ export function SketchCanvas() {
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
+        onClick={onStageClick}
         onDblClick={onDblClick}
         onWheel={onWheel}
       >
@@ -739,7 +791,7 @@ export function SketchCanvas() {
                   stroke={strokeFor(el.id)}
                   strokeWidth={el.type === 'telescope' ? 5 : 3.5}
                   lineCap="round"
-                  onClick={() => tool === 'select' && select(el.id)}
+                  onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
                 />
               );
@@ -753,7 +805,7 @@ export function SketchCanvas() {
                   strokeWidth={3.5}
                   lineCap="round"
                   lineJoin="round"
-                  onClick={() => tool === 'select' && select(el.id)}
+                  onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
                 />
               );
@@ -768,7 +820,7 @@ export function SketchCanvas() {
                   dash={[3, 3]}
                   lineCap="round"
                   lineJoin="round"
-                  onClick={() => tool === 'select' && select(el.id)}
+                  onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
                 />
               );
@@ -783,7 +835,7 @@ export function SketchCanvas() {
                   stroke={cordStroke(el.id, '#2a8a4a')}
                   strokeWidth={2}
                   lineJoin="round"
-                  onClick={() => tool === 'select' && select(el.id)}
+                  onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
                 />
               );
@@ -797,7 +849,7 @@ export function SketchCanvas() {
               const midB = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
               const stroke = cordStroke(el.id, '#8a5cd0');
               return (
-                <Group key={el.id} onClick={() => tool === 'select' && select(el.id)}>
+                <Group key={el.id} onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}>
                   {/* faint tie between the two coupled segments (routing-independent) */}
                   <Line
                     points={[midA.x, midA.y, midB.x, midB.y]}
@@ -836,10 +888,10 @@ export function SketchCanvas() {
                 <Line
                   key={el.id}
                   points={[a.x, a.y, b.x, b.y]}
-                  stroke={selectedElementId === el.id ? '#d80' : '#c0459a'}
+                  stroke={selectedSet.has(el.id) ? '#d80' : '#c0459a'}
                   strokeWidth={1.5}
                   dash={[2, 4]}
-                  onClick={() => tool === 'select' && select(el.id)}
+                  onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
                 />
               );

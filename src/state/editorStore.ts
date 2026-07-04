@@ -14,6 +14,11 @@ export type Tool =
   | 'bowden'
   | 'torsionCable';
 
+/** The two lenses on one document (§8): sketch hides engineering, design
+ * overlays it. A transient view choice, not a document property — switching
+ * mechanisms or faces never destroys data. */
+export type Face = 'sketch' | 'design';
+
 /** Equilibrium (§5.2) settle state for the force overlays. `unavailable`
  * covers the pre-merge worktree where the solver's equilibrium mode is not yet
  * implemented — the UI degrades gracefully rather than throwing. */
@@ -54,7 +59,9 @@ export interface PlaybackState {
 export interface EditorState {
   activeMechanismId: string | null;
   tool: Tool;
-  selectedElementId: string | null;
+  face: Face;
+  /** multi-select (§8.2a): order = click order; empty = nothing selected */
+  selectedElementIds: string[];
   /** live solved pose during drag/playback; null = document positions */
   posePositions: Record<string, Vec2> | null;
   playback: PlaybackState;
@@ -71,7 +78,12 @@ export interface EditorState {
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
+  setFace(face: Face): void;
+  /** replace the selection with one element (null clears) */
   select(elementId: string | null): void;
+  /** shift/cmd-click semantics: add if absent, remove if present */
+  toggleSelect(elementId: string): void;
+  clearSelection(): void;
   setPosePositions(p: Record<string, Vec2> | null): void;
   setPlayback(p: Partial<PlaybackState>): void;
   setTracing(on: boolean): void;
@@ -86,7 +98,8 @@ export interface EditorState {
 export const useEditorStore = create<EditorState>()((set) => ({
   activeMechanismId: null,
   tool: 'select',
-  selectedElementId: null,
+  face: 'sketch',
+  selectedElementIds: [],
   posePositions: null,
   playback: { clipName: null, playing: false, tS: 0, speed: 1, amplitude: 1 },
   tracing: false,
@@ -97,10 +110,20 @@ export const useEditorStore = create<EditorState>()((set) => ({
   equilibriumOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
 
+  // face is deliberately kept on mechanism switch — it is a lens, not a
+  // per-mechanism property (§8)
   setActiveMechanism: (id) =>
-    set({ activeMechanismId: id, posePositions: null, selectedElementId: null, tracePath: [] }),
+    set({ activeMechanismId: id, posePositions: null, selectedElementIds: [], tracePath: [] }),
   setTool: (tool) => set({ tool, pendingConnect: null }),
-  select: (selectedElementId) => set({ selectedElementId }),
+  setFace: (face) => set({ face }),
+  select: (elementId) => set({ selectedElementIds: elementId === null ? [] : [elementId] }),
+  toggleSelect: (elementId) =>
+    set((s) => ({
+      selectedElementIds: s.selectedElementIds.includes(elementId)
+        ? s.selectedElementIds.filter((id) => id !== elementId)
+        : [...s.selectedElementIds, elementId],
+    })),
+  clearSelection: () => set({ selectedElementIds: [] }),
   setPosePositions: (posePositions) => set({ posePositions }),
   setPlayback: (p) => set((s) => ({ playback: { ...s.playback, ...p } })),
   setTracing: (tracing) => set({ tracing, tracePath: [] }),
