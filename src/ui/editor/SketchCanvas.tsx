@@ -19,7 +19,7 @@ import {
 import { useEditorStore } from '../../state/editorStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
-import { findSnap, GRID_M, type Snap } from './snapping';
+import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
@@ -465,23 +465,27 @@ export function SketchCanvas() {
     const screen = stagePointer(e);
     if (!screen || !mech) return;
     if (tool === 'polyline' && draft) {
+      // Same Konva time-based-dblclick caveat as the rope path: only a
+      // coincident double-click finishes; rapid distinct clicks keep drafting.
+      const committed = [draft.start.pos, ...draft.vertices];
+      if (!isCoincidentFinish(committed)) return;
       const endSnap = snapAt(screen);
-      finishPipe(draft, endSnap, screen);
+      // The double-click's own mousedowns injected the finish position into
+      // vertices (twice); strip duplicates and the vertex coincident with the
+      // endpoint so it doesn't become a degenerate interior vertex.
+      const interior = dedupConsecutive(draft.vertices).filter(
+        (v, i, arr) =>
+          i < arr.length - 1 ||
+          Math.hypot(v.x - endSnap.pos.x, v.y - endSnap.pos.y) > 1e-6,
+      );
+      finishPipe({ ...draft, vertices: interior }, endSnap, screen);
       return;
     }
     if (tool === 'rope' && ropeDraft) {
       const pts = ropeDraft.points;
-      // Konva's dblclick is time-based (fires for any two clicks within its
-      // window, regardless of position), so a real finish is only the case
-      // where the two clicks landed on the same spot — the last two waypoints
-      // are coincident. Otherwise this is a rapid pair of distinct waypoints;
-      // keep drafting.
-      const n = pts.length;
-      const finishing =
-        n >= 2 &&
-        Math.hypot(pts[n - 1]!.pos.x - pts[n - 2]!.pos.x, pts[n - 1]!.pos.y - pts[n - 2]!.pos.y) <=
-          1e-6;
-      if (!finishing) return;
+      // See isCoincidentFinish: a real finish is only the case where the two
+      // clicks landed on the same spot — the last two waypoints coincident.
+      if (!isCoincidentFinish(pts.map((s) => s.pos))) return;
       const dedup = pts.filter(
         (s, i) =>
           i === 0 || Math.hypot(s.pos.x - pts[i - 1]!.pos.x, s.pos.y - pts[i - 1]!.pos.y) > 1e-6,

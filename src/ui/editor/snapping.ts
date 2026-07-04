@@ -28,6 +28,25 @@ export interface SnapContext {
 
 const d = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
 
+/**
+ * Konva's dblclick is time-based (fires for any two clicks within its window,
+ * regardless of position), so a multi-point drawing tool must only treat a
+ * dblclick as "finish" when the double-click's two mousedowns landed on the
+ * same spot — i.e. the last two committed points are coincident. Otherwise
+ * the dblclick is just a rapid pair of distinct waypoints and drafting
+ * continues.
+ */
+export function isCoincidentFinish(points: readonly Vec2[], tol = 1e-6): boolean {
+  const n = points.length;
+  return n >= 2 && d(points[n - 1]!, points[n - 2]!) <= tol;
+}
+
+/** Drop consecutive duplicate points (the double-click's own mousedowns
+ * inject the finish position twice). */
+export function dedupConsecutive(points: readonly Vec2[], tol = 1e-6): Vec2[] {
+  return points.filter((p, i) => i === 0 || d(p, points[i - 1]!) > tol);
+}
+
 export function findSnap(world: Vec2, ctx: SnapContext): Snap {
   const { mechanism, positions, silhouette, tolM } = ctx;
   const gridM = ctx.gridM ?? GRID_M;
