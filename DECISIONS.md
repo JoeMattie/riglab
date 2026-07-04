@@ -7,8 +7,9 @@ bottom of each phase section. Planfile deviations are marked **[deviation]**.
 
 ### Method
 
-Throwaway harness in `spike/` (to be deleted from main after Phase 0 review;
-git history retains it). All candidates implement one adapter interface and
+Throwaway harness in `spike/` (deleted from main after the Phase 0 review
+sign-off on 2026-07-04; retrievable from git history — last commit containing
+it is tagged by the removal commit's parent). All candidates implement one adapter interface and
 run identical scenarios with analytic expectations
 (`spike/harness/conformance.ts`):
 
