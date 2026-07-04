@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixtureProject, fixtureProjectV1 } from './fixtures';
+import { fixtureProject, fixtureProjectV1, fixtureProjectV2 } from './fixtures';
 import {
   applyMigrations,
   type Migration,
@@ -33,14 +33,27 @@ describe('applyMigrations pipeline (synthetic registry)', () => {
   });
 });
 
-describe('v1 → v2 migration', () => {
-  it('upgrades a Phase 0 document: empty skeletonBindings, default wearer', () => {
+describe('v1 → latest migration chain', () => {
+  it('upgrades a Phase 0 document through every step: skeletonBindings, wearer, bomSettings', () => {
     const migrated = migrateToLatest(fixtureProjectV1());
     expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.mechanisms[0]!.skeletonBindings).toEqual([]);
     expect(migrated.wearer).toEqual({ heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 });
+    expect(migrated.bomSettings).toEqual({ heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 });
     // nothing else was touched
     expect(migrated.mechanisms[0]!.elements).toEqual(fixtureProject().mechanisms[0]!.elements);
+  });
+});
+
+describe('v2 → v3 migration', () => {
+  it('adds default bomSettings to a v2 document, leaving the rest intact', () => {
+    const migrated = migrateToLatest(fixtureProjectV2());
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(migrated.bomSettings).toEqual({ heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 });
+    expect(migrated.mechanisms[0]!.skeletonBindings).toEqual(
+      fixtureProject().mechanisms[0]!.skeletonBindings,
+    );
+    expect(migrated.wearer).toEqual(fixtureProject().wearer);
   });
 });
 
