@@ -12,6 +12,7 @@
 // output.
 //
 // The solver is pure and framework-free (§12): schema data in, plain data out.
+import { polylineLengthM } from '../geometry/pipe';
 import type { InputChannel, Mechanism, MechanismElement, Vec2 } from '../schema';
 import type { SolveDiagnostics, SolveForces, SolveInputs, SolveResult } from './types';
 
@@ -134,32 +135,32 @@ export function drivenTargets(mechanism: Mechanism, inputs: SolveInputs): Record
 }
 
 // ── mass accumulation (§5.1) ─────────────────────────────────────────────
-function developedLength(nodeIds: string[], posOf: Map<string, Vec2>): number {
-  let total = 0;
-  for (let i = 1; i < nodeIds.length; i++) {
-    const a = posOf.get(nodeIds[i - 1]!)!;
-    const b = posOf.get(nodeIds[i]!)!;
-    total += hypot(a.x - b.x, a.y - b.y);
-  }
-  return total;
+function polyLen(nodeIds: string[], posOf: Map<string, Vec2>): number {
+  return polylineLengthM(nodeIds.map((id) => posOf.get(id)!));
 }
 
-/** Node masses: link/bentLink/telescope self-weight (length × caller density,
- * half to each endpoint) + point masses along links (by parametric t) + node
- * point masses. */
-function accumulateMasses(mechanism: Mechanism, density: number): Map<string, number> {
+/** Node masses: link/bentLink/telescope self-weight (length × density, half to
+ * each endpoint) + point masses along links (by parametric t) + node point
+ * masses. Each element's density is its per-element override (engineered pipe
+ * material, §4.2) if present, else the generic `density`. */
+function accumulateMasses(
+  mechanism: Mechanism,
+  density: number,
+  elementDensity: Record<string, number> = {},
+): Map<string, number> {
   const posOf = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const mass = new Map(mechanism.nodes.map((n) => [n.id, 0]));
   const add = (id: string, m: number): void => {
     mass.set(id, (mass.get(id) ?? 0) + m);
   };
+  const densityOf = (id: string): number => elementDensity[id] ?? density;
 
   for (const el of mechanism.elements) {
     if (el.type === 'link' || el.type === 'telescope') {
       const a = posOf.get(el.nodeA)!;
       const b = posOf.get(el.nodeB)!;
       const len = el.type === 'telescope' ? el.lengthM : hypot(a.x - b.x, a.y - b.y);
-      const self = len * density;
+      const self = len * densityOf(el.id);
       add(el.nodeA, self / 2);
       add(el.nodeB, self / 2);
       for (const pm of el.pointMasses) {
@@ -167,7 +168,7 @@ function accumulateMasses(mechanism: Mechanism, density: number): Map<string, nu
         add(el.nodeB, pm.massKg * pm.t);
       }
     } else if (el.type === 'bentLink') {
-      const self = developedLength(el.nodeIds, posOf) * density;
+      const self = polyLen(el.nodeIds, posOf) * densityOf(el.id);
       const per = self / el.nodeIds.length;
       for (const id of el.nodeIds) add(id, per);
       // along-body point masses lumped to the two ends by parameter t
@@ -727,7 +728,7 @@ interface Built {
 
 function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   const density = inputs.linkDensityKgPerM ?? 0;
-  const masses = accumulateMasses(mechanism, density);
+  const masses = accumulateMasses(mechanism, density, inputs.elementLinearDensityKgPerM ?? {});
   const targets = drivenTargets(mechanism, inputs);
 
   const particles = new Map<string, Particle>();
@@ -1042,13 +1043,18 @@ function measure(built: Built, gravity: Vec2): Map<string, { fx: number; fy: num
 // the member axial forces. Ropes drawn slack (path length < L0) carry nothing
 // and are never flagged. Reported independently of the settled pose, which is
 // a collapsed equilibrium when a rope can't do its job.
-function ropesRequiringCompression(mechanism: Mechanism, gravity: Vec2, density: number): string[] {
+function ropesRequiringCompression(
+  mechanism: Mechanism,
+  gravity: Vec2,
+  density: number,
+  elementDensity: Record<string, number>,
+): string[] {
   if (!mechanism.elements.some((e) => e.type === 'rope')) return [];
   const posOf = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const freeNodes = mechanism.nodes.filter((n) => n.kind === 'free').map((n) => n.id);
   if (freeNodes.length === 0) return [];
   const rowOf = new Map(freeNodes.map((id, i) => [id, i]));
-  const masses = accumulateMasses(mechanism, density);
+  const masses = accumulateMasses(mechanism, density, elementDensity);
 
   interface Member {
     ropeId: string | null;
@@ -1270,6 +1276,7 @@ function diagnostics(
   settled: boolean,
   gravity: Vec2,
   density: number,
+  elementDensity: Record<string, number>,
 ): SolveDiagnostics {
   let residual = 0;
   const violated = new Set<string>();
@@ -1288,7 +1295,12 @@ function diagnostics(
     converged: settled && residual <= RESIDUAL_TOL,
     residual,
     violated: [...violated].sort(),
-    ropesRequiringCompression: ropesRequiringCompression(mechanism, gravity, density),
+    ropesRequiringCompression: ropesRequiringCompression(
+      mechanism,
+      gravity,
+      density,
+      elementDensity,
+    ),
   };
 }
 
@@ -1296,6 +1308,7 @@ function diagnostics(
 export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): SolveResult {
   const gravity: Vec2 = mechanism.gravityOn ? { x: 0, y: -G } : { x: 0, y: 0 };
   const density = inputs.linkDensityKgPerM ?? 0;
+  const elementDensity = inputs.elementLinearDensityKgPerM ?? {};
   const built = build(mechanism, inputs);
   const settled = settle(built, gravity);
   const nodeForce = measure(built, gravity);
@@ -1306,6 +1319,6 @@ export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): Sol
   return {
     positions,
     forces: extractForces(mechanism, built, nodeForce, gravity),
-    diagnostics: diagnostics(mechanism, built, settled, gravity, density),
+    diagnostics: diagnostics(mechanism, built, settled, gravity, density, elementDensity),
   };
 }

@@ -18,6 +18,11 @@ export interface SolveInputs {
    * configured generic default here; omitted ⇒ links carry no self-weight and
    * mass comes only from explicit point masses. Ignored in kinematic mode. */
   linkDensityKgPerM?: number;
+  /** Per-element linear-density override (kg/m) for engineered links/bentLinks/
+   * telescopes, keyed by element id (§4.2 maturity). Falls back to
+   * linkDensityKgPerM when an element is absent. The BOM/materials layer feeds
+   * these from assigned pipe materials. Additive, equilibrium-only. */
+  elementLinearDensityKgPerM?: Record<string, number>;
 }
 
 export interface SolveForces {
