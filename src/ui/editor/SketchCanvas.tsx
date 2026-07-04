@@ -19,6 +19,7 @@ import {
 import { useEditorStore } from '../../state/editorStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
+import { pinchStep, wheelGesture } from './gesture';
 import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
@@ -171,6 +172,64 @@ export function SketchCanvas() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Two-finger touch pinch/pan — the touch-device arm of the zoompinch-spike
+  // fallback (trackpad pan/pinch is the wheel path in onWheel). Runs the same
+  // pure viewTransform helpers, so content stays vector-sharp and
+  // pointer-anchored. Only acts on ≥2 touch pointers, so single-pointer
+  // draw/drag/select events pass straight through to Konva (behavior contract).
+  const hasMech = mech != null;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !hasMech) return;
+    const pointers = new Map<number, Vec2>();
+    let last: { a: Vec2; b: Vec2 } | null = null;
+    const localPos = (e: PointerEvent): Vec2 => {
+      const r = el.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const twoPointers = (): { a: Vec2; b: Vec2 } | null => {
+      const pts = [...pointers.values()];
+      return pts.length >= 2 ? { a: pts[0]!, b: pts[1]! } : null;
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      pointers.set(e.pointerId, localPos(e));
+      last = twoPointers();
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, localPos(e));
+      const curr = twoPointers();
+      if (!curr || !last) return;
+      e.preventDefault();
+      const step = pinchStep(last, curr);
+      setView((v) => zoomAt(panBy(v, step.panDxPx, step.panDyPx), step.anchor, step.factor));
+      last = curr;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!pointers.delete(e.pointerId)) return;
+      last = twoPointers();
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove, { passive: false });
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+  }, [hasMech]);
+
+  // debug seam: publish the live view transform (scale/cx/cy px-per-m) so
+  // scripted browser checks can assert pan/zoom without parsing canvas pixels
+  useEffect(() => {
+    const w = window as unknown as { __riglab?: Record<string, unknown> };
+    if (!w.__riglab) w.__riglab = {};
+    w.__riglab.getView = () => view;
+  }, [view]);
 
   const pose = useMemo(() => {
     const clip = playback.clipName ? getClip(playback.clipName) : undefined;
@@ -509,11 +568,16 @@ export function SketchCanvas() {
     }
   };
 
+  // Wheel navigation via the vendored gesture model (the zoompinch-spike
+  // fallback): ctrl+wheel / trackpad-pinch → cursor-anchored zoom; plain wheel /
+  // two-finger scroll → pan. Applied to `view` state (never a CSS transform), so
+  // Konva re-renders vector-sharp per point (§11 acceptance).
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const screen = stagePointer(e as unknown as Konva.KonvaEventObject<MouseEvent>);
     if (!screen) return;
-    setView((v) => zoomAt(v, screen, e.evt.deltaY > 0 ? 0.9 : 1.1));
+    const g = wheelGesture(e.evt);
+    setView((v) => (g.kind === 'zoom' ? zoomAt(v, screen, g.factor) : panBy(v, g.dxPx, g.dyPx)));
   };
 
   // keyboard: delete selection, escape cancels draft/bind
@@ -606,7 +670,7 @@ export function SketchCanvas() {
   return (
     <div
       ref={containerRef}
-      style={{ flex: 1, minHeight: 0, position: 'relative' }}
+      style={{ flex: 1, minHeight: 0, position: 'relative', touchAction: 'none' }}
       data-testid="sketch-canvas"
     >
       <Stage

@@ -42,19 +42,22 @@ export function EditorShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  // test/debug hook: lets Playwright assert on the live document
+  // test/debug hook: lets Playwright assert on the live document. Merged (not
+  // replaced) so seams published by children — e.g. SketchCanvas's getView —
+  // survive this initializer regardless of effect ordering.
   useEffect(() => {
-    (window as unknown as { __riglab: object }).__riglab = {
-      getDoc: () => useAppStore.getState().current,
-      getEditor: () => {
-        const s = useEditorStore.getState();
-        return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
-      },
-      // seam for exercising the equilibrium force-overlay plumbing while the
-      // solver's equilibrium mode lands in a parallel branch (§5.2)
-      setEquilibrium: (readout: unknown) =>
-        useEditorStore.getState().setEquilibrium(readout as never),
+    const w = window as unknown as { __riglab?: Record<string, unknown> };
+    if (!w.__riglab) w.__riglab = {};
+    const hook = w.__riglab;
+    hook.getDoc = () => useAppStore.getState().current;
+    hook.getEditor = () => {
+      const s = useEditorStore.getState();
+      return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
     };
+    // seam for exercising the equilibrium force-overlay plumbing while the
+    // solver's equilibrium mode lands in a parallel branch (§5.2)
+    hook.setEquilibrium = (readout: unknown) =>
+      useEditorStore.getState().setEquilibrium(readout as never);
   }, []);
 
   if (!current) return null;
