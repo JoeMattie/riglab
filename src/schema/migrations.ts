@@ -4,10 +4,22 @@ import { SCHEMA_VERSION, projectSchema, type Project } from './project';
  * app code here; old documents must migrate forever. */
 export type Migration = (doc: Record<string, unknown>) => Record<string, unknown>;
 
-/** keyed by the version the migration upgrades FROM. Version 1 is the first
- * released schema, so this starts empty; every SCHEMA_VERSION bump adds an
- * entry (enforced by tests). */
-export const migrations: Record<number, Migration> = {};
+/** keyed by the version the migration upgrades FROM; every SCHEMA_VERSION
+ * bump adds an entry (enforced by tests). */
+export const migrations: Record<number, Migration> = {
+  // v1 → v2: mechanisms gained skeletonBindings (empty for old docs);
+  // project gained wearer mannequin params (defaults).
+  1: (doc) => ({
+    ...doc,
+    mechanisms: Array.isArray(doc.mechanisms)
+      ? (doc.mechanisms as Array<Record<string, unknown>>).map((m) => ({
+          ...m,
+          skeletonBindings: [],
+        }))
+      : doc.mechanisms,
+    wearer: { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 },
+  }),
+};
 
 export class MigrationError extends Error {}
 

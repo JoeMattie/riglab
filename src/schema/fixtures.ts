@@ -182,6 +182,7 @@ export function fixtureProject(): Project {
           },
         ],
         pointMasses: [{ id: 'npm-1', name: 'head weight', massKg: 2.5, nodeId: 'n4' }],
+        skeletonBindings: [{ id: 'sb-1', point: 'handR', nodeId: 'n6' }],
         inputs: [
           {
             id: 'ch1',
@@ -264,8 +265,24 @@ export function fixtureProject(): Project {
         },
       ],
     },
+    wearer: { heightM: 1.8, shoulderWidthM: 0.48, hipWidthM: 0.37 },
     wearerAnchorOverrides: {
       shoulderL: { x: 0.02, y: 1.45, z: 0.19 },
     },
+  };
+}
+
+/** A version-1 document as Phase 0 wrote it (no skeletonBindings, no wearer
+ * params) — used to test the 1→2 migration against real old data. */
+export function fixtureProjectV1(): Record<string, unknown> {
+  const p = fixtureProject() as unknown as Record<string, unknown>;
+  const { wearer: _wearer, ...rest } = p;
+  return {
+    ...rest,
+    schemaVersion: 1,
+    mechanisms: (p.mechanisms as Array<Record<string, unknown>>).map((m) => {
+      const { skeletonBindings: _sb, ...mRest } = m;
+      return mRest;
+    }),
   };
 }

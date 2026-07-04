@@ -18,6 +18,7 @@ function mech(
     nodes,
     elements,
     pointMasses: [],
+    skeletonBindings: [],
     inputs: [],
     namedStates: [],
     ...overrides,

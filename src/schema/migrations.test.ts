@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixtureProject } from './fixtures';
+import { fixtureProject, fixtureProjectV1 } from './fixtures';
 import {
   MigrationError,
   applyMigrations,
@@ -30,6 +30,17 @@ describe('applyMigrations pipeline (synthetic registry)', () => {
 
   it('throws a MigrationError when a step is missing', () => {
     expect(() => applyMigrations({ schemaVersion: 4 }, 4, 7, registry)).toThrow(MigrationError);
+  });
+});
+
+describe('v1 → v2 migration', () => {
+  it('upgrades a Phase 0 document: empty skeletonBindings, default wearer', () => {
+    const migrated = migrateToLatest(fixtureProjectV1());
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(migrated.mechanisms[0]!.skeletonBindings).toEqual([]);
+    expect(migrated.wearer).toEqual({ heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 });
+    // nothing else was touched
+    expect(migrated.mechanisms[0]!.elements).toEqual(fixtureProject().mechanisms[0]!.elements);
   });
 });
 

@@ -3,6 +3,7 @@ import {
   idSchema,
   jointRealizationSchema,
   maturitySchema,
+  skeletonPointSchema,
   vec2Schema,
   viewOrientationSchema,
 } from './common';
@@ -207,6 +208,15 @@ export const inputChannelSchema = z.object({
   locked: z.boolean(),
 });
 
+/** Binds a wearer skeleton point to a mechanism node: during clip playback
+ * (and silhouette posing) the node is driven to the point's projection in
+ * this mechanism's view plane (§7.3). */
+export const skeletonBindingSchema = z.object({
+  id: idSchema,
+  point: skeletonPointSchema,
+  nodeId: idSchema,
+});
+
 export const namedStateSchema = z.object({
   name: z.string().min(1),
   positions: z.record(idSchema, vec2Schema),
@@ -222,6 +232,7 @@ export const mechanismSchema = z.object({
   nodes: z.array(mechanismNodeSchema),
   elements: z.array(mechanismElementSchema),
   pointMasses: z.array(nodePointMassSchema),
+  skeletonBindings: z.array(skeletonBindingSchema),
   inputs: z.array(inputChannelSchema),
   namedStates: z.array(namedStateSchema),
 });
@@ -238,6 +249,7 @@ export type ElasticElement = z.infer<typeof elasticElementSchema>;
 export type BowdenElement = z.infer<typeof bowdenElementSchema>;
 export type TorsionCableElement = z.infer<typeof torsionCableElementSchema>;
 export type NodePointMass = z.infer<typeof nodePointMassSchema>;
+export type SkeletonBinding = z.infer<typeof skeletonBindingSchema>;
 export type InputChannel = z.infer<typeof inputChannelSchema>;
 export type NamedState = z.infer<typeof namedStateSchema>;
 export type Mechanism = z.infer<typeof mechanismSchema>;

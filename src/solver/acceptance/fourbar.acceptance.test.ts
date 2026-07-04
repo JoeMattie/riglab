@@ -28,6 +28,7 @@ export function fourBarMechanism(): Mechanism {
     ],
     elements: [link('crank', 'O2', 'A'), link('coupler', 'A', 'B'), link('rocker', 'B', 'O4')],
     pointMasses: [],
+    skeletonBindings: [],
     inputs: [],
     namedStates: [],
   };

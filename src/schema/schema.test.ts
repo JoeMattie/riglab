@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureProject } from './fixtures';
-import { createEmptyProject, projectSchema } from './project';
+import { SCHEMA_VERSION, createEmptyProject, projectSchema } from './project';
 
 describe('project schema v1', () => {
   it('accepts a freshly created empty project', () => {
@@ -28,7 +28,7 @@ describe('project schema v1', () => {
   });
 
   it('rejects a wrong schemaVersion literal', () => {
-    const p = { ...fixtureProject(), schemaVersion: 2 };
+    const p = { ...fixtureProject(), schemaVersion: SCHEMA_VERSION + 1 };
     expect(projectSchema.safeParse(p).success).toBe(false);
   });
 

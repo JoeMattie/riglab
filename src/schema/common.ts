@@ -65,6 +65,31 @@ export const wearerAnchorSchema = z.enum([
   'handR',
 ]);
 
+/** Poseable skeleton points exposed for 2D snapping and node bindings (§7).
+ * Distinct from wearer *anchors* (§4.3): anchors are structural attachment
+ * frames; skeleton points move with clips. */
+export const skeletonPointSchema = z.enum([
+  'head',
+  'spineTop',
+  'pelvis',
+  'shoulderL',
+  'shoulderR',
+  'elbowL',
+  'elbowR',
+  'handL',
+  'handR',
+  'hipL',
+  'hipR',
+  'kneeL',
+  'kneeR',
+  'ankleL',
+  'ankleR',
+  'shoeL',
+  'shoeR',
+]);
+
+export type SkeletonPoint = z.infer<typeof skeletonPointSchema>;
+
 export type Vec2 = z.infer<typeof vec2Schema>;
 export type Vec3 = z.infer<typeof vec3Schema>;
 export type Quaternion = z.infer<typeof quaternionSchema>;
