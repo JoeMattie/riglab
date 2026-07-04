@@ -16,7 +16,10 @@ export interface SettleResult {
  * consecutive steps), or maxSteps is hit. */
 export function settle(
   adapter: SpikeAdapter,
-  { eps = 1e-8, maxSteps = 8000, quietSteps = 5 } = {},
+  // eps is loose enough that engine candidates with persistent solver
+  // micro-motion (~1e-7 m/step) can converge; correctness is asserted on
+  // positions/forces afterwards, not on this criterion.
+  { eps = 1e-6, maxSteps = 8000, quietSteps = 5 } = {},
 ): SettleResult {
   let prev = adapter.positions();
   let quiet = 0;

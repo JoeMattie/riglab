@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@dimforge/rapier2d-compat": "0.19.3",
+    "planck": "1.5.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
