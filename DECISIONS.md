@@ -547,3 +547,81 @@ default), 3 iterable callbacks returning `Set.add`'s value, 2 unused
 optional chaining. `npm run lint` added to package scripts and as a CI step
 between typecheck and test; typecheck, all 84 unit/acceptance tests, and the
 production build verified green after the sweep.
+
+## Phase 3 — UI infrastructure
+
+The two Phase 3 entry tasks (planfile §11): adopt shadcn/ui + Tailwind for
+panel UI, and integrate zoompinch canvas navigation behind a go/no-go spike.
+Infrastructure only — no feature UI (info panel/checklist/BOM land later).
+
+### DECISION: Tailwind v4 via the `@tailwindcss/vite` plugin
+
+`tailwindcss@4.3.2` + `@tailwindcss/vite@4.3.2`, pinned exact. The first-party
+Vite plugin is Tailwind v4's recommended integration (no `tailwind.config.js`,
+no PostCSS chain, no `content` globs — v4 auto-detects sources). Theme lives in
+CSS: `src/index.css` holds `@import 'tailwindcss'`, the shadcn design tokens on
+`:root`/`.dark` (oklch), and an `@theme inline` block mapping them to
+`--color-*`. Imported once from `src/main.tsx`. `tw-animate-css@1.4.0` (the
+Tailwind-v4 successor to the deprecated `tailwindcss-animate`) supplies the
+enter/exit keyframes shadcn overlays use.
+
+### DECISION: shadcn/ui vendored via CLI, base color neutral, into `src/ui/components/`
+
+Ran `shadcn@4.13.0 add …` against a hand-written `components.json` (style
+`new-york`, `baseColor: neutral`, `cssVariables: true`, `iconLibrary: lucide`,
+aliases pointing at `@/ui/components` + `@/ui/lib/utils`). Vendored the working
+set the later feature slices need: button, input, label, select, tabs,
+checkbox, table, dialog, dropdown-menu, tooltip, separator, badge, scroll-area,
+toggle, toggle-group. Per the scope-amendment decision there is **no runtime
+component-library dependency**: the components are source in the repo; their
+only npm deps are the consolidated `radix-ui@1.6.1` (current shadcn imports
+from the single `radix-ui` package, not per-primitive `@radix-ui/react-*`),
+`class-variance-authority@0.7.1`, `clsx@2.1.1`, `tailwind-merge@3.6.0`, and
+`lucide-react@1.23.0` — all pinned exact. The CLI added no dependency ranges
+(everything was pre-installed exact) and did not modify `index.css`.
+
+A `@/*` → `./src/*` path alias was added in both `tsconfig.json` (`paths`, no
+`baseUrl` — it's deprecated in TS 6) and `vite.config.ts` (`resolve.alias`), so
+the vendored components' `@/ui/lib/utils` imports resolve under tsc, Vite, and
+Vitest. Existing relative imports are untouched.
+
+### DECISION: vendored code is formatted to our Biome style, not exempted from lint
+
+The shadcn CLI emits double-quoted, semicolon-free source. Rather than relax or
+scope-off any lint rule for `src/ui/components/`, the vendored files were run
+through `biome check --write` once (→ single quotes, semicolons, organized
+imports). After formatting they pass `biome check` with **zero diagnostics and
+no rule suppressions** — shadcn's model is that you own these components, so
+treating them as first-party code (not vendored exceptions) is the lower-churn
+choice and keeps one consistent style.
+
+### DECISION [biome config change]: exclude the Tailwind entry CSS from Biome
+
+`biome.json` gains `files.includes: ["**", "!src/index.css"]`. Biome 2.5.2's
+CSS parser rejects Tailwind v4 at-rules (`@custom-variant`, `@theme`, `@apply`,
+`@import 'tailwindcss'`) — it emitted "Tailwind-specific syntax is disabled" and
+aborted. `src/index.css` is a Tailwind-v4/shadcn artifact that Biome would only
+mangle, so it is excluded from Biome entirely (any future *plain* CSS still gets
+linted). No lint *rule* was changed. Logged here per the CLAUDE.md rule that
+biome-config changes go through DECISIONS.md.
+
+### DECISION: preflight regression compensated with scoped base styles, not a redesign
+
+Tailwind v4's preflight strips the UA button/input/select affordances the
+inline-styled Phase 1–2 chrome (EditorShell, ProjectList, Toolbar,
+MechanismTabs, ForcesPanel, TransportBar, ConnectMenu) relied on — bare
+`<button>`/`<input>` lose padding, border, and background. Rather than restyle
+each component, `index.css` adds a small `@layer base` block restoring neutral
+affordances to native controls, scoped with `:not([data-slot])` so it never
+touches vendored shadcn components (all of which carry `data-slot`); inline
+styles on legacy elements still win, so icon buttons keep `border:none`. This is
+the planfile §3 "pre-existing chrome migrates opportunistically … fully
+converged by Phase 5" posture — deliberately minimal, no design pass (that is
+Phase 5, driven by the design handoff doc). One reference migration proves the
+stack: EditorShell's header Export button → shadcn `Button` (outline/sm) and the
+save-state indicator → shadcn `Badge`.
+
+Verification: `npm run e2e` (builds + runs the production build) — all 3 smoke
+specs green after preflight + the reference migration. (Incidentally corrected a
+pre-existing Biome format drift in `SketchCanvas.tsx` that was failing
+`npm run lint` on `main`, so the green gate could pass.)
