@@ -24,6 +24,18 @@ const ITERS = 40; // Gauss–Seidel projection iterations per substep
 const WARM_ITERS = 200; // constraint-only warm-start iterations (no dynamics)
 const MAX_STEPS = 6000; // relaxation step cap
 const SETTLE_SPEED_EPS = 1e-6; // m/s — "settled" threshold on max particle speed
+// Pose-quiescence fallback settle criterion (Phase 3): a tension-only
+// constraint at its active boundary makes the settle creep so its max speed
+// plateaus above SETTLE_SPEED_EPS though the pose is already at rest. Declare
+// settled when no free particle drifts more than POSE_QUIESCENCE_EPS over a
+// POSE_QUIESCENCE_WINDOW-substep window. EPS = 1e-4 m is 10× finer than the
+// tightest equilibrium position assertion (1e-3 m), so a pose this still is
+// settled for reporting; WINDOW = 400 substeps (= 4.0 s at DT) is long enough
+// that a genuinely transient (still-swinging) pose drifts well past EPS, so
+// this never pre-empts a normal settle (verified against every equilibrium
+// acceptance case — see DECISIONS.md "Phase 3 — solver robustness").
+const POSE_QUIESCENCE_WINDOW = 400; // substeps
+const POSE_QUIESCENCE_EPS = 1e-4; // m — max free-particle drift over the window
 const RESIDUAL_TOL = 1e-4; // m — constraint-violation tolerance for `converged`
 const GENERIC_NODE_MASS = 1; // kg — inverse-mass conditioning for massless free nodes (no gravity)
 const COMP_TOL = 1e-3; // N — rope axial force below −tol ⇒ "requires compression"
@@ -1002,8 +1014,31 @@ function settle(built: Built, gravity: Vec2): boolean {
     p.vx = 0;
     p.vy = 0;
   }
+  // Pose-quiescence fallback (Phase 3 solver-robustness). A tension-only
+  // constraint held at its active boundary makes the relaxation *creep* rather
+  // than quiesce: each substep the load re-tautens the rope (the projection is
+  // skipped when marginally slack and applied when marginally taut), so the
+  // pose crawls toward equilibrium at a near-constant, overdamped rate and the
+  // max particle SPEED plateaus just above SETTLE_SPEED_EPS — the answer (pose
+  // + tension) is already correct but `settle` never reports it. So in addition
+  // to the speed test we declare the pose settled once no free particle has
+  // moved more than POSE_QUIESCENCE_EPS over a POSE_QUIESCENCE_WINDOW-substep
+  // window: net drift over a window, robust to the boundary alternation and
+  // strictly a fallback (a still-moving transient drifts well past the eps, so
+  // this never pre-empts a genuinely converging settle — see DECISIONS.md).
+  let snapX = free.map((p) => p.x);
+  let snapY = free.map((p) => p.y);
   for (let step = 0; step < MAX_STEPS; step++) {
     if (substep(built, free, gravity) < SETTLE_SPEED_EPS) return true;
+    if ((step + 1) % POSE_QUIESCENCE_WINDOW === 0) {
+      let maxDrift = 0;
+      for (let i = 0; i < free.length; i++) {
+        maxDrift = Math.max(maxDrift, hypot(free[i]!.x - snapX[i]!, free[i]!.y - snapY[i]!));
+      }
+      if (maxDrift < POSE_QUIESCENCE_EPS) return true;
+      snapX = free.map((p) => p.x);
+      snapY = free.map((p) => p.y);
+    }
   }
   return false;
 }

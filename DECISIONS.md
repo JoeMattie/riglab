@@ -547,3 +547,80 @@ default), 3 iterable callbacks returning `Set.add`'s value, 2 unused
 optional chaining. `npm run lint` added to package scripts and as a CI step
 between typecheck and test; typecheck, all 84 unit/acceptance tests, and the
 production build verified green after the sweep.
+
+## Phase 3 — solver robustness
+
+### The rope taut-limit non-convergence (carried forward from the Phase 2 review)
+
+**Failure mode.** A mass hanging on a rope that settles to exactly its taut
+limit (path length == L0 under load) reported `diagnostics.converged === false`
+while still extracting the correct tension (m·g) and the correct pose. Root
+cause, confirmed by instrumenting `settle()`: at the active boundary the
+relaxation *creeps* instead of quiescing. Each substep gravity re-tautens the
+rope (`RopeC.project` is skipped when the path is marginally slack, `C ≤ 0`, and
+applied when marginally taut, `C > 0`), so the free particle crawls along the
+constraint boundary toward equilibrium at a near-constant, heavily-overdamped
+rate. That crawl velocity plateaus just above `SETTLE_SPEED_EPS = 1e-6 m/s`, so
+the speed-based settle test never fires within `MAX_STEPS = 6000` — even though
+the pose is, for reporting purposes, already at rest and the measured tension is
+exact. The effect is length-driven, not mass-driven (the settle step count is
+independent of the point mass and grows with rope length: the near-plumb
+pendulum mode is overdamped and its time constant scales with the arm). A
+**rigid link** of the same length exhibits the identical slow mode, which
+confirms the problem is the boundary creep / overdamped swing, not a compression
+artifact of the rope inequality.
+
+**Regression test (written first).** `src/solver/acceptance/ropeTautLimit.acceptance.test.ts`:
+a 5 kg mass on a 4 m rope, drawn a touch off-plumb on the taut circle, must
+settle plumb at exactly the taut length, report `converged === true`, tension
+= m·g ±2%, and residual ≤ 1e-4. Verified **failing on the pre-fix code**
+(`expected false to be true` on `converged`, with tension already correct)
+and passing after the fix.
+
+**Fix chosen: a pose-quiescence fallback settle criterion.** Alongside the
+existing max-speed test, `settle()` now also declares the pose settled when no
+free particle drifts more than `POSE_QUIESCENCE_EPS` over a rolling
+`POSE_QUIESCENCE_WINDOW`-substep window (net drift per window, so it is robust
+to the boundary's slack/taut alternation). This changes only the *stop
+criterion* — not the dynamics, projection, or force extraction — so every
+converging mechanism reaches the identical equilibrium pose by the identical
+relaxation; the fallback only ever ends a settle that the speed test would
+otherwise run to the step cap. Considered and rejected: (a) a position/deadband
+hysteresis on rope activation — risks changing rope-compression semantics and
+the analytic slack cases; (b) latching a persistently-active inequality to an
+equality — attacks the wrong cause (a rigid link fails identically, so latching
+the rope to a rod would not help) and can clamp a rope that should go slack at
+equilibrium; (c) retuning `DAMPING` — a fixed coefficient cannot critically-damp
+every arm length, and it is the planfile's suggested 0.85.
+
+**Constants introduced** (both fixed, deterministic — no `Math.random`, no time,
+fixed window/iteration counts, constraint order unchanged):
+- `POSE_QUIESCENCE_EPS = 1e-4 m` — max free-particle drift over the window that
+  counts as "at rest." Chosen 10× finer than the tightest equilibrium position
+  assertion in the suite (1e-3 m in the hanging-mass / eyelet cases), so a pose
+  this still is settled at the reporting scale; the fix's returned pose for the
+  regression case is within ~7e-5 m of the fully-relaxed pose.
+- `POSE_QUIESCENCE_WINDOW = 400 substeps` (= 4.0 s at `DT = 0.01`) — long enough
+  that a genuinely transient (still-swinging) pose drifts well past the eps, so
+  the fallback never pre-empts a normal settle. Verified against every
+  equilibrium acceptance case: for the ones that take > 400 steps to settle
+  (e.g. the counter-balanced boom, ~1181 steps) the window drift stays above
+  the eps until the speed test fires first, so their results are unchanged; the
+  faster cases settle in far fewer than 400 steps and never reach a window
+  check. All 92 unit/acceptance tests pass, build green.
+
+Semantics note (not a deviation): for arms long enough that the pose is *still
+meaningfully moving* at the step cap (drift > eps over the window, e.g. a rope
+well over ~5 m), the solver still reports `converged === false` — which is
+honest, because such a pose has not actually settled. The fix resolves the
+"settled-but-mis-flagged" cases; it does not paper over genuinely unfinished
+relaxations.
+
+### Incidental: pre-existing Biome formatting error fixed to keep the lint gate green
+
+`src/ui/editor/SketchCanvas.tsx` carried a pre-existing over-wrapped condition
+(a two-line `||` that Biome's 100-col formatter collapses to one) that failed
+`npm run lint` at clean `HEAD`, unrelated to this solver change. Fixed with
+`biome check --write` on that file only (formatting, zero logic change) so the
+definition-of-done lint gate passes; called out here and in the summary rather
+than folded silently into the solver commit.
