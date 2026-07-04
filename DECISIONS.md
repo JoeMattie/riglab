@@ -481,6 +481,30 @@ component or `solve()` in Vitest, it must not become an e2e spec; Playwright
 verifies wiring (project lifecycle, sketch, forces smoke), not logic, and
 interactive browser-driving is not the development verification loop.
 
+### DECISION: browser verification is scripted, not driven (2026-07-04, user directive)
+
+The slow part of browser verification is interactive driving — each MCP
+click costs an agent round trip plus an accessibility snapshot; the same
+journey as a headless Playwright script runs in seconds (the committed
+3-spec suite: ~4.4 s). Policy for end-of-phase "built app works"
+verification and any ad-hoc browser checking:
+
+1. Write a throwaway headless Playwright script (or temporary spec) for the
+   journey and run it once against `npx vite preview` on the production
+   build; collect screenshots/console logs as artifacts to eyeball.
+2. Assert app state through the `window.__riglab` debug hook in a single
+   `evaluate` (solver status, forces, document state) instead of parsing
+   snapshots/pixels.
+3. Anything expressible as a `solve()`/component assertion belongs in
+   Vitest, per the test-pyramid decision above — the browser pass confirms
+   wiring only.
+4. Interactive MCP driving is reserved for gesture-feel checks that
+   genuinely need a human-like pointer (drag feel, double-click semantics,
+   snap behavior).
+
+Throwaway verification scripts that prove durable may graduate into the
+committed smoke suite; otherwise they are deleted, not accumulated.
+
 ### DECISION: lint/format = Biome (2026-07-04, user directive)
 
 User directive ("biome for linting and formatting to help avoid react

@@ -15,6 +15,7 @@
 - TypeScript strict; Zod schemas are the single source of truth for the project file format (`z.infer` for types); every schema change bumps `schemaVersion` and adds a migration.
 - Pin exact dependency versions. If the spike selects a WASM engine, verify in Phase 0 that the WASM asset loads from a production Cloudflare Pages build (`npx wrangler pages dev` on the built output is an acceptable proxy), and add a determinism test pinned to the engine version.
 - Small commits per vertical slice; CI (typecheck + lint + test + build) must be green at every commit on main. Lint/format is Biome (`npm run lint`, zero diagnostics); rule suppressions need an inline `biome-ignore` with a reason, and rule-config changes go through DECISIONS.md.
+- **Browser verification is scripted, not driven**: verify the built app with a headless Playwright script against `npx vite preview`, asserting app state through the `window.__riglab` debug hook in a single evaluate — not step-by-step interactive MCP clicking (one agent round trip per click). Interactive driving is reserved for gesture-feel checks (drag, double-click, snapping) that need a human-like pointer. Details in DECISIONS.md ("browser verification is scripted, not driven").
 - No network calls at runtime, no backend, no analytics. Static assets only.
 - No creature-specific language in code identifiers or UI strings; raptor exists only in bundled example data files.
 
