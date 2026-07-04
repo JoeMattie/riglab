@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
 import { useAppStore } from '../state/appStore';
 import { useEditorStore } from '../state/editorStore';
+import { Badge } from './components/badge';
+import { Button } from './components/button';
 import { ConnectMenu } from './editor/ConnectMenu';
 import { ForcesPanel } from './editor/ForcesPanel';
 import { MechanismTabs } from './editor/MechanismTabs';
@@ -94,9 +96,9 @@ export function EditorShell() {
           onChange={(e) => updateCurrent((doc) => ({ ...doc, name: e.target.value }))}
           style={{ fontSize: 16, fontWeight: 600 }}
         />
-        <span data-testid="save-state" style={{ color: saveState === 'saved' ? '#282' : '#a60' }}>
+        <Badge data-testid="save-state" variant={saveState === 'saved' ? 'secondary' : 'outline'}>
           {saveState === 'saved' ? 'saved' : 'saving…'}
-        </span>
+        </Badge>
         <button type="button" data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
           ↶ undo
         </button>
@@ -104,9 +106,15 @@ export function EditorShell() {
           ↷ redo
         </button>
         <span style={{ flex: 1 }} />
-        <button type="button" data-testid="export-project" onClick={onExport}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="export-project"
+          onClick={onExport}
+        >
           Export JSON
-        </button>
+        </Button>
       </header>
       <MechanismTabs />
       <Toolbar />
