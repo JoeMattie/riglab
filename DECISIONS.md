@@ -283,4 +283,70 @@ merging the two worktrees._
   mocked readout while the real equilibrium solver is unavailable in this
   worktree. UI logic is otherwise unit-tested with mocked `SolveResult` values
   (`forces.test.ts`) since no React testing-library dependency is available and
-  none may be added.
+  none may be added. *(Superseded 2026-07-04: @testing-library/react is now
+  sanctioned — see scope amendments below.)*
+
+## Scope amendments — 2026-07-04 (user directive)
+
+Five additions slotted into the remaining phases; planfile updated in the
+same change (§3, §4.4, §7, §8.2a, §8.3, §9, §10, §11).
+
+### DECISION: UI components = shadcn/ui (Tailwind + Radix, vendored)
+
+User directive. Adopted at the start of Phase 3, the first form-heavy phase
+(inspector, checklist, materials tables) — retrofitting Phase 1–2's small
+chrome earlier would be churn for no user value. Components are vendored via
+the shadcn CLI into `src/ui/components/` (no runtime component-lib
+dependency; Tailwind + Radix primitives pinned exact per the pinning rule).
+A design handoff document, produced by a separate design pass once the app
+is feature-complete (~end of Phase 4), drives the Phase 5 polish; until then
+shadcn defaults, no bespoke styling.
+
+### DECISION: canvas navigation = zoompinch (gesture layer → Konva Stage transform)
+
+User directive, chosen for gesture feel. `@zoompinch/react@0.0.18` supports
+React 19, MIT, actively maintained (May 2026), with a framework-agnostic
+`@zoompinch/core`. Known integration constraint recorded in the planfile:
+zoompinch's native model CSS-transforms wrapped DOM content, which would
+bitmap-scale (blur) a Konva canvas — so we consume its gesture/transform
+state and apply translate/scale to the Konva Stage (the existing
+`viewTransform.ts` seam), rotation locked. Pre-1.0 risk accepted; a go/no-go
+integration spike opens Phase 3, with hand-rolled wheel/pinch handlers as
+the documented fallback.
+
+### DECISION: info panel (selection inspector), both faces — planfile §8.2a
+
+User directive; largely a concretization of §8.2's "opens the right
+inspector" rather than new machinery. One selection-reactive right panel
+serves both faces with face-appropriate scope (sketch: geometry/behavior/
+derived info; design: + materials, realizations, forces, checklist items);
+multi-select becomes the bulk-assignment surface. Reconciled with the
+sketch face's "zero forms" principle: the panel is reactive and collapsible,
+never a creation prerequisite. Slotted into Phase 3.
+
+### DECISION: control layer (virtual input devices + control clips) — planfile §4.4, new Phase 4.5
+
+User directive, motivated by the reference build's control yoke (twist →
+head roll, swing → pan, trigger via cable → jaw): skeleton bindings cover
+body-driven motion but not operated controls. Designed as a thin layer over
+the existing input-channel machinery — a `Control` groups typed axes, each
+axis maps (range + invert) onto a channel — rather than a parallel input
+system, so solver and lock semantics are untouched. Includes per-type
+manipulation widgets and "control clips" (keyframe tracks over channels,
+recordable by scrubbing, composable with movement clips on one timeline) —
+this promotes the minimal slice of the §10 animation-timeline stretch goal;
+the full choreography editor stays stretch. Slotted as Phase 4.5 (after 3D
+assembly, before examples): controls shine when the composed creature
+exists, and example 7 now demonstrates a yoke + bundled control clip.
+
+### DECISION: test-pyramid policy — RTL in, Playwright capped at smoke
+
+User directive ("use a real testing library; manual Playwright is taking a
+long time"). Vitest was already the test runner (14 unit/acceptance files),
+so the real change is policy: add **@testing-library/react + jsdom** (the
+planfile always named Testing Library; it was never installed, and one
+worktree note above barred it — now reversed) and cap Playwright at a small
+smoke suite. Rule of thumb: if a behavior can be asserted against a
+component or `solve()` in Vitest, it must not become an e2e spec; Playwright
+verifies wiring (project lifecycle, sketch, forces smoke), not logic, and
+interactive browser-driving is not the development verification loop.
