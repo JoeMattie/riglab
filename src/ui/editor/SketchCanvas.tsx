@@ -475,8 +475,7 @@ export function SketchCanvas() {
       // endpoint so it doesn't become a degenerate interior vertex.
       const interior = dedupConsecutive(draft.vertices).filter(
         (v, i, arr) =>
-          i < arr.length - 1 ||
-          Math.hypot(v.x - endSnap.pos.x, v.y - endSnap.pos.y) > 1e-6,
+          i < arr.length - 1 || Math.hypot(v.x - endSnap.pos.x, v.y - endSnap.pos.y) > 1e-6,
       );
       finishPipe({ ...draft, vertices: interior }, endSnap, screen);
       return;
