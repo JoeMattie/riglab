@@ -5,6 +5,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { SCHEMA_VERSION } from '../src/schema/project';
 
 test('project lifecycle: create ×2, reload, autosave, export, delete, re-import', async ({
   page,
@@ -46,7 +47,7 @@ test('project lifecycle: create ×2, reload, autosave, export, delete, re-import
   const exported = await readFile(path, 'utf8');
   const doc = JSON.parse(exported) as { name: string; schemaVersion: number; id: string };
   expect(doc.name).toBe('Alpha 2');
-  expect(doc.schemaVersion).toBe(2);
+  expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
 
   // the rename survives a reload (autosave really hit IndexedDB)
   await page.getByTestId('back-to-projects').click();
