@@ -1,10 +1,12 @@
 // Pure document transforms for sketch editing. All editing flows through
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
+import { derivedMaturity } from '../design/resolution';
 import type {
   BowdenElement,
   ElasticElement,
   InputChannel,
+  JointRealization,
   Mechanism,
   MechanismElement,
   PivotElement,
@@ -546,4 +548,174 @@ export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: stri
     ...m,
     skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
   }));
+}
+
+// ── design-face assignment ops (§8.2, §8.2a) ────────────────────────────────
+// Every assignment re-derives the element's maturity (derivedMaturity in
+// src/design/resolution.ts) so maturity always agrees with the data —
+// assigning flips to 'engineered', unassigning drops back to 'sketch'.
+
+/** Re-derive maturity after an assignment change. */
+const withMaturity = <T extends MechanismElement>(el: T): T => ({
+  ...el,
+  maturity: derivedMaturity(el),
+});
+
+function mapElements(
+  doc: Project,
+  mechId: string,
+  fn: (el: MechanismElement) => MechanismElement,
+): Project {
+  return withMechanism(doc, mechId, (m) => ({ ...m, elements: m.elements.map(fn) }));
+}
+
+/** Assign (or clear, with undefined) a pipe material on every link/bentLink in
+ * `elementIds` — the single- and bulk-assignment surface (§8.2). Other element
+ * types in the list are ignored, so a mixed selection is safe. */
+export function assignPipeMaterial(
+  doc: Project,
+  mechId: string,
+  elementIds: string[],
+  pipeMaterialId: string | undefined,
+): Project {
+  const ids = new Set(elementIds);
+  return mapElements(doc, mechId, (el) =>
+    ids.has(el.id) && (el.type === 'link' || el.type === 'bentLink')
+      ? withMaturity({ ...el, pipeMaterialId })
+      : el,
+  );
+}
+
+/** Assign (or clear) one member of a telescope's outer/inner material pair. */
+export function assignTelescopeMaterial(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+  member: 'outer' | 'inner',
+  pipeMaterialId: string | undefined,
+): Project {
+  return mapElements(doc, mechId, (el) =>
+    el.id === elementId && el.type === 'telescope'
+      ? withMaturity(
+          member === 'outer'
+            ? { ...el, outerPipeMaterialId: pipeMaterialId }
+            : { ...el, innerPipeMaterialId: pipeMaterialId },
+        )
+      : el,
+  );
+}
+
+/** Assign (or clear) a cordage material on every rope/elastic/bowden/torsion
+ * cable in `elementIds`. Assigning a cordage that carries a stiffness preset
+ * to an elastic adopts the preset (§4.2 "material with its own preset"). */
+export function assignCordageMaterial(
+  doc: Project,
+  mechId: string,
+  elementIds: string[],
+  cordageMaterialId: string | undefined,
+): Project {
+  const ids = new Set(elementIds);
+  const preset = cordageMaterialId
+    ? doc.materials.cordage.find((c) => c.id === cordageMaterialId)?.defaultStiffnessNPerM
+    : undefined;
+  return mapElements(doc, mechId, (el) => {
+    if (!ids.has(el.id)) return el;
+    if (el.type === 'elastic') {
+      return withMaturity({
+        ...el,
+        cordageMaterialId,
+        stiffnessNPerM: preset ?? el.stiffnessNPerM,
+      });
+    }
+    if (el.type === 'rope' || el.type === 'bowden' || el.type === 'torsionCable') {
+      return withMaturity({ ...el, cordageMaterialId });
+    }
+    return el;
+  });
+}
+
+/** Assign (or clear) the physical realization of every pivot/slider in
+ * `elementIds` — the bulk-realization surface (§8.2). */
+export function assignRealization(
+  doc: Project,
+  mechId: string,
+  elementIds: string[],
+  realization: JointRealization | undefined,
+): Project {
+  const ids = new Set(elementIds);
+  return mapElements(doc, mechId, (el) =>
+    ids.has(el.id) && (el.type === 'pivot' || el.type === 'slider')
+      ? withMaturity({ ...el, realization })
+      : el,
+  );
+}
+
+/** Assign (or clear) a link/bentLink END realization (cut allowance at that
+ * end, §6.2). Ends are optional refinements — a butt cut is valid — so they do
+ * not participate in the maturity rule. */
+export function assignEndRealization(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+  end: 'A' | 'B',
+  realization: JointRealization | undefined,
+): Project {
+  return mapElements(doc, mechId, (el) =>
+    el.id === elementId && (el.type === 'link' || el.type === 'bentLink')
+      ? end === 'A'
+        ? { ...el, endRealizationA: realization }
+        : { ...el, endRealizationB: realization }
+      : el,
+  );
+}
+
+/** Inline dimension edit (§8.2, §11): set a link/telescope length by keeping
+ * endpoint A fixed and moving B along the current A→B direction (degenerate
+ * zero-length links extend along +x). Only node B moves — connected geometry
+ * reconciles on the next kinematic solve. Telescopes clamp to [min, max] and
+ * update their length parameter as well. Non-positive lengths are ignored. */
+export function setLinkLength(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+  lengthM: number,
+): Project {
+  if (!(lengthM > 0)) return doc;
+  return withMechanism(doc, mechId, (m) => {
+    const el = m.elements.find((e) => e.id === elementId);
+    if (!el || (el.type !== 'link' && el.type !== 'telescope')) return m;
+    const target =
+      el.type === 'telescope' ? Math.min(el.maxLengthM, Math.max(el.minLengthM, lengthM)) : lengthM;
+    const a = nodePosition(m, el.nodeA);
+    const b = nodePosition(m, el.nodeB);
+    const len = segLength(a, b);
+    const dir = len > 1e-9 ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: 1, y: 0 };
+    const newB = { x: a.x + dir.x * target, y: a.y + dir.y * target };
+    return {
+      ...m,
+      nodes: m.nodes.map((n) => (n.id === el.nodeB ? { ...n, position: newB } : n)),
+      elements:
+        el.type === 'telescope'
+          ? m.elements.map((e) => (e.id === el.id ? { ...el, lengthM: target } : e))
+          : m.elements,
+    };
+  });
+}
+
+/** Patch behavior parameters of one element (rope L₀, elastic k/rest/
+ * pretension, telescope range/sliding, bowden rests, torsion ratio/backlash,
+ * pivot limits/spring — §8.2a). The expected `type` guards against stale
+ * selections patching a different element kind. */
+export function patchElement<K extends MechanismElement['type']>(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+  type: K,
+  patch: Partial<Extract<MechanismElement, { type: K }>>,
+): Project {
+  return mapElements(doc, mechId, (el) =>
+    el.id === elementId && el.type === type
+      ? withMaturity({ ...el, ...patch } as MechanismElement)
+      : el,
+  );
 }
