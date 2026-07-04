@@ -37,6 +37,8 @@ export function createAppStore(store: ProjectStore = new ProjectStore()) {
   const useStore = create<AppState>()(
     temporal(
       (set, get) => {
+        let gestureStart: Project | null = null;
+
         const autosaver = createAutosaver(async (doc) => {
           await store.saveProject(doc);
           // only report "saved" if no newer edit got scheduled meanwhile
@@ -124,14 +126,25 @@ export function createAppStore(store: ProjectStore = new ProjectStore()) {
           },
 
           beginGesture() {
+            gestureStart = get().current;
             useStore.temporal.getState().pause();
           },
 
           endGesture() {
-            useStore.temporal.getState().resume();
-            // commit the gesture's end state as one history entry
-            const cur = get().current;
-            if (cur) set({ current: { ...cur } });
+            const final = get().current;
+            const temporal = useStore.temporal.getState();
+            if (gestureStart && final && final !== gestureStart) {
+              // one history entry for the whole gesture, restoring to the
+              // PRE-gesture state: silently rewind while paused, then replay
+              // the final state with history recording on
+              set({ current: gestureStart });
+              temporal.resume();
+              set({ current: final });
+            } else {
+              // click without change — no history entry
+              temporal.resume();
+            }
+            gestureStart = null;
           },
         };
       },

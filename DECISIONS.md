@@ -140,6 +140,63 @@ that exact version (no `^`/`~`), per the CLAUDE.md pinning rule. Companion
 `@types/three@0.185.x` for `three@0.185.x`), not the absolute newest.
 Upgrades thereafter are deliberate, not automatic.
 
+## Phase 1 — sketch & play
+
+### DECISION: joint-limit angle convention
+
+The planfile says "min/max relative angle between two designated links"
+without defining zero. Chosen: the signed deviation from the straight
+continuation of memberA through the pivot into memberB (0 = straight, like a
+knee). This puts the atan2 discontinuity at the physically implausible
+fully-folded pose instead of at straight, where serial joints (neck, tail,
+legs) actually operate. Documented on the schema.
+
+### DECISION: DOF displayed as particle-space mobility
+
+`dof = 2·(free nodes) − (independent equality constraints touching a free
+node)` — equivalent to the Grübler–Kutzbach count for this shared-pin
+lattice model (four-bar → 1, braced triangle → 0, double-braced → −1), and
+it is exactly what the solver solves, so the badge can never disagree with
+behavior. Classic Grübler caveats (paradoxical/redundant geometries) apply
+equally to both forms.
+
+### Solver robustness findings (the drag-ratchet postmortem)
+
+Playwright drags with coarse pointer steps exposed a compounding failure:
+(1) the drag/constraint projection cycle never converges when the target is
+far from feasible, so the returned pose carried real constraint violation;
+(2) the UI recomputes rest lengths from the previous solution every frame,
+so that violation compounded — a four-bar's coupler shrank 40% in six
+frames. Fixes, in depth: constraint-only settle sweeps after the drag loop
+(output always lands on the constraint manifold); a deterministic
+golden-angle micro-nudge (no Math.random, §12) to escape degenerate
+collinear configurations Gauss–Seidel cannot leave; and the UI never writes
+a non-converged pose into the document. Regression-tested with unreachable
+drag targets + position feedback (kinematic acceptance suite).
+
+### DECISION: undo gestures bracket to the pre-gesture state
+
+zundo history pauses during a drag; on release the store silently rewinds to
+the gesture-start document and replays the final state with recording on —
+one history entry per gesture, none for click-without-change. (The naive
+"record on release" version recorded the post-drag state, making drag-undo a
+no-op.)
+
+### Deferred / simplifications (to revisit)
+
+- **Driven-node input channels**: schema carries `driven` nodes + channels
+  with lock toggles, but channel→geometry semantics (what a scalar angle
+  drives) are deferred to Phase 2, where the first force examples (jaw
+  trigger, steer) give them concrete meaning. Phase 1 acceptance needs only
+  drag targets and skeleton bindings, which share the same solve() path.
+- **Connect menu on the finishing end only**: a drawn pipe's starting end
+  auto-pivots when it lands on existing geometry; the pivot/weld/slider/
+  detach menu appears only where the stroke ends. One menu per stroke keeps
+  the draw loop fast; revisit if weld-at-start turns out to be common.
+- Konva is rendered declaratively through react-konva at Phase 1 scene
+  sizes; the imperative-refs hot path from the spike remains the plan for
+  the Phase 5 performance pass if profiling demands it.
+
 ### Process conventions approved by the user (2026-07-04)
 
 - **[deviation]** Acceptance tests for future phases are committed

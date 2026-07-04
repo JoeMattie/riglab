@@ -18,16 +18,19 @@ bundled example content only.
 
 ## Status
 
-**Phase 0 complete** (spike + scaffold): solver/renderer library evaluation
-done and recorded in [DECISIONS.md](DECISIONS.md) — custom XPBD solver and
-Konva won; project persistence (IndexedDB via Dexie, autosave, rolling
-revisions), JSON export/import, Zod schema v1, and a minimal project manager
-shell are in place with CI green.
+**Phase 1 complete** (sketch & play): draw straight/polyline/freehand pipes
+on the wearer silhouette, snap-connect with the pivot/weld/slider menu, drag
+mechanisms through their range of motion with a live kinematic XPBD solve,
+anchor nodes, bind nodes to skeleton points, and play walk / arm-swing /
+lean clips that drive the bound nodes. Undo/redo, DOF badge, motion-path
+tracing. Phase 0 delivered the library spike ([DECISIONS.md](DECISIONS.md) —
+custom XPBD + Konva), Zod schema with migrations, Dexie persistence, and
+JSON export/import.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Library spike + scaffold | ✅ done |
-| 1 | Sketch & play: draw pipes, snap-connect, drag-to-pose, movement clips | next |
+| 1 | Sketch & play: draw pipes, snap-connect, drag-to-pose, movement clips | ✅ done |
 | 2 | Forces: ropes/elastics/bowden/torsion, equilibrium, tension readouts | — |
 | 3 | Design face: materials DB, nesting matrix, cut list + BOM | — |
 | 4 | 3D assembly: full mannequin, instance placement, mass/CG/balance | — |

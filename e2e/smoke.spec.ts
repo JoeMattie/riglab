@@ -41,7 +41,7 @@ test('project lifecycle: create ×2, reload, autosave, export, delete, re-import
   const exported = await readFile(path, 'utf8');
   const doc = JSON.parse(exported) as { name: string; schemaVersion: number; id: string };
   expect(doc.name).toBe('Alpha 2');
-  expect(doc.schemaVersion).toBe(1);
+  expect(doc.schemaVersion).toBe(2);
 
   // the rename survives a reload (autosave really hit IndexedDB)
   await page.getByTestId('back-to-projects').click();

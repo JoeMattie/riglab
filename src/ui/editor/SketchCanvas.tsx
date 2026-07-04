@@ -263,9 +263,25 @@ export function SketchCanvas() {
     }
 
     if (tool === 'select' && dragNode) {
+      // solve from the LIVE document, not this render's closure — fast event
+      // bursts can outrun React renders, and a stale mechanism here would
+      // solve from outdated geometry
       const world = toWorld(view, screen);
-      const result = runSolve({ [dragNode]: world });
-      if (result) {
+      const liveDoc = useAppStore.getState().current;
+      const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
+      if (!liveDoc || !liveMech) return;
+      const targets = {
+        ...bindingTargets(liveMech, liveDoc.wearer, pose),
+        [dragNode]: world,
+      };
+      const result = solve(liveMech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      setDiagnostics(
+        { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
+        result.diagnostics.violated,
+      );
+      // never write a non-converged pose back into the document — rest
+      // lengths are recomputed from it, so residual violation would compound
+      if (result.diagnostics.converged) {
         updateCurrent((cur) => moveNodes(cur, mech.id, result.positions));
         if (tracing) {
           const p = result.positions[dragNode];

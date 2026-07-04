@@ -61,6 +61,8 @@ function dragSequence(
   return { positions, mech: cur };
 }
 
+const dist = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
+
 function circleTargets(center: Vec2, radius: number, steps: number): Vec2[] {
   return Array.from({ length: steps }, (_, i) => {
     const a = (i / steps) * 2 * Math.PI;
@@ -337,6 +339,44 @@ describe('ACCEPTANCE Phase 1 — DOF diagnostics', () => {
     expect(result.diagnostics.converged).toBe(false);
     expect(result.diagnostics.residual).toBeGreaterThan(0.01);
     expect(result.diagnostics.violated).toContain('piv');
+  });
+});
+
+describe('ACCEPTANCE Phase 1 — no length ratchet under far drag targets', () => {
+  it('feeding solved positions back while dragging to unreachable targets keeps lengths exact', () => {
+    // regression: the UI recomputes rest lengths from the previous solution
+    // every frame, so any residual drag violation left in the output would
+    // compound frame over frame (found via Playwright with coarse pointer
+    // steps — solver must end on the constraint manifold, not mid-cycle)
+    let m = mech(
+      [
+        node('O2', 0, 0, 'anchor'),
+        node('A', 0, 0.2, 'free'),
+        node('B', 0.42, 0.45, 'free'),
+        node('O4', 0.6, 0, 'anchor'),
+      ],
+      [link('crank', 'O2', 'A'), link('coupler', 'A', 'B'), link('rocker', 'B', 'O4')],
+    );
+    const rests = { crank: 0.2, coupler: dist(m.nodes[1]!.position, m.nodes[2]!.position), rocker: dist(m.nodes[2]!.position, m.nodes[3]!.position) };
+    // wild, mostly-unreachable targets, big jumps like a fast pointer
+    const targets: Vec2[] = [
+      { x: 1.5, y: 1.2 },
+      { x: -1.0, y: 0.8 },
+      { x: 0.3, y: -1.4 },
+      { x: 2.0, y: 0.0 },
+      { x: -0.5, y: -0.5 },
+      { x: 0.1, y: 1.8 },
+    ];
+    for (const t of targets) {
+      const { positions, mech: next } = dragSequence(m, 'A', [t]);
+      m = next;
+      const lenCrank = dist(positions.O2!, positions.A!);
+      const lenCoupler = dist(positions.A!, positions.B!);
+      const lenRocker = dist(positions.B!, positions.O4!);
+      expect(Math.abs(lenCrank - rests.crank)).toBeLessThanOrEqual(1e-4);
+      expect(Math.abs(lenCoupler - rests.coupler)).toBeLessThanOrEqual(1e-4);
+      expect(Math.abs(lenRocker - rests.rocker)).toBeLessThanOrEqual(1e-4);
+    }
   });
 });
 

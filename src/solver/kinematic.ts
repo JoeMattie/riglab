@@ -10,6 +10,11 @@ import type { Mechanism, Vec2 } from '../schema';
 import type { SolveInputs, SolveResult } from './types';
 
 const ITERATIONS = 300;
+/** constraint-only sweeps after the drag loop: a far-from-feasible drag
+ * target would otherwise leave real violation in the output (the drag/
+ * constraint cycle never converges), and since callers recompute rest
+ * lengths from returned positions, that error would compound per frame */
+const SETTLE_ITERATIONS = 100;
 const CONVERGE_TOL = 1e-5;
 
 interface P {
@@ -358,9 +363,37 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     .filter(([id]) => particles.has(id))
     .map(([id, target]) => new DragC(get(id), target));
 
+  const settle = () => {
+    for (let it = 0; it < SETTLE_ITERATIONS; it++) {
+      for (const c of constraints) c.project();
+    }
+  };
+  const maxViolation = () => {
+    let r = 0;
+    for (const c of constraints) r = Math.max(r, c.violation());
+    return r;
+  };
+
   for (let it = 0; it < ITERATIONS; it++) {
     for (const d of drags) d.project();
     for (const c of constraints) c.project();
+  }
+  // release the drag and settle onto the constraint manifold
+  settle();
+
+  // degenerate configurations (e.g. links dragged exactly collinear) leave
+  // Gauss–Seidel with no perpendicular gradient to escape along; a tiny
+  // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry.
+  // Truly conflicting constraints stay violated and get reported below.
+  for (let round = 0; round < 3 && maxViolation() > CONVERGE_TOL; round++) {
+    let k = 0;
+    for (const p of particles.values()) {
+      if (p.w === 0) continue;
+      k++;
+      p.x += 1e-6 * Math.sin(k * 2.39996);
+      p.y += 1e-6 * Math.cos(k * 2.39996);
+    }
+    settle();
   }
 
   let residual = 0;
