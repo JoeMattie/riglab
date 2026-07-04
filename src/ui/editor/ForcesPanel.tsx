@@ -1,12 +1,12 @@
+import type { InputChannel, UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { useEditorStore } from '../../state/editorStore';
 import {
   addInputChannel,
   removeInputChannel,
   setGravity,
   setInputChannel,
 } from '../../state/docOps';
-import type { InputChannel, UnitsPreference } from '../../schema';
+import { useEditorStore } from '../../state/editorStore';
 import { formatForce, solverStatusLabel } from './forces';
 
 const STATUS_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
@@ -108,13 +108,30 @@ export function ForcesPanel() {
             <div
               key={ch.id}
               data-testid="input-channel"
-              style={{ display: 'flex', gap: 5, alignItems: 'center', border: '1px solid #e2e2e8', borderRadius: 6, padding: '2px 6px' }}
+              style={{
+                display: 'flex',
+                gap: 5,
+                alignItems: 'center',
+                border: '1px solid #e2e2e8',
+                borderRadius: 6,
+                padding: '2px 6px',
+              }}
             >
               <input
                 data-testid="input-name"
                 value={ch.name}
-                onChange={(e) => updateCurrent((cur) => setInputChannel(cur, mech.id, ch.id, { name: e.target.value }))}
-                style={{ width: 72, fontSize: 12, border: 'none', borderBottom: '1px solid #ccc', background: 'transparent' }}
+                onChange={(e) =>
+                  updateCurrent((cur) =>
+                    setInputChannel(cur, mech.id, ch.id, { name: e.target.value }),
+                  )
+                }
+                style={{
+                  width: 72,
+                  fontSize: 12,
+                  border: 'none',
+                  borderBottom: '1px solid #ccc',
+                  background: 'transparent',
+                }}
               />
               <input
                 type="range"
@@ -126,17 +143,33 @@ export function ForcesPanel() {
                 disabled={ch.locked}
                 onPointerDown={beginGesture}
                 onPointerUp={endGesture}
-                onChange={(e) => updateCurrent((cur) => setInputChannel(cur, mech.id, ch.id, { value: Number(e.target.value) }))}
+                onChange={(e) =>
+                  updateCurrent((cur) =>
+                    setInputChannel(cur, mech.id, ch.id, { value: Number(e.target.value) }),
+                  )
+                }
                 style={{ width: 90 }}
               />
-              <span style={{ width: 34, textAlign: 'right', color: '#555', fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{
+                  width: 34,
+                  textAlign: 'right',
+                  color: '#555',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {ch.value.toFixed(2)}
               </span>
               <button
+                type="button"
                 data-testid="input-lock"
                 title={ch.locked ? 'unlock channel' : 'lock channel (freeze value)'}
                 aria-pressed={ch.locked}
-                onClick={() => updateCurrent((cur) => setInputChannel(cur, mech.id, ch.id, { locked: !ch.locked }))}
+                onClick={() =>
+                  updateCurrent((cur) =>
+                    setInputChannel(cur, mech.id, ch.id, { locked: !ch.locked }),
+                  )
+                }
                 style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14 }}
               >
                 {ch.locked ? '🔒' : '🔓'}
@@ -147,6 +180,7 @@ export function ForcesPanel() {
                 </span>
               )}
               <button
+                type="button"
                 data-testid="input-remove"
                 title="remove channel"
                 onClick={() => updateCurrent((cur) => removeInputChannel(cur, mech.id, ch.id))}
@@ -158,6 +192,7 @@ export function ForcesPanel() {
           );
         })}
         <button
+          type="button"
           data-testid="add-input"
           onClick={() => updateCurrent((cur) => addInputChannel(cur, mech.id).doc)}
           title="add an input channel"

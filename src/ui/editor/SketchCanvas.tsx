@@ -1,6 +1,10 @@
-import Konva from 'konva';
+import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import type { Mechanism, Vec2 } from '../../schema';
+import { solve } from '../../solver';
+import { useAppStore } from '../../state/appStore';
+import type { EndSpec } from '../../state/docOps';
 import {
   addBowden,
   addElastic,
@@ -12,15 +16,11 @@ import {
   moveNodes,
   setNodeKind,
 } from '../../state/docOps';
-import type { EndSpec } from '../../state/docOps';
-import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
-import { solve } from '../../solver';
-import type { Mechanism, Vec2 } from '../../schema';
-import { REST_POSE, bindingTargets, computeSilhouette, getClip, samplePose } from '../../wearer';
+import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
-import { GRID_M, findSnap, type Snap } from './snapping';
-import { initialView, panBy, toScreen, toWorld, zoomAt, type ViewTransform } from './viewTransform';
+import { findSnap, GRID_M, type Snap } from './snapping';
+import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
 
@@ -69,7 +69,11 @@ function snapToEndSpec(snap: Snap, connect: 'pivot' | 'weld' | 'slider' | 'detac
   if (connect === 'detach') return { kind: 'newNode', pos: snap.pos };
   switch (snap.kind) {
     case 'node':
-      return { kind: 'existingNode', nodeId: snap.nodeId, connect: connect === 'weld' ? 'weld' : 'pivot' };
+      return {
+        kind: 'existingNode',
+        nodeId: snap.nodeId,
+        connect: connect === 'weld' ? 'weld' : 'pivot',
+      };
     case 'onPipe':
       return {
         kind: 'onPipe',
@@ -130,7 +134,11 @@ export function SketchCanvas() {
   // own tools). Rope routes through clicked waypoints; elastic/bowden are
   // click-drag; bowden needs two segments; torsion couples two picked pivots.
   const [ropeDraft, setRopeDraft] = useState<{ points: Snap[]; cursor: Vec2 } | null>(null);
-  const [dragCord, setDragCord] = useState<{ tool: 'elastic' | 'bowden'; start: Snap; cursor: Vec2 } | null>(null);
+  const [dragCord, setDragCord] = useState<{
+    tool: 'elastic' | 'bowden';
+    start: Snap;
+    cursor: Vec2;
+  } | null>(null);
   const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap } | null>(null);
   const [torsionA, setTorsionA] = useState<{ pivotId: string; nodeId: string } | null>(null);
   const panRef = useRef<{ x: number; y: number } | null>(null);
@@ -311,7 +319,9 @@ export function SketchCanvas() {
     if (tool === 'rope') {
       // click waypoints; double-click (two clicks on one spot) finishes.
       // Points landing on a pipe become eyelets.
-      setRopeDraft((d) => (d ? { ...d, points: [...d.points, snap] } : { points: [snap], cursor: snap.pos }));
+      setRopeDraft((d) =>
+        d ? { ...d, points: [...d.points, snap] } : { points: [snap], cursor: snap.pos },
+      );
       return;
     }
     if (tool === 'elastic' || tool === 'bowden') {
@@ -440,7 +450,10 @@ export function SketchCanvas() {
     if (draft && (draft.mode === 'pipe' || draft.mode === 'freehand')) {
       const endSnap = snapAt(screen);
       const start = draft.start.pos;
-      if (draft.mode === 'pipe' && Math.hypot(endSnap.pos.x - start.x, endSnap.pos.y - start.y) < 0.02) {
+      if (
+        draft.mode === 'pipe' &&
+        Math.hypot(endSnap.pos.x - start.x, endSnap.pos.y - start.y) < 0.02
+      ) {
         setDraft(null); // too short — treat as a cancelled click
         return;
       }
@@ -465,10 +478,13 @@ export function SketchCanvas() {
       // keep drafting.
       const n = pts.length;
       const finishing =
-        n >= 2 && Math.hypot(pts[n - 1]!.pos.x - pts[n - 2]!.pos.x, pts[n - 1]!.pos.y - pts[n - 2]!.pos.y) <= 1e-6;
+        n >= 2 &&
+        Math.hypot(pts[n - 1]!.pos.x - pts[n - 2]!.pos.x, pts[n - 1]!.pos.y - pts[n - 2]!.pos.y) <=
+          1e-6;
       if (!finishing) return;
       const dedup = pts.filter(
-        (s, i) => i === 0 || Math.hypot(s.pos.x - pts[i - 1]!.pos.x, s.pos.y - pts[i - 1]!.pos.y) > 1e-6,
+        (s, i) =>
+          i === 0 || Math.hypot(s.pos.x - pts[i - 1]!.pos.x, s.pos.y - pts[i - 1]!.pos.y) > 1e-6,
       );
       if (dedup.length >= 2) {
         const specs = dedup.map((s) => snapToEndSpec(s, 'pivot'));
@@ -519,7 +535,10 @@ export function SketchCanvas() {
 
   if (!doc || !mech) {
     return (
-      <div ref={containerRef} style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#888' }}>
+      <div
+        ref={containerRef}
+        style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#888' }}
+      >
         <p>Create a mechanism to start sketching.</p>
       </div>
     );
@@ -536,10 +555,22 @@ export function SketchCanvas() {
     const w0 = toWorld(view, { x: 0, y: size.h });
     const w1 = toWorld(view, { x: size.w, y: 0 });
     for (let x = Math.floor(w0.x / step) * step; x <= w1.x; x += step) {
-      gridLines.push({ pts: flat([{ x, y: w0.y }, { x, y: w1.y }]), strong: Math.abs(x) < 1e-9 });
+      gridLines.push({
+        pts: flat([
+          { x, y: w0.y },
+          { x, y: w1.y },
+        ]),
+        strong: Math.abs(x) < 1e-9,
+      });
     }
     for (let y = Math.floor(w0.y / step) * step; y <= w1.y; y += step) {
-      gridLines.push({ pts: flat([{ x: w0.x, y }, { x: w1.x, y }]), strong: Math.abs(y) < 1e-9 });
+      gridLines.push({
+        pts: flat([
+          { x: w0.x, y },
+          { x: w1.x, y },
+        ]),
+        strong: Math.abs(y) < 1e-9,
+      });
     }
   }
 
@@ -570,7 +601,11 @@ export function SketchCanvas() {
   const units = doc.unitsPreference;
 
   return (
-    <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative' }} data-testid="sketch-canvas">
+    <div
+      ref={containerRef}
+      style={{ flex: 1, minHeight: 0, position: 'relative' }}
+      data-testid="sketch-canvas"
+    >
       <Stage
         width={size.w}
         height={size.h}
@@ -582,20 +617,48 @@ export function SketchCanvas() {
       >
         <Layer listening={false}>
           {gridLines.map((g, i) => (
-            <Line key={i} points={g.pts} stroke={g.strong ? '#c8c8d4' : '#ededf2'} strokeWidth={1} />
+            <Line
+              // biome-ignore lint/suspicious/noArrayIndexKey: grid lines are positional, regenerated wholesale, and never reorder
+              key={i}
+              points={g.pts}
+              stroke={g.strong ? '#c8c8d4' : '#ededf2'}
+              strokeWidth={1}
+            />
           ))}
           {silhouette?.outlines.map((poly, i) => (
-            <Line key={`s${i}`} points={flat(poly)} stroke="#b9c0cc" strokeWidth={2} lineJoin="round" />
+            <Line
+              // biome-ignore lint/suspicious/noArrayIndexKey: silhouette outlines are a fixed projection, regenerated wholesale, never reordered
+              key={`s${i}`}
+              points={flat(poly)}
+              stroke="#b9c0cc"
+              strokeWidth={2}
+              lineJoin="round"
+            />
           ))}
           {showSilhouettePoints &&
             silhouette &&
             Object.entries(silhouette.points).map(([name, p]) => (
-              <Circle key={`sp${name}`} x={S(p).x} y={S(p).y} radius={4} stroke="#7a9" strokeWidth={1.5} />
+              <Circle
+                key={`sp${name}`}
+                x={S(p).x}
+                y={S(p).y}
+                radius={4}
+                stroke="#7a9"
+                strokeWidth={1.5}
+              />
             ))}
           {showSilhouettePoints &&
             silhouette &&
             Object.entries(silhouette.anchors).map(([name, p]) => (
-              <Rect key={`sa${name}`} x={S(p).x - 3} y={S(p).y - 3} width={6} height={6} stroke="#a97" strokeWidth={1.5} />
+              <Rect
+                key={`sa${name}`}
+                x={S(p).x - 3}
+                y={S(p).y - 3}
+                width={6}
+                height={6}
+                stroke="#a97"
+                strokeWidth={1.5}
+              />
             ))}
         </Layer>
 
@@ -677,15 +740,29 @@ export function SketchCanvas() {
                     opacity={0.5}
                     listening={false}
                   />
-                  <Line points={[a1.x, a1.y, a2.x, a2.y]} stroke={stroke} strokeWidth={2.5} dash={[8, 3, 2, 3]} lineCap="round" hitStrokeWidth={12} />
-                  <Line points={[b1.x, b1.y, b2.x, b2.y]} stroke={stroke} strokeWidth={2.5} dash={[8, 3, 2, 3]} lineCap="round" hitStrokeWidth={12} />
+                  <Line
+                    points={[a1.x, a1.y, a2.x, a2.y]}
+                    stroke={stroke}
+                    strokeWidth={2.5}
+                    dash={[8, 3, 2, 3]}
+                    lineCap="round"
+                    hitStrokeWidth={12}
+                  />
+                  <Line
+                    points={[b1.x, b1.y, b2.x, b2.y]}
+                    stroke={stroke}
+                    strokeWidth={2.5}
+                    dash={[8, 3, 2, 3]}
+                    lineCap="round"
+                    hitStrokeWidth={12}
+                  />
                 </Group>
               );
             }
             if (el.type === 'torsionCable') {
               const pa = mech.elements.find((e) => e.id === el.pivotA);
               const pb = mech.elements.find((e) => e.id === el.pivotB);
-              if (!pa || pa.type !== 'pivot' || !pb || pb.type !== 'pivot') return null;
+              if (pa?.type !== 'pivot' || pb?.type !== 'pivot') return null;
               const a = S(nodePos(pa.nodeId));
               const b = S(nodePos(pb.nodeId));
               return (
@@ -710,7 +787,14 @@ export function SketchCanvas() {
               const to = silhouette.points[b.point];
               if (!from || !to) return null;
               return (
-                <Line key={b.id} points={flat([from, to])} stroke="#4a4" strokeWidth={1} dash={[3, 4]} listening={false} />
+                <Line
+                  key={b.id}
+                  points={flat([from, to])}
+                  stroke="#4a4"
+                  strokeWidth={1}
+                  dash={[3, 4]}
+                  listening={false}
+                />
               );
             })}
 
@@ -739,13 +823,32 @@ export function SketchCanvas() {
             />
           )}
           {dragCord && dragCord.tool === 'elastic' && (
-            <Line points={zigzag(S(dragCord.start.pos), S(dragCord.cursor))} stroke="#2a8a4a" strokeWidth={2} opacity={0.7} listening={false} />
+            <Line
+              points={zigzag(S(dragCord.start.pos), S(dragCord.cursor))}
+              stroke="#2a8a4a"
+              strokeWidth={2}
+              opacity={0.7}
+              listening={false}
+            />
           )}
           {dragCord && dragCord.tool === 'bowden' && (
-            <Line points={flat([dragCord.start.pos, dragCord.cursor])} stroke="#8a5cd0" strokeWidth={2.5} dash={[8, 3, 2, 3]} opacity={0.7} listening={false} />
+            <Line
+              points={flat([dragCord.start.pos, dragCord.cursor])}
+              stroke="#8a5cd0"
+              strokeWidth={2.5}
+              dash={[8, 3, 2, 3]}
+              opacity={0.7}
+              listening={false}
+            />
           )}
           {bowdenA && (
-            <Line points={flat([bowdenA.start.pos, bowdenA.end.pos])} stroke="#8a5cd0" strokeWidth={2.5} dash={[8, 3, 2, 3]} listening={false} />
+            <Line
+              points={flat([bowdenA.start.pos, bowdenA.end.pos])}
+              stroke="#8a5cd0"
+              strokeWidth={2.5}
+              dash={[8, 3, 2, 3]}
+              listening={false}
+            />
           )}
           {torsionA && renderPositions[torsionA.nodeId] && (
             <Circle
@@ -787,9 +890,7 @@ export function SketchCanvas() {
           {mech.nodes.map((n) => {
             const p = S(nodePos(n.id));
             if (n.kind === 'anchor') {
-              return (
-                <Rect key={n.id} x={p.x - 5} y={p.y - 5} width={10} height={10} fill="#222" />
-              );
+              return <Rect key={n.id} x={p.x - 5} y={p.y - 5} width={10} height={10} fill="#222" />;
             }
             const isPivot = (memberCount.get(n.id) ?? 0) >= 2;
             return (

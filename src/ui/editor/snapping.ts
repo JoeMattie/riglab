@@ -35,11 +35,7 @@ export function findSnap(world: Vec2, ctx: SnapContext): Snap {
   let best: { snap: Snap; dist: number; priority: number } | null = null;
   const consider = (snap: Snap, dist: number, priority: number) => {
     if (dist > tolM) return;
-    if (
-      !best ||
-      priority < best.priority ||
-      (priority === best.priority && dist < best.dist)
-    ) {
+    if (!best || priority < best.priority || (priority === best.priority && dist < best.dist)) {
       best = { snap, dist, priority };
     }
   };

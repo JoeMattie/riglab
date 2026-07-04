@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureProject } from './fixtures';
-import { SCHEMA_VERSION, createEmptyProject, projectSchema } from './project';
+import { createEmptyProject, projectSchema, SCHEMA_VERSION } from './project';
 
 describe('project schema v1', () => {
   it('accepts a freshly created empty project', () => {

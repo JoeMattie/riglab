@@ -58,6 +58,7 @@ export function TransportBar() {
         ))}
       </select>
       <button
+        type="button"
         data-testid="play-pause"
         disabled={!clip}
         onClick={() => setPlayback({ playing: !playback.playing })}

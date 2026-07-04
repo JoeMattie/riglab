@@ -1,5 +1,5 @@
-import { REVISION_LIMIT, RigLabDb } from './db';
 import { createEmptyProject, migrateToLatest, type Project } from '../schema';
+import { REVISION_LIMIT, RigLabDb } from './db';
 
 export interface ProjectSummary {
   id: string;
@@ -37,10 +37,7 @@ export class ProjectStore {
     await this.db.transaction('rw', this.db.projects, this.db.revisions, async () => {
       await this.db.projects.put({ id: doc.id, name: doc.name, updatedAt: savedAt, doc });
       await this.db.revisions.add({ projectId: doc.id, savedAt, doc } as never);
-      const revIds = await this.db.revisions
-        .where('projectId')
-        .equals(doc.id)
-        .sortBy('savedAt');
+      const revIds = await this.db.revisions.where('projectId').equals(doc.id).sortBy('savedAt');
       const excess = revIds.length - REVISION_LIMIT;
       if (excess > 0) {
         await this.db.revisions.bulkDelete(revIds.slice(0, excess).map((r) => r.revId));

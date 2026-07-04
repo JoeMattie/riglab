@@ -45,7 +45,10 @@ describe('ACCEPTANCE Phase 1 — skeleton binding drives nodes through walk', ()
       const t = (i / 24) * walk.durationS;
       const pose = samplePose(walk, t);
       const targets = bindingTargets(m, DEFAULT_WEARER, pose);
-      const expected = projectPoint('side-left', computeSkeleton(DEFAULT_WEARER, pose).points.handR);
+      const expected = projectPoint(
+        'side-left',
+        computeSkeleton(DEFAULT_WEARER, pose).points.handR,
+      );
       expect(targets.free).toEqual(expected);
       const result = solve(m, { channelValues: {}, dragTargets: targets }, 'kinematic');
       expect(result.positions.free!.x).toBeCloseTo(expected.x, 9);

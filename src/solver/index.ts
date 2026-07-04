@@ -3,8 +3,8 @@ import { solveEquilibrium } from './equilibrium';
 import { solveKinematic } from './kinematic';
 import type { SolveInputs, SolveMode, SolveResult } from './types';
 
-export * from './types';
 export { channelValue, drivenTargets } from './equilibrium';
+export * from './types';
 
 /** Retained from Phase 1 for consumers that referenced it; no longer thrown
  * now that equilibrium mode is implemented. */

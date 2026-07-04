@@ -1,7 +1,7 @@
 // Phase 1 smoke: the seed smoke grows (§3) — create a project, draw a
 // four-bar with three chained pipes and two double-click anchors, verify
 // DOF 1 · mechanism, drag the crank tip, and confirm geometry held.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 interface RigLabHook {
   getDoc(): {
@@ -11,7 +11,10 @@ interface RigLabHook {
       elements: Array<{ type: string }>;
     }>;
   };
-  getEditor(): { activeMechanismId: string | null; dof: { dof: number; classification: string } | null };
+  getEditor(): {
+    activeMechanismId: string | null;
+    dof: { dof: number; classification: string } | null;
+  };
 }
 
 declare global {

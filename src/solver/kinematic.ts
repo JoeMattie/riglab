@@ -256,7 +256,10 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     mechanism.nodes.map((n) => {
       const target = n.kind === 'driven' ? driven[n.id] : undefined;
       const p = target ?? n.position;
-      return [n.id, { id: n.id, x: p.x, y: p.y, w: n.kind === 'anchor' || n.kind === 'driven' ? 0 : 1 }];
+      return [
+        n.id,
+        { id: n.id, x: p.x, y: p.y, w: n.kind === 'anchor' || n.kind === 'driven' ? 0 : 1 },
+      ];
     }),
   );
   const pos = new Map(mechanism.nodes.map((n) => [n.id, n.position]));

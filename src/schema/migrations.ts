@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, projectSchema, type Project } from './project';
+import { type Project, projectSchema, SCHEMA_VERSION } from './project';
 
 /** Migration from version N to N+1. Operates on plain JSON — never import
  * app code here; old documents must migrate forever. */

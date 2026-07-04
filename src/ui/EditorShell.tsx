@@ -68,7 +68,14 @@ export function EditorShell() {
   };
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        fontFamily: 'system-ui, sans-serif',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <header
         style={{
           display: 'flex',
@@ -78,7 +85,7 @@ export function EditorShell() {
           borderBottom: '1px solid #ccc',
         }}
       >
-        <button data-testid="back-to-projects" onClick={() => void closeProject()}>
+        <button type="button" data-testid="back-to-projects" onClick={() => void closeProject()}>
           ← Projects
         </button>
         <input
@@ -90,14 +97,14 @@ export function EditorShell() {
         <span data-testid="save-state" style={{ color: saveState === 'saved' ? '#282' : '#a60' }}>
           {saveState === 'saved' ? 'saved' : 'saving…'}
         </span>
-        <button data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
+        <button type="button" data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
           ↶ undo
         </button>
-        <button data-testid="redo" onClick={redo} title="Ctrl/Cmd+Shift+Z">
+        <button type="button" data-testid="redo" onClick={redo} title="Ctrl/Cmd+Shift+Z">
           ↷ redo
         </button>
         <span style={{ flex: 1 }} />
-        <button data-testid="export-project" onClick={onExport}>
+        <button type="button" data-testid="export-project" onClick={onExport}>
           Export JSON
         </button>
       </header>

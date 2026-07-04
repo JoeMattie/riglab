@@ -18,23 +18,25 @@ bundled example content only.
 
 ## Status
 
-**Phase 1 complete** (sketch & play): draw straight/polyline/freehand pipes
-on the wearer silhouette, snap-connect with the pivot/weld/slider menu, drag
-mechanisms through their range of motion with a live kinematic XPBD solve,
-anchor nodes, bind nodes to skeleton points, and play walk / arm-swing /
-lean clips that drive the bound nodes. Undo/redo, DOF badge, motion-path
-tracing. Phase 0 delivered the library spike ([DECISIONS.md](DECISIONS.md) —
-custom XPBD + Konva), Zod schema with migrations, Dexie persistence, and
-JSON export/import.
+**Phase 2 complete** (forces): ropes with eyelet routing, elastics, bowden
+and torsion-cable couplings, gravity + static-equilibrium relaxation, force
+readouts (tensions, pivot reactions, required input force/torque),
+rope-compression warnings, and input channels with lock toggles. Phase 1
+delivered sketch & play (draw pipes on the wearer silhouette, snap-connect,
+drag-to-pose with a live kinematic XPBD solve, skeleton bindings, movement
+clips, undo/redo); Phase 0 the library spike
+([DECISIONS.md](DECISIONS.md) — custom XPBD + Konva), Zod schema with
+migrations, Dexie persistence, and JSON export/import.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Library spike + scaffold | ✅ done |
 | 1 | Sketch & play: draw pipes, snap-connect, drag-to-pose, movement clips | ✅ done |
-| 2 | Forces: ropes/elastics/bowden/torsion, equilibrium, tension readouts | — |
-| 3 | Design face: materials DB, nesting matrix, cut list + BOM | — |
+| 2 | Forces: ropes/elastics/bowden/torsion, equilibrium, tension readouts | ✅ done |
+| 3 | Design face: info panel, materials DB, nesting matrix, cut list + BOM; shadcn/ui + zoompinch adoption | — |
 | 4 | 3D assembly: full mannequin, instance placement, mass/CG/balance | — |
-| 5 | Bundled examples + polish | — |
+| 4.5 | Controls: virtual input devices (yoke/lever/trigger) + control clips | — |
+| 5 | Bundled examples + polish (design-handoff visual pass) | — |
 
 The full specification lives in
 [PLANFILE-pvc-rig-lab.md](PLANFILE-pvc-rig-lab.md) — it is the source of
@@ -48,7 +50,9 @@ Vite · React · TypeScript (strict) · Zustand (+ zundo for undo) · Zod
 (schema = single source of truth, versioned with migrations) · Dexie
 (IndexedDB) · Konva (2D editor) · three.js via react-three-fiber (3D
 assembly, Phase 4) · custom XPBD solver behind a pure
-`solve(mechanism, inputs, mode)` interface · Vitest + Playwright.
+`solve(mechanism, inputs, mode)` interface · Vitest + Testing Library, with
+a small Playwright smoke suite · Biome (lint + format). Phase 3 adds
+shadcn/ui (Tailwind) for panel UI and zoompinch for canvas pan/zoom.
 
 Fully client-side: no backend, no network calls at runtime, works offline
 once loaded; deploys as static assets to Cloudflare Pages. Internal units are
@@ -62,23 +66,26 @@ npm run dev        # dev server
 npm test           # unit + acceptance tests (Vitest)
 npm run e2e        # Playwright smoke test against the built app
 npm run typecheck  # tsc --noEmit
+npm run lint       # Biome (lint + format check); lint:fix applies fixes
 npm run build      # production build to dist/
 ```
 
-CI (GitHub Actions) runs typecheck, tests, build, and the Playwright smoke
-on every push. Solver and BOM math are developed test-first: acceptance
-tests for future phases are committed skip-marked and un-skipped at the
-start of their phase.
+CI (GitHub Actions) runs typecheck, lint, tests, build, and the Playwright
+smoke on every push. Solver and BOM math are developed test-first:
+acceptance tests for future phases are committed skip-marked and un-skipped
+at the start of their phase. UI logic is tested in Vitest (Testing Library);
+the Playwright suite stays smoke-level.
 
 ## Layout
 
 ```
 src/schema/        Zod schemas (z.infer types), schemaVersion + migrations
-src/solver/        solve() interface + acceptance tests (XPBD impl: Phase 1)
+src/solver/        solve() — XPBD kinematic + equilibrium modes, acceptance tests
 src/persistence/   Dexie store, autosave, revisions, JSON export/import
-src/state/         Zustand app store
-src/ui/            React UI (project manager shell; editor from Phase 1)
-e2e/               Playwright smoke test
+src/state/         Zustand app store + document operations
+src/ui/            React UI (project manager shell, sketch editor)
+src/wearer/        mannequin, view projections, movement clips
+e2e/               Playwright smoke suite
 ```
 
 The Phase 0 evaluation harness (three solver candidates benchmarked against

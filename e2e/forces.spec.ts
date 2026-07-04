@@ -3,7 +3,7 @@
 // to confirm the force-overlay plumbing renders. Physical numbers are NOT
 // asserted here — the equilibrium solver lands in a parallel branch; the
 // solver-math acceptance tests live in src/solver/acceptance/.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 // A second e2e spec must not re-declare the global Window.__riglab type (the
 // sketch spec already augments it, with a different shape), so read the hook

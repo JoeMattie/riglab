@@ -39,10 +39,15 @@ export function ProjectList() {
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onCreate()}
         />
-        <button data-testid="create-project" onClick={onCreate} disabled={!newName.trim()}>
+        <button
+          type="button"
+          data-testid="create-project"
+          onClick={onCreate}
+          disabled={!newName.trim()}
+        >
           Create
         </button>
-        <button data-testid="import-project" onClick={() => fileRef.current?.click()}>
+        <button type="button" data-testid="import-project" onClick={() => fileRef.current?.click()}>
           Import…
         </button>
         <input
@@ -79,10 +84,11 @@ export function ProjectList() {
               {p.name}
             </span>
             <small>{new Date(p.updatedAt).toLocaleString()}</small>
-            <button data-testid="open-project" onClick={() => void openProject(p.id)}>
+            <button type="button" data-testid="open-project" onClick={() => void openProject(p.id)}>
               Open
             </button>
             <button
+              type="button"
               onClick={() => {
                 const name = window.prompt('Rename project', p.name);
                 if (name?.trim()) void renameProject(p.id, name.trim());
@@ -91,6 +97,7 @@ export function ProjectList() {
               Rename
             </button>
             <button
+              type="button"
               data-testid="delete-project"
               onClick={() => {
                 if (window.confirm(`Delete "${p.name}"?`)) void deleteProject(p.id);

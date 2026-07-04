@@ -3,9 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Mechanism } from '../../schema';
 import { solve } from '..';
-import { FOUR_BAR, crankTip, fourBarB, fourBarInitial } from './analytic';
+import { crankTip, FOUR_BAR, fourBarB, fourBarInitial } from './analytic';
 
-export function fourBarMechanism(): Mechanism {
+function fourBarMechanism(): Mechanism {
   const { A, B } = fourBarInitial(FOUR_BAR);
   const link = (id: string, nodeA: string, nodeB: string): Mechanism['elements'][number] => ({
     id,
@@ -42,7 +42,11 @@ describe('ACCEPTANCE Phase 1 — four-bar kinematic drag', () => {
     for (let k = 1; k <= 72; k++) {
       const theta = Math.PI / 2 + (k * 2 * Math.PI) / 72;
       const target = crankTip(FOUR_BAR, theta);
-      const result = solve(mechanism, { channelValues: {}, dragTargets: { A: target } }, 'kinematic');
+      const result = solve(
+        mechanism,
+        { channelValues: {}, dragTargets: { A: target } },
+        'kinematic',
+      );
       const expB = fourBarB(FOUR_BAR, theta, prevB);
       prevB = expB;
       const gotA = result.positions.A;

@@ -480,3 +480,33 @@ smoke suite. Rule of thumb: if a behavior can be asserted against a
 component or `solve()` in Vitest, it must not become an e2e spec; Playwright
 verifies wiring (project lifecycle, sketch, forces smoke), not logic, and
 interactive browser-driving is not the development verification loop.
+
+### DECISION: lint/format = Biome (2026-07-04, user directive)
+
+User directive ("biome for linting and formatting to help avoid react
+pitfalls and keep everything looking nice"). `@biomejs/biome@2.5.2` pinned
+exact; one tool replaces the ESLint+Prettier pair, and its **react domain**
+supplies the pitfall rules that motivated the ask (exhaustive hook
+dependencies, rules of hooks, no array-index keys, button types). Config
+choices, each deliberate:
+
+- **recommended preset + react + test domains**, organize-imports assist on.
+- **`noNonNullAssertion` off** — 245 hits, nearly all in the solver where
+  `!` follows an existence-checked map/find lookup; TypeScript strict
+  already polices null soundness, and rewriting the solver for a style rule
+  is churn with regression risk.
+- **Formatter codifies the existing style** (2-space, single quotes) with
+  **line width 100** — the code base wasn't wrapped at Biome's default 80
+  (102 lines over 100 chars), and 100 wraps JSX less aggressively.
+- Suppressions require inline `biome-ignore` with a reason; the only two in
+  the sweep are `noArrayIndexKey` on the sketch canvas grid/silhouette
+  layers, where the lists are positional projections regenerated wholesale
+  and never reordered.
+
+One-time sweep across 66 files: formatting + import organization, plus real
+fixes — 19 `<button>`s given `type="button"` (they were submit-typed by
+default), 3 iterable callbacks returning `Set.add`'s value, 2 unused
+`export`s removed from test files, 2 `!x || x.y !== z` chains converted to
+optional chaining. `npm run lint` added to package scripts and as a CI step
+between typecheck and test; typecheck, all 84 unit/acceptance tests, and the
+production build verified green after the sweep.

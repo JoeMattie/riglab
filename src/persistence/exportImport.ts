@@ -1,4 +1,4 @@
-import { migrateToLatest, projectSchema, type Project } from '../schema';
+import { migrateToLatest, type Project, projectSchema } from '../schema';
 
 /** Serialize a project for file export. Validates on the way out so a bug
  * can't write an unloadable file. */

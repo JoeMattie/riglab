@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyProject } from '../schema/project';
 import type { Mechanism, PivotElement, Project } from '../schema';
+import { createEmptyProject } from '../schema/project';
 import {
   addBowden,
   addElastic,
@@ -8,11 +8,11 @@ import {
   addMechanism,
   addRope,
   addTorsionCable,
+  DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
+  type EndSpec,
   removeInputChannel,
   setGravity,
   setInputChannel,
-  DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
-  type EndSpec,
 } from './docOps';
 
 function freshMechanism(): { doc: Project; mechId: string } {
@@ -37,7 +37,11 @@ describe('addRope', () => {
 
   it('routes through interior waypoints (eyelets) and sums the path length', () => {
     const { doc, mechId } = freshMechanism();
-    const { doc: next, elementId } = addRope(doc, mechId, [newNode(0, 0), newNode(0, 1), newNode(1, 1)]);
+    const { doc: next, elementId } = addRope(doc, mechId, [
+      newNode(0, 0),
+      newNode(0, 1),
+      newNode(1, 1),
+    ]);
     const rope = mechOf(next).elements.find((e) => e.id === elementId)!;
     if (rope.type !== 'rope') throw new Error('not a rope');
     expect(rope.path).toHaveLength(3);

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { addMechanism } from '../../state/docOps';
-import { useAppStore } from '../../state/appStore';
-import { useEditorStore } from '../../state/editorStore';
 import type { ViewOrientation } from '../../schema';
+import { useAppStore } from '../../state/appStore';
+import { addMechanism } from '../../state/docOps';
+import { useEditorStore } from '../../state/editorStore';
 
 const VIEWS: ViewOrientation[] = ['side-left', 'side-right', 'front', 'back', 'top', 'free'];
 
@@ -27,9 +27,18 @@ export function MechanismTabs() {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 4, padding: '6px 12px', borderBottom: '1px solid #ddd', alignItems: 'center' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: 4,
+        padding: '6px 12px',
+        borderBottom: '1px solid #ddd',
+        alignItems: 'center',
+      }}
+    >
       {doc.mechanisms.map((m) => (
         <button
+          type="button"
           key={m.id}
           data-testid="mechanism-tab"
           onClick={() => setActiveMechanism(m.id)}
@@ -42,14 +51,16 @@ export function MechanismTabs() {
         <span data-testid="view-picker">
           view:{' '}
           {VIEWS.map((v) => (
-            <button key={v} data-testid={`view-${v}`} onClick={() => create(v)}>
+            <button type="button" key={v} data-testid={`view-${v}`} onClick={() => create(v)}>
               {v}
             </button>
           ))}
-          <button onClick={() => setPicking(false)}>×</button>
+          <button type="button" onClick={() => setPicking(false)}>
+            ×
+          </button>
         </span>
       ) : (
-        <button data-testid="add-mechanism" onClick={() => setPicking(true)}>
+        <button type="button" data-testid="add-mechanism" onClick={() => setPicking(true)}>
           + mechanism
         </button>
       )}

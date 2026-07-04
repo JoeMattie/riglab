@@ -2,8 +2,9 @@
 // see BOM" in later phases): project lifecycle against the BUILT app —
 // create two projects, survive a reload, autosave a rename, export, delete,
 // re-import identically.
-import { expect, test } from '@playwright/test';
+
 import { readFile } from 'node:fs/promises';
+import { expect, test } from '@playwright/test';
 
 test('project lifecycle: create ×2, reload, autosave, export, delete, re-import', async ({
   page,
@@ -27,7 +28,11 @@ test('project lifecycle: create ×2, reload, autosave, export, delete, re-import
   await expect(page.getByTestId('project-name')).toHaveText(['Beta', 'Alpha']);
 
   // open Alpha, rename through the autosave path, watch the indicator settle
-  await page.getByTestId('project-row').filter({ hasText: 'Alpha' }).getByTestId('open-project').click();
+  await page
+    .getByTestId('project-row')
+    .filter({ hasText: 'Alpha' })
+    .getByTestId('open-project')
+    .click();
   await page.getByTestId('project-name-input').fill('Alpha 2');
   await expect(page.getByTestId('save-state')).toHaveText('saving…');
   await expect(page.getByTestId('save-state')).toHaveText('saved', { timeout: 5000 });
@@ -60,7 +65,11 @@ test('project lifecycle: create ×2, reload, autosave, export, delete, re-import
   const fileChooserPromise = page.waitForEvent('filechooser');
   await page.getByTestId('import-project').click();
   const chooser = await fileChooserPromise;
-  await chooser.setFiles({ name: 'alpha-2.riglab.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
+  await chooser.setFiles({
+    name: 'alpha-2.riglab.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(exported),
+  });
   await expect(page.getByTestId('project-name')).toHaveText(['Alpha 2', 'Beta']);
 
   // exported-then-imported document is identical: re-export and compare bytes

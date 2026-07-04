@@ -1,5 +1,5 @@
 import type { MovementClip } from './clips/format';
-import { REST_POSE, type JointPose } from './skeleton';
+import { type JointPose, REST_POSE } from './skeleton';
 
 export interface PlaybackOptions {
   /** time multiplier (1 = authored speed) */

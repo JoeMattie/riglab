@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fixtureProject } from '../schema/fixtures';
 import { MigrationError } from '../schema';
+import { fixtureProject } from '../schema/fixtures';
 import { createAutosaver } from './autosave';
 import { REVISION_LIMIT, RigLabDb } from './db';
 import { ProjectStore } from './projectStore';

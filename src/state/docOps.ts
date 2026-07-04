@@ -117,7 +117,7 @@ export function splitLink(
   t: number,
 ): { mechanism: Mechanism; nodeId: string } {
   const el = m.elements.find((e) => e.id === elementId);
-  if (!el || el.type !== 'link') throw new Error(`cannot split element ${elementId}`);
+  if (el?.type !== 'link') throw new Error(`cannot split element ${elementId}`);
   const pos = positionOnLink(m, elementId, t);
   const nodeId = uid();
   const segA: MechanismElement = { ...el, id: uid(), nodeB: nodeId };
@@ -141,8 +141,7 @@ export function splitLink(
 function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
   switch (spec.kind) {
     case 'existingNode': {
-      const weldTo =
-        spec.connect === 'weld' ? elementsAtNode(m, spec.nodeId)[0] : undefined;
+      const weldTo = spec.connect === 'weld' ? elementsAtNode(m, spec.nodeId)[0] : undefined;
       return { mechanism: m, nodeId: spec.nodeId, weldTo };
     }
     case 'newNode': {
@@ -168,10 +167,7 @@ function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
         mechanism: {
           ...m,
           nodes: [...m.nodes, { id: nodeId, kind: 'free', position: spec.pos }],
-          skeletonBindings: [
-            ...m.skeletonBindings,
-            { id: uid(), point: spec.point, nodeId },
-          ],
+          skeletonBindings: [...m.skeletonBindings, { id: uid(), point: spec.point, nodeId }],
         },
         nodeId,
       };
@@ -201,8 +197,7 @@ function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
         };
       }
       const { mechanism, nodeId } = splitLink(m, spec.elementId, spec.t);
-      const weldTo =
-        spec.connect === 'weld' ? elementsAtNode(mechanism, nodeId)[0] : undefined;
+      const weldTo = spec.connect === 'weld' ? elementsAtNode(mechanism, nodeId)[0] : undefined;
       return { mechanism, nodeId, weldTo };
     }
   }
@@ -382,8 +377,14 @@ export function addBowden(
       a2,
       b1,
       b2,
-      restLengthAM: Math.max(segLength(nodePosition(mechanism, a1), nodePosition(mechanism, a2)), 1e-3),
-      restLengthBM: Math.max(segLength(nodePosition(mechanism, b1), nodePosition(mechanism, b2)), 1e-3),
+      restLengthAM: Math.max(
+        segLength(nodePosition(mechanism, a1), nodePosition(mechanism, a2)),
+        1e-3,
+      ),
+      restLengthBM: Math.max(
+        segLength(nodePosition(mechanism, b1), nodePosition(mechanism, b2)),
+        1e-3,
+      ),
     };
     return { ...mechanism, elements: [...mechanism.elements, bowden] };
   });
@@ -506,10 +507,14 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
       if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
         used.add(el.nodeA);
         used.add(el.nodeB);
-      } else if (el.type === 'bentLink') el.nodeIds.forEach((id) => used.add(id));
-      else if (el.type === 'pivot' || el.type === 'slider') used.add(el.nodeId);
-      else if (el.type === 'rope') el.path.forEach((id) => used.add(id));
-      else if (el.type === 'bowden') [el.a1, el.a2, el.b1, el.b2].forEach((id) => used.add(id));
+      } else if (el.type === 'bentLink') {
+        for (const id of el.nodeIds) used.add(id);
+      } else if (el.type === 'pivot' || el.type === 'slider') used.add(el.nodeId);
+      else if (el.type === 'rope') {
+        for (const id of el.path) used.add(id);
+      } else if (el.type === 'bowden') {
+        for (const id of [el.a1, el.a2, el.b1, el.b2]) used.add(id);
+      }
     }
     return {
       ...m,

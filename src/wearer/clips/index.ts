@@ -1,7 +1,7 @@
 import armSwingJson from './arm-swing.json';
+import { type MovementClip, movementClipSchema } from './format';
 import leanJson from './lean.json';
 import walkJson from './walk.json';
-import { movementClipSchema, type MovementClip } from './format';
 
 export * from './format';
 

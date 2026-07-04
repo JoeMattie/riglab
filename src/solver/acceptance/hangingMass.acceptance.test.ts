@@ -9,7 +9,7 @@ import { solve } from '..';
 const G = 9.81;
 const MASS_KG = 5;
 
-export function hangingMassMechanism(): Mechanism {
+function hangingMassMechanism(): Mechanism {
   return {
     id: 'hanging',
     name: 'hanging mass',

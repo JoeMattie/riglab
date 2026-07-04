@@ -30,6 +30,7 @@ export function ConnectMenu() {
     >
       {pending.options.map((o, i) => (
         <button
+          type="button"
           key={o}
           data-testid={`connect-${o}`}
           onClick={() => pending.choose(o)}

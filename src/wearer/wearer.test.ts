@@ -3,7 +3,7 @@ import { DEFAULT_WEARER } from '../schema';
 import { CLIPS, getClip } from './clips';
 import { samplePose } from './playback';
 import { computeSilhouette, projectPoint } from './projection';
-import { REST_POSE, computeSkeleton } from './skeleton';
+import { computeSkeleton, REST_POSE } from './skeleton';
 
 describe('parametric skeleton', () => {
   it('is left/right symmetric at rest (mirrored z, equal x/y)', () => {
@@ -74,7 +74,7 @@ describe('movement clips', () => {
     const walk = getClip('walk')!;
     const at = (t: number) => samplePose(walk, t);
     // seamless loop
-      expect(at(0)).toEqual(at(walk.durationS));
+    expect(at(0)).toEqual(at(walk.durationS));
     // left leg = right leg shifted half a cycle
     for (const t of [0, 0.15, 0.3, 0.45, 0.6, 0.9]) {
       expect(at(t).hipL).toBeCloseTo(at(t + walk.durationS / 2).hipR, 10);

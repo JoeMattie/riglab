@@ -42,7 +42,8 @@ export const movementClipSchema = z
   .refine(
     (c) =>
       Object.values(c.tracks).every(
-        (t) => t !== undefined && t.timesS[0] === 0 && t.timesS[t.timesS.length - 1] === c.durationS,
+        (t) =>
+          t !== undefined && t.timesS[0] === 0 && t.timesS[t.timesS.length - 1] === c.durationS,
       ),
     { message: 'every track must start at 0 and end at durationS' },
   )

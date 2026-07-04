@@ -2,7 +2,14 @@
 // projection of the wearer's world frame (y up, x forward, z wearer-left).
 // Elevation views keep world y as 2D y (gravity −Y); `top` maps the ground
 // plane; `free` behaves like side-left.
-import type { SkeletonPoint, Vec2, Vec3, ViewOrientation, WearerAnchor, WearerParams } from '../schema';
+import type {
+  SkeletonPoint,
+  Vec2,
+  Vec3,
+  ViewOrientation,
+  WearerAnchor,
+  WearerParams,
+} from '../schema';
 import { computeSkeleton, headRadiusM, type JointPose, type SkeletonFrame } from './skeleton';
 
 export function projectPoint(view: ViewOrientation, p: Vec3): Vec2 {
@@ -71,12 +78,14 @@ export function computeSilhouette(
     chain(A.hipRectBackR, A.shoulderR),
   ];
 
-  const points = Object.fromEntries(
-    Object.entries(P).map(([k, v]) => [k, pr(v)]),
-  ) as Record<SkeletonPoint, Vec2>;
-  const anchors = Object.fromEntries(
-    Object.entries(A).map(([k, v]) => [k, pr(v)]),
-  ) as Record<WearerAnchor, Vec2>;
+  const points = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, pr(v)])) as Record<
+    SkeletonPoint,
+    Vec2
+  >;
+  const anchors = Object.fromEntries(Object.entries(A).map(([k, v]) => [k, pr(v)])) as Record<
+    WearerAnchor,
+    Vec2
+  >;
 
   return { outlines, points, anchors };
 }

@@ -109,6 +109,9 @@ export const useEditorStore = create<EditorState>()((set) => ({
   setPendingConnect: (pendingConnect) => set({ pendingConnect }),
   setDiagnostics: (dof, violated) => set({ dof, violated }),
   setEquilibriumOn: (equilibriumOn) =>
-    set({ equilibriumOn, equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM }),
+    set({
+      equilibriumOn,
+      equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM,
+    }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
 }));

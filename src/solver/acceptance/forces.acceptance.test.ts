@@ -203,7 +203,15 @@ describe('ACCEPTANCE Phase 2 — bowden 1:1 displacement transfer', () => {
       {
         gravityOn: false,
         inputs: [
-          { id: 'pull', name: 'pull', kind: 'displacement', min: -0.3, max: 0.3, value: 0, locked: false },
+          {
+            id: 'pull',
+            name: 'pull',
+            kind: 'displacement',
+            min: -0.3,
+            max: 0.3,
+            value: 0,
+            locked: false,
+          },
         ],
       },
     );
@@ -379,10 +387,7 @@ describe('Phase 2 unit — rope-compression detection', () => {
 
     // sanity: a normal overhead-anchored rope is NOT flagged
     const normal = mech(
-      [
-        node('H', 0, 1, 'anchor'),
-        node('Mn', 0, 0.2),
-      ],
+      [node('H', 0, 1, 'anchor'), node('Mn', 0, 0.2)],
       [{ id: 'rope', type: 'rope', maturity: 'sketch', path: ['H', 'Mn'], lengthM: 0.8 }],
       { pointMasses: [{ id: 'w', name: 'weight', massKg: 3, nodeId: 'Mn' }] },
     );
@@ -420,12 +425,20 @@ describe('Phase 2 unit — required input force on a driven lever', () => {
 
   it('a locked channel stays frozen at its stored value despite a channel override', () => {
     // locked at value 0 (horizontal); an override asks for 0.6 rad and must be ignored
-    const lockedResult = solve(drivenLever(true, 0), { channelValues: { lift: 0.6 } }, 'equilibrium');
+    const lockedResult = solve(
+      drivenLever(true, 0),
+      { channelValues: { lift: 0.6 } },
+      'equilibrium',
+    );
     const D = lockedResult.positions.D!;
     expect(Math.atan2(D.y, D.x)).toBeCloseTo(0, 3); // still horizontal
 
     // the same channel unlocked DOES follow the override
-    const openResult = solve(drivenLever(false, 0), { channelValues: { lift: 0.6 } }, 'equilibrium');
+    const openResult = solve(
+      drivenLever(false, 0),
+      { channelValues: { lift: 0.6 } },
+      'equilibrium',
+    );
     const D2 = openResult.positions.D!;
     expect(Math.atan2(D2.y, D2.x)).toBeCloseTo(0.6, 2);
   });
@@ -474,11 +487,7 @@ describe('Phase 2 unit — equilibrium determinism', () => {
   it('two fresh runs produce identical positions (≤ 1e-12)', () => {
     const build = (): Mechanism =>
       mech(
-        [
-          node('O', 0, 0, 'anchor'),
-          node('T', 1, 0),
-          node('P', 0, 1, 'anchor'),
-        ],
+        [node('O', 0, 0, 'anchor'), node('T', 1, 0), node('P', 0, 1, 'anchor')],
         [
           link('boom', 'O', 'T'),
           {

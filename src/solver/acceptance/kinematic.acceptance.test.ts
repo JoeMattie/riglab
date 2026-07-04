@@ -48,7 +48,11 @@ function dragSequence(
   let cur = m;
   let positions: Record<string, Vec2> = {};
   for (const target of targets) {
-    const result = solve(cur, { channelValues: {}, dragTargets: { [nodeId]: target } }, 'kinematic');
+    const result = solve(
+      cur,
+      { channelValues: {}, dragTargets: { [nodeId]: target } },
+      'kinematic',
+    );
     positions = result.positions;
     cur = {
       ...cur,
@@ -164,7 +168,12 @@ describe('ACCEPTANCE Phase 1 — pivot welds and angle limits', () => {
           nodeId: 'p',
           memberIds: ['base', 'arm'],
           welds: [],
-          angleLimit: { memberA: 'base', memberB: 'arm', minRad: -Math.PI / 4, maxRad: Math.PI / 4 },
+          angleLimit: {
+            memberA: 'base',
+            memberB: 'arm',
+            minRad: -Math.PI / 4,
+            maxRad: Math.PI / 4,
+          },
         },
       ],
     );
@@ -189,11 +198,7 @@ describe('ACCEPTANCE Phase 1 — pivot welds and angle limits', () => {
 describe('ACCEPTANCE Phase 1 — slider and telescope', () => {
   it('a slider node stays on its link axis within travel limits', () => {
     const m = mech(
-      [
-        node('a', 0, 0, 'anchor'),
-        node('b', 1, 0, 'anchor'),
-        node('s', 0.5, 0, 'free'),
-      ],
+      [node('a', 0, 0, 'anchor'), node('b', 1, 0, 'anchor'), node('s', 0.5, 0, 'free')],
       [
         link('rail', 'a', 'b'),
         {
@@ -238,7 +243,11 @@ describe('ACCEPTANCE Phase 1 — slider and telescope', () => {
         },
       ],
     );
-    const result = solve(m, { channelValues: {}, dragTargets: { b: { x: 1.2, y: 0.6 } } }, 'kinematic');
+    const result = solve(
+      m,
+      { channelValues: {}, dragTargets: { b: { x: 1.2, y: 0.6 } } },
+      'kinematic',
+    );
     const b = result.positions.b!;
     expect(Math.hypot(b.x, b.y)).toBeCloseTo(0.5, 4);
   });
@@ -263,7 +272,11 @@ describe('ACCEPTANCE Phase 1 — slider and telescope', () => {
     );
     const far = solve(m, { channelValues: {}, dragTargets: { b: { x: 2, y: 0 } } }, 'kinematic');
     expect(Math.hypot(far.positions.b!.x, far.positions.b!.y)).toBeCloseTo(0.7, 4);
-    const near = solve(m, { channelValues: {}, dragTargets: { b: { x: 0.05, y: 0 } } }, 'kinematic');
+    const near = solve(
+      m,
+      { channelValues: {}, dragTargets: { b: { x: 0.05, y: 0 } } },
+      'kinematic',
+    );
     expect(Math.hypot(near.positions.b!.x, near.positions.b!.y)).toBeCloseTo(0.3, 4);
   });
 });
@@ -357,7 +370,11 @@ describe('ACCEPTANCE Phase 1 — no length ratchet under far drag targets', () =
       ],
       [link('crank', 'O2', 'A'), link('coupler', 'A', 'B'), link('rocker', 'B', 'O4')],
     );
-    const rests = { crank: 0.2, coupler: dist(m.nodes[1]!.position, m.nodes[2]!.position), rocker: dist(m.nodes[2]!.position, m.nodes[3]!.position) };
+    const rests = {
+      crank: 0.2,
+      coupler: dist(m.nodes[1]!.position, m.nodes[2]!.position),
+      rocker: dist(m.nodes[2]!.position, m.nodes[3]!.position),
+    };
     // wild, mostly-unreachable targets, big jumps like a fast pointer
     const targets: Vec2[] = [
       { x: 1.5, y: 1.2 },

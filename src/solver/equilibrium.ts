@@ -83,7 +83,10 @@ function driveRefs(mechanism: Mechanism): DriveRef[] {
     // rail: lowest-id link/telescope with this node as an endpoint
     let other: Vec2 | null = null;
     for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
-      if ((el.type === 'link' || el.type === 'telescope') && (el.nodeA === n.id || el.nodeB === n.id)) {
+      if (
+        (el.type === 'link' || el.type === 'telescope') &&
+        (el.nodeA === n.id || el.nodeB === n.id)
+      ) {
         other = posOf.get(el.nodeA === n.id ? el.nodeB : el.nodeA) ?? null;
         break;
       }
@@ -192,7 +195,12 @@ interface EqConstraint {
   addForces(force: Map<string, { fx: number; fy: number }>): void;
 }
 
-function addForce(map: Map<string, { fx: number; fy: number }>, id: string, fx: number, fy: number): void {
+function addForce(
+  map: Map<string, { fx: number; fy: number }>,
+  id: string,
+  fx: number,
+  fy: number,
+): void {
   const f = map.get(id);
   if (f) {
     f.fx += fx;
@@ -428,12 +436,16 @@ interface ForceGen {
 
 /** Linear elastic force = k(len − rest_eff), tension-only by default, along
  * the axis (bungee/rubber can't push). rest_eff folds in pretension. */
-function elasticForce(el: {
-  restLengthM: number;
-  stiffnessNPerM: number;
-  tensionOnly: boolean;
-  pretensionN?: number;
-}, a: Particle, b: Particle): number {
+function elasticForce(
+  el: {
+    restLengthM: number;
+    stiffnessNPerM: number;
+    tensionOnly: boolean;
+    pretensionN?: number;
+  },
+  a: Particle,
+  b: Particle,
+): number {
   const len = hypot(a.x - b.x, a.y - b.y);
   const restEff = el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
   const f = el.stiffnessNPerM * (len - restEff);
@@ -442,7 +454,12 @@ function elasticForce(el: {
 
 class ElasticForceGen implements ForceGen {
   constructor(
-    private readonly el: { restLengthM: number; stiffnessNPerM: number; tensionOnly: boolean; pretensionN?: number },
+    private readonly el: {
+      restLengthM: number;
+      stiffnessNPerM: number;
+      tensionOnly: boolean;
+      pretensionN?: number;
+    },
     private readonly a: Particle,
     private readonly b: Particle,
   ) {}
@@ -542,7 +559,11 @@ class PointOnLineC implements EqConstraint {
     const rely = this.n.y - this.a.y;
     const cPerp = Math.abs((relx * -uy + rely * ux) / L);
     const s = (relx * ux + rely * uy) / L;
-    return Math.max(cPerp, Math.max(0, this.travelMin * L - s), Math.max(0, s - this.travelMax * L));
+    return Math.max(
+      cPerp,
+      Math.max(0, this.travelMin * L - s),
+      Math.max(0, s - this.travelMax * L),
+    );
   }
 
   addForces(): void {
@@ -635,7 +656,8 @@ class TorsionCableC implements EqConstraint {
     if (!A || !B) return;
     const raw = B.theta - this.thetaB0 - this.ratio * (A.theta - this.thetaA0);
     // dead-zone: only the part of `raw` beyond ±backlash transmits
-    const excess = raw > this.backlash ? raw - this.backlash : raw < -this.backlash ? raw + this.backlash : 0;
+    const excess =
+      raw > this.backlash ? raw - this.backlash : raw < -this.backlash ? raw + this.backlash : 0;
     if (excess === 0) return;
     // effective gradient per node: ∂raw/∂θB·(θB grads) − ratio·(θA grads)
     const contrib: Array<[Particle, number, number]> = [
@@ -662,7 +684,11 @@ class TorsionCableC implements EqConstraint {
     const B = angleAndGrads(this.pb, this.ab, this.bb);
     if (!A || !B) return 0;
     const raw = B.theta - this.thetaB0 - this.ratio * (A.theta - this.thetaA0);
-    return raw > this.backlash ? raw - this.backlash : raw < -this.backlash ? -this.backlash - raw : 0;
+    return raw > this.backlash
+      ? raw - this.backlash
+      : raw < -this.backlash
+        ? -this.backlash - raw
+        : 0;
   }
 
   addForces(): void {
@@ -741,12 +767,23 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   const constraints: EqConstraint[] = [];
   const forceGens: ForceGen[] = [];
   const torsionSpringByPivot = new Map<string, TorsionSpringForceGen>();
-  const pivotByElementId = new Map<string, { pivotNodeId: string; aId: string; bId: string } | null>();
+  const pivotByElementId = new Map<
+    string,
+    { pivotNodeId: string; aId: string; bId: string } | null
+  >();
 
   for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
     switch (el.type) {
       case 'link':
-        constraints.push(new DistanceC(el.id, get(el.nodeA), get(el.nodeB), dist(el.nodeA, el.nodeB), mob(el.nodeA, el.nodeB)));
+        constraints.push(
+          new DistanceC(
+            el.id,
+            get(el.nodeA),
+            get(el.nodeB),
+            dist(el.nodeA, el.nodeB),
+            mob(el.nodeA, el.nodeB),
+          ),
+        );
         break;
       case 'telescope':
         if (el.sliding) {
@@ -755,7 +792,9 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
             new DistanceC(el.id, get(el.nodeA), get(el.nodeB), el.minLengthM, 0, 'min'),
           );
         } else {
-          constraints.push(new DistanceC(el.id, get(el.nodeA), get(el.nodeB), el.lengthM, mob(el.nodeA, el.nodeB)));
+          constraints.push(
+            new DistanceC(el.id, get(el.nodeA), get(el.nodeB), el.lengthM, mob(el.nodeA, el.nodeB)),
+          );
         }
         break;
       case 'bentLink': {
@@ -764,7 +803,9 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
             const counts = mobilityLeft > 0 ? mob(ids[i]!, ids[j]!) : 0;
-            constraints.push(new DistanceC(el.id, get(ids[i]!), get(ids[j]!), dist(ids[i]!, ids[j]!), counts));
+            constraints.push(
+              new DistanceC(el.id, get(ids[i]!), get(ids[j]!), dist(ids[i]!, ids[j]!), counts),
+            );
             if (counts > 0) mobilityLeft--;
           }
         }
@@ -786,7 +827,16 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
           const an = a ? adjacentNodeId(a, el.nodeId) : null;
           const bn = b ? adjacentNodeId(b, el.nodeId) : null;
           if (an && bn) {
-            constraints.push(new AngleLimitC(el.id, get(el.nodeId), get(an), get(bn), el.angleLimit.minRad, el.angleLimit.maxRad));
+            constraints.push(
+              new AngleLimitC(
+                el.id,
+                get(el.nodeId),
+                get(an),
+                get(bn),
+                el.angleLimit.minRad,
+                el.angleLimit.maxRad,
+              ),
+            );
           }
         }
         if (el.torsionSpring) {
@@ -819,7 +869,15 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         const rail = elementById.get(el.alongElementId);
         if (rail && (rail.type === 'link' || rail.type === 'telescope')) {
           constraints.push(
-            new PointOnLineC(el.id, get(el.nodeId), get(rail.nodeA), get(rail.nodeB), el.travelMin, el.travelMax, mob(el.nodeId)),
+            new PointOnLineC(
+              el.id,
+              get(el.nodeId),
+              get(rail.nodeA),
+              get(rail.nodeB),
+              el.travelMin,
+              el.travelMax,
+              mob(el.nodeId),
+            ),
           );
         }
         break;
@@ -831,7 +889,17 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         forceGens.push(new ElasticForceGen(el, get(el.nodeA), get(el.nodeB)));
         break;
       case 'bowden':
-        constraints.push(new BowdenC(el.id, get(el.a1), get(el.a2), get(el.b1), get(el.b2), el.restLengthAM, el.restLengthBM));
+        constraints.push(
+          new BowdenC(
+            el.id,
+            get(el.a1),
+            get(el.a2),
+            get(el.b1),
+            get(el.b2),
+            el.restLengthAM,
+            el.restLengthBM,
+          ),
+        );
         break;
       case 'torsionCable':
         // deferred: needs both pivots resolved (built after the loop)
@@ -875,7 +943,10 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   };
 }
 
-function drawnAngle(posOf: Map<string, Vec2>, piv: { pivotNodeId: string; aId: string; bId: string }): number {
+function drawnAngle(
+  posOf: Map<string, Vec2>,
+  piv: { pivotNodeId: string; aId: string; bId: string },
+): number {
   const p = posOf.get(piv.pivotNodeId)!;
   const a = posOf.get(piv.aId)!;
   const b = posOf.get(piv.bId)!;
@@ -1013,12 +1084,18 @@ function ropesRequiringCompression(mechanism: Mechanism, gravity: Vec2, density:
         let gx = 0;
         let gy = 0;
         if (i > 0) {
-          const [ux, uy] = unit(posOf.get(el.path[i - 1]!)!.x - p.x, posOf.get(el.path[i - 1]!)!.y - p.y);
+          const [ux, uy] = unit(
+            posOf.get(el.path[i - 1]!)!.x - p.x,
+            posOf.get(el.path[i - 1]!)!.y - p.y,
+          );
           gx += ux;
           gy += uy;
         }
         if (i < el.path.length - 1) {
-          const [ux, uy] = unit(posOf.get(el.path[i + 1]!)!.x - p.x, posOf.get(el.path[i + 1]!)!.y - p.y);
+          const [ux, uy] = unit(
+            posOf.get(el.path[i + 1]!)!.x - p.x,
+            posOf.get(el.path[i + 1]!)!.y - p.y,
+          );
           gx += ux;
           gy += uy;
         }
@@ -1077,7 +1154,12 @@ function ropesRequiringCompression(mechanism: Mechanism, gravity: Vec2, density:
 
 /** Min-norm least squares of A x ≈ b via (AᵀA + εI) x = Aᵀb, Gaussian
  * elimination with partial pivoting. Small dense systems only. */
-function leastSquares(A: number[][], b: Float64Array, rows: number, cols: number): Float64Array | null {
+function leastSquares(
+  A: number[][],
+  b: Float64Array,
+  rows: number,
+  cols: number,
+): Float64Array | null {
   if (cols === 0) return new Float64Array(0);
   const ata: number[][] = Array.from({ length: cols }, () => new Array(cols).fill(0));
   const atb = new Float64Array(cols);
@@ -1137,7 +1219,11 @@ function extractForces(
       if (r) elements[el.id] = Math.max(0, r.tension());
     } else if (el.type === 'elastic') {
       // spring force from geometry: k(len − rest_eff), clamped ≥0 if tension-only
-      elements[el.id] = elasticForce(el, built.particles.get(el.nodeA)!, built.particles.get(el.nodeB)!);
+      elements[el.id] = elasticForce(
+        el,
+        built.particles.get(el.nodeA)!,
+        built.particles.get(el.nodeB)!,
+      );
     } else if (el.type === 'bowden') {
       const bo = cs.find((c): c is BowdenC => c instanceof BowdenC);
       if (bo) elements[el.id] = bo.tension();
@@ -1178,7 +1264,13 @@ function extractForces(
   return { elements, pivotReactions, requiredInputs };
 }
 
-function diagnostics(mechanism: Mechanism, built: Built, settled: boolean, gravity: Vec2, density: number): SolveDiagnostics {
+function diagnostics(
+  mechanism: Mechanism,
+  built: Built,
+  settled: boolean,
+  gravity: Vec2,
+  density: number,
+): SolveDiagnostics {
   let residual = 0;
   const violated = new Set<string>();
   let equalities = 0;

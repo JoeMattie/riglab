@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fixtureProject } from '../schema/fixtures';
 import { createEmptyProject } from '../schema';
+import { fixtureProject } from '../schema/fixtures';
 import { exportProjectJson, importProjectJson, suggestedFileName } from './exportImport';
 
 describe('JSON export/import', () => {

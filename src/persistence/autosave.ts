@@ -13,10 +13,7 @@ export interface Autosaver {
   hasPending(): boolean;
 }
 
-export function createAutosaver(
-  save: (doc: Project) => Promise<void>,
-  delayMs = 1000,
-): Autosaver {
+export function createAutosaver(save: (doc: Project) => Promise<void>, delayMs = 1000): Autosaver {
   let pending: Project | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: Promise<void> | null = null;

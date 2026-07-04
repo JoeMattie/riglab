@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureProject, fixtureProjectV1 } from './fixtures';
 import {
-  MigrationError,
   applyMigrations,
+  type Migration,
+  MigrationError,
   migrateToLatest,
   migrations,
-  type Migration,
 } from './migrations';
 import { SCHEMA_VERSION } from './project';
 
@@ -51,9 +51,7 @@ describe('migrateToLatest', () => {
   });
 
   it('rejects documents from a newer app', () => {
-    expect(() => migrateToLatest({ schemaVersion: SCHEMA_VERSION + 1 })).toThrow(
-      /newer app/,
-    );
+    expect(() => migrateToLatest({ schemaVersion: SCHEMA_VERSION + 1 })).toThrow(/newer app/);
   });
 
   it('rejects a missing or invalid schemaVersion', () => {
