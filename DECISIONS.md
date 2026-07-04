@@ -132,6 +132,14 @@ a hand-rolled stack if it disappoints.
 Export-only (BOM), ~20 lines with correct quoting; import stays JSON.
 PapaParse only if CSV *parsing* ever becomes a requirement.
 
+### DECISION: dependency versions = latest stable at adoption, pinned exact (2026-07-04, user directive)
+
+New dependencies are added at their most recent stable release and pinned to
+that exact version (no `^`/`~`), per the CLAUDE.md pinning rule. Companion
+`@types/*` packages track the version of the library they type (e.g.
+`@types/three@0.185.x` for `three@0.185.x`), not the absolute newest.
+Upgrades thereafter are deliberate, not automatic.
+
 ### Process conventions approved by the user (2026-07-04)
 
 - **[deviation]** Acceptance tests for future phases are committed
