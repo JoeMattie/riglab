@@ -2,16 +2,35 @@
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
 import type {
+  BowdenElement,
+  ElasticElement,
+  InputChannel,
   Mechanism,
   MechanismElement,
   PivotElement,
   Project,
+  RopeElement,
   SkeletonPoint,
+  TorsionCableElement,
   Vec2,
   ViewOrientation,
 } from '../schema';
 
 const uid = (): string => crypto.randomUUID();
+
+/** Sketch-default spring rate for a freshly drawn elastic before a material
+ * (with its own preset) is assigned in the design face (§4.2). */
+export const DEFAULT_ELASTIC_STIFFNESS_N_PER_M = 200;
+
+function nodePosition(m: Mechanism, nodeId: string): Vec2 {
+  const n = m.nodes.find((nd) => nd.id === nodeId);
+  if (!n) throw new Error(`no node ${nodeId}`);
+  return n.position;
+}
+
+function segLength(a: Vec2, b: Vec2): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
 
 function withMechanism(doc: Project, mechId: string, fn: (m: Mechanism) => Mechanism): Project {
   return {
@@ -266,6 +285,186 @@ export function addPipe(
   return { doc: newDoc, elementId };
 }
 
+/** Resolve a chain of pipe-end specs into node ids on the mechanism, threading
+ * the mutated mechanism through each resolution. Force elements (rope/elastic/
+ * bowden) attach to nodes but never weld the incoming cord to existing pipes,
+ * so `weldTo` is intentionally ignored. */
+function resolveChain(m: Mechanism, specs: EndSpec[]): { mechanism: Mechanism; nodeIds: string[] } {
+  let mech = m;
+  const nodeIds: string[] = [];
+  for (const spec of specs) {
+    const r = resolveEnd(mech, spec);
+    mech = r.mechanism;
+    nodeIds.push(r.nodeId);
+  }
+  return { mechanism: mech, nodeIds };
+}
+
+/** Draw a rope: a tension-only cord through 2+ path points. Interior points
+ * landing on a pipe become frictionless eyelets fixed to that pipe (§4.2).
+ * Rest length L₀ defaults to the drawn path length (taut at creation). */
+export function addRope(
+  doc: Project,
+  mechId: string,
+  path: EndSpec[],
+): { doc: Project; elementId: string } {
+  const elementId = uid();
+  const newDoc = withMechanism(doc, mechId, (m0) => {
+    const { mechanism, nodeIds } = resolveChain(m0, path);
+    // collapse a path point that resolved onto the previous node (e.g. a
+    // double-click that re-snapped the last vertex)
+    const pathIds = nodeIds.filter((id, i) => i === 0 || id !== nodeIds[i - 1]);
+    if (pathIds.length < 2) return m0;
+    const pts = pathIds.map((id) => nodePosition(mechanism, id));
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += segLength(pts[i - 1]!, pts[i]!);
+    const rope: RopeElement = {
+      id: elementId,
+      type: 'rope',
+      maturity: 'sketch',
+      path: pathIds,
+      lengthM: Math.max(len, 1e-3),
+    };
+    return { ...mechanism, elements: [...mechanism.elements, rope] };
+  });
+  return { doc: newDoc, elementId };
+}
+
+/** Draw an elastic (linear spring) between two points. Rest length defaults to
+ * the drawn length so a fresh elastic sits at zero force. */
+export function addElastic(
+  doc: Project,
+  mechId: string,
+  startSpec: EndSpec,
+  endSpec: EndSpec,
+): { doc: Project; elementId: string } {
+  const elementId = uid();
+  const newDoc = withMechanism(doc, mechId, (m0) => {
+    const { mechanism, nodeIds } = resolveChain(m0, [startSpec, endSpec]);
+    const [a, b] = nodeIds as [string, string];
+    if (a === b) return m0;
+    const rest = Math.max(segLength(nodePosition(mechanism, a), nodePosition(mechanism, b)), 1e-3);
+    const elastic: ElasticElement = {
+      id: elementId,
+      type: 'elastic',
+      maturity: 'sketch',
+      nodeA: a,
+      nodeB: b,
+      restLengthM: rest,
+      stiffnessNPerM: DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
+      tensionOnly: true,
+    };
+    return { ...mechanism, elements: [...mechanism.elements, elastic] };
+  });
+  return { doc: newDoc, elementId };
+}
+
+/** Draw a bowden: a displacement coupling between two drawn segments A(a1→a2)
+ * and B(b1→b2), routing-independent (brake-cable jaw drive, §4.2). */
+export function addBowden(
+  doc: Project,
+  mechId: string,
+  aStart: EndSpec,
+  aEnd: EndSpec,
+  bStart: EndSpec,
+  bEnd: EndSpec,
+): { doc: Project; elementId: string } {
+  const elementId = uid();
+  const newDoc = withMechanism(doc, mechId, (m0) => {
+    const { mechanism, nodeIds } = resolveChain(m0, [aStart, aEnd, bStart, bEnd]);
+    const [a1, a2, b1, b2] = nodeIds as [string, string, string, string];
+    if (a1 === a2 || b1 === b2) return m0;
+    const bowden: BowdenElement = {
+      id: elementId,
+      type: 'bowden',
+      maturity: 'sketch',
+      a1,
+      a2,
+      b1,
+      b2,
+      restLengthAM: Math.max(segLength(nodePosition(mechanism, a1), nodePosition(mechanism, a2)), 1e-3),
+      restLengthBM: Math.max(segLength(nodePosition(mechanism, b1), nodePosition(mechanism, b2)), 1e-3),
+    };
+    return { ...mechanism, elements: [...mechanism.elements, bowden] };
+  });
+  return { doc: newDoc, elementId };
+}
+
+/** Couple two existing pivots with a torsion cable (θ_B − θ_B₀ = ratio·(θ_A −
+ * θ_A₀), §4.2). No-op if either id is not a pivot in this mechanism. */
+export function addTorsionCable(
+  doc: Project,
+  mechId: string,
+  pivotAId: string,
+  pivotBId: string,
+): { doc: Project; elementId: string } {
+  const elementId = uid();
+  const newDoc = withMechanism(doc, mechId, (m) => {
+    const isPivot = (id: string) => m.elements.some((e) => e.id === id && e.type === 'pivot');
+    if (pivotAId === pivotBId || !isPivot(pivotAId) || !isPivot(pivotBId)) return m;
+    const cable: TorsionCableElement = {
+      id: elementId,
+      type: 'torsionCable',
+      maturity: 'sketch',
+      pivotA: pivotAId,
+      pivotB: pivotBId,
+      ratio: 1,
+      backlashRad: 0,
+    };
+    return { ...m, elements: [...m.elements, cable] };
+  });
+  return { doc: newDoc, elementId };
+}
+
+export function setGravity(doc: Project, mechId: string, on: boolean): Project {
+  return withMechanism(doc, mechId, (m) => ({ ...m, gravityOn: on }));
+}
+
+/** Add a generic input channel. Channel→geometry binding (driven nodes) is
+ * authored later (its concrete meaning arrives with the example mechanisms);
+ * this exists so the Phase 2 slider + lock-toggle UI is usable and testable. */
+export function addInputChannel(doc: Project, mechId: string): { doc: Project; channelId: string } {
+  const channelId = uid();
+  const newDoc = withMechanism(doc, mechId, (m) => {
+    const channel: InputChannel = {
+      id: channelId,
+      name: `input ${m.inputs.length + 1}`,
+      kind: 'displacement',
+      min: 0,
+      max: 1,
+      value: 0,
+      locked: false,
+    };
+    return { ...m, inputs: [...m.inputs, channel] };
+  });
+  return { doc: newDoc, channelId };
+}
+
+export function setInputChannel(
+  doc: Project,
+  mechId: string,
+  channelId: string,
+  patch: Partial<Pick<InputChannel, 'name' | 'value' | 'locked' | 'min' | 'max'>>,
+): Project {
+  return withMechanism(doc, mechId, (m) => ({
+    ...m,
+    inputs: m.inputs.map((c) => {
+      if (c.id !== channelId) return c;
+      const next = { ...c, ...patch };
+      // keep value within the channel range whenever either bound changes
+      next.value = Math.min(next.max, Math.max(next.min, next.value));
+      return next;
+    }),
+  }));
+}
+
+export function removeInputChannel(doc: Project, mechId: string, channelId: string): Project {
+  return withMechanism(doc, mechId, (m) => ({
+    ...m,
+    inputs: m.inputs.filter((c) => c.id !== channelId),
+  }));
+}
+
 export function moveNodes(doc: Project, mechId: string, positions: Record<string, Vec2>): Project {
   return withMechanism(doc, mechId, (m) => ({
     ...m,
@@ -298,6 +497,8 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
         return !e.memberIds.includes(elementId);
       }
       if (e.type === 'slider') return e.alongElementId !== elementId;
+      // a torsion cable couples two pivots; drop it if either pivot is gone
+      if (e.type === 'torsionCable') return e.pivotA !== elementId && e.pivotB !== elementId;
       return true;
     });
     const used = new Set<string>();
