@@ -1,13 +1,55 @@
+import { useEffect } from 'react';
 import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
 import { useAppStore } from '../state/appStore';
+import { useEditorStore } from '../state/editorStore';
+import { ConnectMenu } from './editor/ConnectMenu';
+import { MechanismTabs } from './editor/MechanismTabs';
+import { SketchCanvas } from './editor/SketchCanvas';
+import { Toolbar } from './editor/Toolbar';
+import { TransportBar } from './editor/TransportBar';
 
-/** Phase 0 editor placeholder: top bar with name (autosaved on edit), save
- * indicator, export. The sketch canvas arrives in Phase 1. */
 export function EditorShell() {
   const current = useAppStore((s) => s.current);
   const saveState = useAppStore((s) => s.saveState);
   const closeProject = useAppStore((s) => s.closeProject);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const undo = useAppStore((s) => s.undo);
+  const redo = useAppStore((s) => s.redo);
+  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
+  const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
+
+  // keep an active mechanism selected whenever one exists
+  useEffect(() => {
+    if (!current) return;
+    const exists = current.mechanisms.some((m) => m.id === activeMechanismId);
+    if (!exists) setActiveMechanism(current.mechanisms[0]?.id ?? null);
+  }, [current, activeMechanismId, setActiveMechanism]);
+
+  // undo/redo keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
+  // test/debug hook: lets Playwright assert on the live document
+  useEffect(() => {
+    (window as unknown as { __riglab: object }).__riglab = {
+      getDoc: () => useAppStore.getState().current,
+      getEditor: () => {
+        const s = useEditorStore.getState();
+        return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
+      },
+    };
+  }, []);
+
   if (!current) return null;
 
   const onExport = () => {
@@ -21,7 +63,7 @@ export function EditorShell() {
   };
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header
         style={{
           display: 'flex',
@@ -43,17 +85,24 @@ export function EditorShell() {
         <span data-testid="save-state" style={{ color: saveState === 'saved' ? '#282' : '#a60' }}>
           {saveState === 'saved' ? 'saved' : 'saving…'}
         </span>
+        <button data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
+          ↶ undo
+        </button>
+        <button data-testid="redo" onClick={redo} title="Ctrl/Cmd+Shift+Z">
+          ↷ redo
+        </button>
         <span style={{ flex: 1 }} />
         <button data-testid="export-project" onClick={onExport}>
           Export JSON
         </button>
       </header>
-      <main style={{ padding: 24, color: '#666' }}>
-        <p>Sketch editor arrives in Phase 1.</p>
-        <p>
-          {current.mechanisms.length} mechanism(s) · units: {current.unitsPreference}
-        </p>
-      </main>
+      <MechanismTabs />
+      <Toolbar />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
+        <SketchCanvas />
+        <ConnectMenu />
+      </div>
+      <TransportBar />
     </div>
   );
 }
