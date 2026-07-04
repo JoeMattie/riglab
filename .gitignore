@@ -1,5 +1,7 @@
 node_modules/
 dist/
+spike-dist/
+.wrangler/
 coverage/
 playwright-report/
 test-results/

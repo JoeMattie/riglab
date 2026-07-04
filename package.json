@@ -9,15 +9,21 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "spike": "vite",
+    "spike:build": "vite build --config spike/vite.pages.config.ts",
+    "spike:pages": "npm run spike:build && npx wrangler pages dev spike-dist"
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "0.19.3",
+    "konva": "10.3.0",
     "planck": "1.5.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "react-konva": "19.2.5"
   },
   "devDependencies": {
+    "@types/node": "24.10.9",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
