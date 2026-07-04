@@ -8,6 +8,11 @@ describe('project schema v1', () => {
     expect(projectSchema.parse(p)).toEqual(p);
   });
 
+  it('seeds default bomSettings on creation (§6.2)', () => {
+    const p = createEmptyProject('p1', 'New project');
+    expect(p.bomSettings).toEqual({ heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 });
+  });
+
   it('accepts a project exercising every element type', () => {
     const p = fixtureProject();
     expect(projectSchema.parse(p)).toEqual(p);

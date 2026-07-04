@@ -70,6 +70,8 @@ export const materialsDbSchema = z.object({
   unitPrices: z.record(idSchema, z.number().nonnegative()),
 });
 
+export type PipeSizingSystem = z.infer<typeof pipeSizingSystemSchema>;
+export type FittingType = z.infer<typeof fittingTypeSchema>;
 export type PipeMaterial = z.infer<typeof pipeMaterialSchema>;
 export type FittingMaterial = z.infer<typeof fittingMaterialSchema>;
 export type CordageMaterial = z.infer<typeof cordageMaterialSchema>;

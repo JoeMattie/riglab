@@ -798,3 +798,150 @@ A tiny durable debug seam `window.__riglab.getView()` (SketchCanvas publishes
 its view; EditorShell's hook now *merges* rather than replaces so child seams
 survive) makes pan/zoom scriptable without parsing canvas pixels, matching the
 existing `getDoc`/`getEditor`/`setEquilibrium` seams.
+
+## Phase 3 — materials + BOM math
+
+This slice is pure data + pure functions + tests (no UI; that lands in a
+later slice). BOM lives in `src/bom/` mirroring the solver's purity: inputs
+are `Mechanism[] + MaterialsDb + BomSettings` (plain schema data), outputs are
+plain data. Shared pipe geometry (`polylineLengthM`, fillet-aware
+`developedLengthM`) is extracted to `src/geometry/pipe.ts` and used by both the
+solver and the BOM so "developed length" has one definition.
+
+### bomSettings (schema v3)
+
+`projectSchema` gains `bomSettings { heatWrapAllowanceFactor (1.5),
+ropeWasteFactor (1.2) }` — the two planfile §6.2 tuning factors, editable, with
+those defaults. SCHEMA_VERSION → 3; `migrations[2]` backfills the defaults on
+old docs; `createEmptyProject` seeds them. A v2 fixture was added and the v1
+fixture strips bomSettings so the full 1→3 chain is tested.
+
+### Seed materials (§6.1, §12)
+
+`seedMaterialsDb()` ships approximate US stock: PVC Sch 40 NPS (1/2"–1-1/2"),
+PVC Class 200 thin-wall alternates (3/4", 1"), CPVC CTS (1/2"–1"), fittings for
+every NPS and CTS size × six types (mass + socket depth), cordage (paracord,
+4 mm nylon, two bungee presets, bowden cable), EVA foam sheets, and hardware
+point masses (bolt set, conduit box, garden-hose sleeve, fiberglass rod as a
+per-metre reference entry). Dimensions convert published inch/lb-ft catalogue
+figures to SI in code (auditable); **every row is `approximate: true`** so the
+UI badges them and the user overwrites with calipered stock. Each project owns
+its complete seeded DB (§6.1 "overrides persist in the project"); `createEmptyProject`
+now seeds instead of shipping empty. The Class 200 3/4" / CPVC CTS 3/4" pair is
+a genuine slip fit (≈1.4 mm) — a real telescoping combination.
+
+### Nesting classification + telescope accept/warn set (§6.1)
+
+`nestingClearanceM = ID(outer) − OD(inner)`; bands press `<0`, snug `0–0.5 mm`,
+slip `0.5–1.5 mm`, sloppy `>1.5 mm`. **Upper edges are inclusive** (snug owns
+exactly 0.5 mm, slip owns exactly 1.5 mm). `nestingMatrix` covers every ordered
+distinct pipe pair (nesting is asymmetric). **Telescope accept/warn set:** a
+telescope needs to *slide*, so only `slip` is accepted; `snug` (bearing-tight,
+binds), `press` (interference, won't slide), and `sloppy` (loose, needs
+shimming) all warn. `validateTelescopePair` returns `acceptable = (class ===
+'slip')` with a per-class reason.
+
+### Cut-list allowance sign conventions (§6.2)
+
+Per end, applied to the node-to-node (link) or developed (bentLink) base:
+`fitting` → **−**socket depth of the matching size/system fitting;
+`nestedSleeve`/`nestedCoupler`/`clickDetachable` → **+**2×(this pipe's OD)
+added to the member (treated as the inner/inserting member);
+`heatWrapPivot`/`heatWrapRigid` → **+**`heatWrapAllowanceFactor` × **partner**
+pipe OD; `boltThrough`/`ropeLashing`/`conduitBox` → 0. Net cut length is
+clamped ≥ 0. **Partner OD** is the OD of another structural pipe sharing that
+end node (lowest element id), falling back to the pipe's own OD when none — the
+schema does not pair joint members, so this is a heuristic. **Nested caveat:**
+each nested-marked end adds overlap independently; mark only the inserting end
+as nested to avoid double-counting across a joint.
+
+### Heat-wrap connector pieces (§1)
+
+Heat-wrap realizations also emit their short bent connectors as separate
+cut-list parts (kind `heatWrapConnector`), one per heat-wrap end, material = the
+structural member's pipe, **default length `HEATWRAP_CONNECTOR_LENGTH_M = 0.1 m`**
+(a fixed reasonable default, editable later). Their (small) mass is included in
+the weight rollup's pipe category.
+
+### Telescope member split
+
+A telescope of node-to-node length `L` with overlap `ov = overlapM ?? 2×(inner
+OD)` lists **outer = L/2** and **inner = L/2 + ov** (overlap on the inner,
+§6.2). Sum = L + ov, so the overlap region counts both pipes (§4.2). Weight
+uses these member lengths × their densities.
+
+### Weight vs. cut length
+
+The weight rollup uses each member's **geometric/developed length × density**
+(plus connector mass, fitting/cordage/hardware/point masses), while the cut
+list uses **length ± allowances**. They differ on purpose: allowances are
+fabrication cut adjustments (socket insertion, wrap consumption), not mass
+changes. This keeps weight a clean function of member geometry — a swapped pipe
+material changes weight by exactly `length × Δdensity` (tested on the example).
+Rollups are keyed per mechanism id and per subsystem tag (untagged → `''`).
+
+### Fitting typing + technique summary
+
+The schema records only that a realization is `'fitting'`, not which fitting,
+so type is inferred: a link/bentLink end → `coupling`; a pivot → by member
+count (2 → elbow90, 3 → tee, ≥4 → cross); a slider is counted in the technique
+summary only. Fittings are grouped by type/size/sizing-system with resolved
+unit mass. Hardware from realizations maps `conduitBox → hw-conduitbox`,
+`boltThrough`/`clickDetachable → hw-boltset`. Technique summary counts every
+realization occurrence plus `bends` (heat-bent vertices across bentLinks) and
+`telescopes`.
+
+### Partial BOM (unresolved)
+
+Links/bentLinks without a pipe material and telescopes missing either member
+material are **excluded** from the cut list and pipe weight but **counted and
+reported** in `unresolved { count, elementIds }` so the UI can show a partial
+BOM. Their explicit point masses still count (material-independent). Cordage
+resolution is separate and does not feed `unresolved`.
+
+### Consumables + [deviation] foam deferred
+
+Rope consumable = Σ rope `lengthM` × `ropeWasteFactor`; elastic = Σ
+`restLengthM`; bowden = Σ (`restLengthAM` + `restLengthBM`). **[deviation]**
+Foam area (§6.2 lists it under consumables) is **omitted here** — it comes from
+assembly `FoamPlate`s (Phase 4), which the single-mechanism/`Mechanism[]` BOM
+does not see yet. Noted in code and to be added when the assembly feeds the BOM.
+Likewise **mirrored-instance doubling** ("mirrored instances double
+automatically", §6.2) is deferred to the Phase 4 assembly BOM; this slice sums
+mechanisms as authored.
+
+### Cost + CSV shape
+
+Cost is emitted only for materials carrying a `unitPrices` entry (pipe/cordage
+priced per metre of cut length, fittings/hardware per unit); `totalCost` is
+`undefined` when nothing is priced (cost column hidden, §6.2). `bomToCsv` is
+hand-rolled (per the Phase 0 CSV decision), RFC 4180 quoting (comma/quote/CR/LF
+→ wrapped, embedded quotes doubled), CRLF line endings, four labelled sections:
+Cut list, Fittings, Consumables, Weights.
+
+### [deviation] Solver `elementLinearDensityKgPerM` (additive)
+
+`SolveInputs` gains optional `elementLinearDensityKgPerM: Record<string,number>`
+— a per-element (engineered) linear-density override keyed by element id,
+falling back to the Phase 2 generic `linkDensityKgPerM`. Wired into
+`accumulateMasses`; output shapes untouched, kinematic mode unaffected. This is
+the Phase 3 continuation of the Phase 2 `linkDensityKgPerM` note (per-material
+densities were explicitly deferred to here). The BOM/materials UI layer will
+feed these from assigned pipe materials. Marked a deviation only in that it
+extends the otherwise-frozen `solve()` interface, additively.
+
+### Bundled seesaw-spine example (§9 item 1)
+
+`src/examples/seesaw-spine.json` is the shipped data artifact, generated from
+the authoritative builder `buildSeesawSpineProject()`; `loadSeesawSpine()`
+validates it via `projectSchema`, and a test asserts the two agree (no drift).
+It is an elevation rope-braced truss (parallel chords + tension X-braces),
+hip-rect four-point anchors, neck + tail booms, head/tail point masses, gravity
+on, every pipe engineered with a seed material + realization and tagged
+neck/spine/tail. All structural pipes share one size so a heat-wrap partner OD
+equals the pipe's own OD, which keeps the §11 acceptance arithmetic clean. The
+example's display name may reference the reference build; no creature term
+appears in any identifier or string (asserted in a test). The §11 headline test
+computes the expected cut-list total **independently** (reimplementing the
+allowance arithmetic from geometry + realizations, not by calling `computeBom`)
+and asserts it equals the summed structural-pipe cut parts exactly.

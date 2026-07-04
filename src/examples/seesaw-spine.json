@@ -1,0 +1,954 @@
+{
+  "schemaVersion": 3,
+  "id": "example-seesaw-spine",
+  "name": "Example — seesaw spine",
+  "unitsPreference": "imperial",
+  "materials": {
+    "pipes": [
+      {
+        "id": "pipe-nps-sch40-050",
+        "name": "PVC Sch 40 1/2\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "outerDiameterM": 0.021335999999999997,
+        "innerDiameterM": 0.015798799999999998,
+        "linearDensityKgPerM": 0.238106224,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-075",
+        "name": "PVC Sch 40 3/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.02667,
+        "innerDiameterM": 0.0209296,
+        "linearDensityKgPerM": 0.312514419,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-100",
+        "name": "PVC Sch 40 1\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.033401,
+        "innerDiameterM": 0.026644599999999997,
+        "linearDensityKgPerM": 0.44644917,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-125",
+        "name": "PVC Sch 40 1-1/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "outerDiameterM": 0.04216399999999999,
+        "innerDiameterM": 0.03505199999999999,
+        "linearDensityKgPerM": 0.59526556,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-150",
+        "name": "PVC Sch 40 1-1/2\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "outerDiameterM": 0.04826,
+        "innerDiameterM": 0.040894,
+        "linearDensityKgPerM": 0.714318672,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-cls200-075",
+        "name": "PVC Class 200 3/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.02667,
+        "innerDiameterM": 0.023622,
+        "linearDensityKgPerM": 0.193461307,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-cls200-100",
+        "name": "PVC Class 200 1\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.033401,
+        "innerDiameterM": 0.0302006,
+        "linearDensityKgPerM": 0.25298786300000004,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-050",
+        "name": "CPVC CTS 1/2\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "outerDiameterM": 0.015875,
+        "innerDiameterM": 0.012420599999999999,
+        "linearDensityKgPerM": 0.163698029,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-075",
+        "name": "CPVC CTS 3/4\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.022224999999999998,
+        "innerDiameterM": 0.018161,
+        "linearDensityKgPerM": 0.25298786300000004,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-100",
+        "name": "CPVC CTS 1\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.028575,
+        "innerDiameterM": 0.0233934,
+        "linearDensityKgPerM": 0.41668589200000006,
+        "approximate": true
+      }
+    ],
+    "fittings": [
+      {
+        "id": "fitting-nps-elbow90-1_2",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.03,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_2",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.027,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_2",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.0372,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_2",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.056999999999999995,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_2",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.0168,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_2",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.010799999999999999,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-3_4",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.05,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-3_4",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.045,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-3_4",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.062,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-3_4",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.095,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-3_4",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.028,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-3_4",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.018,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.085,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.0765,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.1054,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.1615,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.047599999999999996,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.030599999999999995,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1_1_4",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.13,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_1_4",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.11699999999999999,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_1_4",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.1612,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_1_4",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.24700000000000003,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_1_4",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.0728,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_1_4",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.0468,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1_1_2",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.17,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_1_2",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.153,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_1_2",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.2108,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_1_2",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.323,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_1_2",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.09519999999999999,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_1_2",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.06119999999999999,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-1_2",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.020000000000000004,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-1_2",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.018,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-1_2",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.024800000000000003,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-1_2",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.038000000000000006,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-1_2",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.011200000000000002,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-1_2",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.0072,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-3_4",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.034999999999999996,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-3_4",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.0315,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-3_4",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.043399999999999994,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-3_4",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.06649999999999999,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-3_4",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.0196,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-3_4",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.012599999999999998,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-1",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.06,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-1",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.054,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-1",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.0744,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-1",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.11399999999999999,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-1",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.0336,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-1",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.021599999999999998,
+        "socketDepthM": 0.02,
+        "approximate": true
+      }
+    ],
+    "cordage": [
+      {
+        "id": "cord-paracord550",
+        "name": "Paracord 550",
+        "kind": "rope",
+        "linearDensityKgPerM": 0.0088,
+        "approximate": true
+      },
+      {
+        "id": "cord-nylon4mm",
+        "name": "4 mm nylon rope",
+        "kind": "rope",
+        "linearDensityKgPerM": 0.011,
+        "approximate": true
+      },
+      {
+        "id": "cord-bungee6",
+        "name": "6 mm bungee / elastic",
+        "kind": "elastic",
+        "linearDensityKgPerM": 0.02,
+        "defaultStiffnessNPerM": 300,
+        "approximate": true
+      },
+      {
+        "id": "cord-bungee8",
+        "name": "8 mm bungee / elastic",
+        "kind": "elastic",
+        "linearDensityKgPerM": 0.034,
+        "defaultStiffnessNPerM": 520,
+        "approximate": true
+      },
+      {
+        "id": "cord-bowden",
+        "name": "Bowden cable + housing",
+        "kind": "bowdenCable",
+        "linearDensityKgPerM": 0.052,
+        "approximate": true
+      }
+    ],
+    "sheets": [
+      {
+        "id": "sheet-eva10",
+        "name": "EVA foam floor tile 10 mm",
+        "arealDensityKgPerM2": 0.9,
+        "approximate": true
+      },
+      {
+        "id": "sheet-eva12",
+        "name": "EVA foam floor tile 12 mm",
+        "arealDensityKgPerM2": 1.1,
+        "approximate": true
+      }
+    ],
+    "hardware": [
+      {
+        "id": "hw-boltset",
+        "name": "Bolt + nut set (M6)",
+        "massKg": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "hw-conduitbox",
+        "name": "Electrical conduit box",
+        "massKg": 0.12,
+        "approximate": true
+      },
+      {
+        "id": "hw-hosesleeve",
+        "name": "Garden-hose joint sleeve",
+        "massKg": 0.05,
+        "approximate": true
+      },
+      {
+        "id": "hw-fiberglassrod",
+        "name": "Fiberglass rod 1/4\" (per m)",
+        "massKg": 0.055,
+        "approximate": true
+      }
+    ],
+    "genericPipeLinearDensityKgPerM": 0.25,
+    "unitPrices": {}
+  },
+  "mechanisms": [
+    {
+      "id": "seesaw-spine",
+      "name": "Seesaw spine",
+      "viewOrientation": "side-left",
+      "gravityOn": true,
+      "nodes": [
+        {
+          "id": "hipBackTop",
+          "kind": "anchor",
+          "position": {
+            "x": -0.15,
+            "y": 1.05
+          }
+        },
+        {
+          "id": "hipFrontTop",
+          "kind": "anchor",
+          "position": {
+            "x": 0.15,
+            "y": 1.05
+          }
+        },
+        {
+          "id": "hipBackBot",
+          "kind": "anchor",
+          "position": {
+            "x": -0.15,
+            "y": 0.95
+          }
+        },
+        {
+          "id": "hipFrontBot",
+          "kind": "anchor",
+          "position": {
+            "x": 0.15,
+            "y": 0.95
+          }
+        },
+        {
+          "id": "tTail",
+          "kind": "free",
+          "position": {
+            "x": -1,
+            "y": 1.05
+          }
+        },
+        {
+          "id": "bTail",
+          "kind": "free",
+          "position": {
+            "x": -1,
+            "y": 0.95
+          }
+        },
+        {
+          "id": "tNeck",
+          "kind": "free",
+          "position": {
+            "x": 1,
+            "y": 1.05
+          }
+        },
+        {
+          "id": "bNeck",
+          "kind": "free",
+          "position": {
+            "x": 1,
+            "y": 0.95
+          }
+        },
+        {
+          "id": "head",
+          "kind": "free",
+          "position": {
+            "x": 1.6,
+            "y": 1.15
+          }
+        },
+        {
+          "id": "tail",
+          "kind": "free",
+          "position": {
+            "x": -1.6,
+            "y": 1
+          }
+        }
+      ],
+      "elements": [
+        {
+          "id": "topTail",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "tTail",
+          "nodeB": "hipBackTop",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "fitting",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "topMid",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipBackTop",
+          "nodeB": "hipFrontTop",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "topNeck",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipFrontTop",
+          "nodeB": "tNeck",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "fitting",
+          "pointMasses": []
+        },
+        {
+          "id": "botTail",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "bTail",
+          "nodeB": "hipBackBot",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "fitting",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "botMid",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipBackBot",
+          "nodeB": "hipFrontBot",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "botNeck",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipFrontBot",
+          "nodeB": "bNeck",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "fitting",
+          "pointMasses": []
+        },
+        {
+          "id": "vertTail",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "tTail",
+          "nodeB": "bTail",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "vertBack",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipBackTop",
+          "nodeB": "hipBackBot",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "vertFront",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "hipFrontTop",
+          "nodeB": "hipFrontBot",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "heatWrapRigid",
+          "pointMasses": []
+        },
+        {
+          "id": "vertNeck",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "spine",
+          "nodeA": "tNeck",
+          "nodeB": "bNeck",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "boltThrough",
+          "endRealizationB": "boltThrough",
+          "pointMasses": []
+        },
+        {
+          "id": "neckTop",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "neck",
+          "nodeA": "tNeck",
+          "nodeB": "head",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "boltThrough",
+          "pointMasses": []
+        },
+        {
+          "id": "neckBot",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "neck",
+          "nodeA": "bNeck",
+          "nodeB": "head",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "boltThrough",
+          "pointMasses": []
+        },
+        {
+          "id": "tailTop",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "tail",
+          "nodeA": "tTail",
+          "nodeB": "tail",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "boltThrough",
+          "pointMasses": []
+        },
+        {
+          "id": "tailBot",
+          "type": "link",
+          "maturity": "engineered",
+          "subsystemTag": "tail",
+          "nodeA": "bTail",
+          "nodeB": "tail",
+          "pipeMaterialId": "pipe-nps-sch40-075",
+          "endRealizationA": "heatWrapRigid",
+          "endRealizationB": "boltThrough",
+          "pointMasses": []
+        },
+        {
+          "id": "braceTail1",
+          "type": "rope",
+          "maturity": "engineered",
+          "subsystemTag": "tail",
+          "path": ["tTail", "hipBackBot"],
+          "lengthM": 0.856,
+          "cordageMaterialId": "cord-paracord550"
+        },
+        {
+          "id": "braceTail2",
+          "type": "rope",
+          "maturity": "engineered",
+          "subsystemTag": "tail",
+          "path": ["bTail", "hipBackTop"],
+          "lengthM": 0.856,
+          "cordageMaterialId": "cord-paracord550"
+        },
+        {
+          "id": "braceNeck1",
+          "type": "rope",
+          "maturity": "engineered",
+          "subsystemTag": "neck",
+          "path": ["hipFrontTop", "bNeck"],
+          "lengthM": 0.856,
+          "cordageMaterialId": "cord-paracord550"
+        },
+        {
+          "id": "braceNeck2",
+          "type": "rope",
+          "maturity": "engineered",
+          "subsystemTag": "neck",
+          "path": ["hipFrontBot", "tNeck"],
+          "lengthM": 0.856,
+          "cordageMaterialId": "cord-paracord550"
+        }
+      ],
+      "pointMasses": [
+        {
+          "id": "headMass",
+          "name": "head",
+          "massKg": 1.5,
+          "nodeId": "head"
+        },
+        {
+          "id": "tailMass",
+          "name": "tail",
+          "massKg": 0.8,
+          "nodeId": "tail"
+        }
+      ],
+      "skeletonBindings": [],
+      "inputs": [],
+      "namedStates": []
+    }
+  ],
+  "assembly": {
+    "instances": [],
+    "bindings": [],
+    "pointMasses": [],
+    "foamPlates": []
+  },
+  "wearer": {
+    "heightM": 1.75,
+    "shoulderWidthM": 0.46,
+    "hipWidthM": 0.36
+  },
+  "wearerAnchorOverrides": {},
+  "bomSettings": {
+    "heatWrapAllowanceFactor": 1.5,
+    "ropeWasteFactor": 1.2
+  }
+}

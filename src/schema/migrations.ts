@@ -19,6 +19,11 @@ export const migrations: Record<number, Migration> = {
       : doc.mechanisms,
     wearer: { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 },
   }),
+  // v2 → v3: project gained bomSettings (§6.2); old docs get the defaults.
+  2: (doc) => ({
+    ...doc,
+    bomSettings: { heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 },
+  }),
 };
 
 export class MigrationError extends Error {}

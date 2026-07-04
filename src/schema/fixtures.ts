@@ -269,14 +269,16 @@ export function fixtureProject(): Project {
     wearerAnchorOverrides: {
       shoulderL: { x: 0.02, y: 1.45, z: 0.19 },
     },
+    bomSettings: { heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 },
   };
 }
 
 /** A version-1 document as Phase 0 wrote it (no skeletonBindings, no wearer
- * params) — used to test the 1→2 migration against real old data. */
+ * params, no bomSettings) — used to test the full 1→latest migration chain
+ * against real old data. */
 export function fixtureProjectV1(): Record<string, unknown> {
   const p = fixtureProject() as unknown as Record<string, unknown>;
-  const { wearer: _wearer, ...rest } = p;
+  const { wearer: _wearer, bomSettings: _bom, ...rest } = p;
   return {
     ...rest,
     schemaVersion: 1,
@@ -285,4 +287,12 @@ export function fixtureProjectV1(): Record<string, unknown> {
       return mRest;
     }),
   };
+}
+
+/** A version-2 document (skeletonBindings + wearer present, but no
+ * bomSettings) — exercises the 2→3 migration in isolation. */
+export function fixtureProjectV2(): Record<string, unknown> {
+  const p = fixtureProject() as unknown as Record<string, unknown>;
+  const { bomSettings: _bom, ...rest } = p;
+  return { ...rest, schemaVersion: 2 };
 }
