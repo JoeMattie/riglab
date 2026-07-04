@@ -1,0 +1,11 @@
+{
+  "name": "arm swing",
+  "durationS": 2,
+  "loop": true,
+  "tracks": {
+    "shoulderR": { "timesS": [0, 1, 2], "values": [-0.7, 0.7, -0.7] },
+    "shoulderL": { "timesS": [0, 1, 2], "values": [0.7, -0.7, 0.7] },
+    "elbowR": { "timesS": [0, 2], "values": [0.3, 0.3] },
+    "elbowL": { "timesS": [0, 2], "values": [0.3, 0.3] }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "lean",
+  "durationS": 4,
+  "loop": true,
+  "tracks": {
+    "lean": { "timesS": [0, 1, 2, 3, 4], "values": [0, 0.35, 0, -0.15, 0] }
+  }
+}
