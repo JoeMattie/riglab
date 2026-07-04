@@ -1,0 +1,133 @@
+// Small building blocks shared by the info-panel sections (§8.2a): labelled
+// rows, a commit-on-blur/Enter numeric field, and assignment Selects.
+import { useEffect, useState } from 'react';
+import type { JointRealization } from '../../../schema';
+import { jointRealizationSchema } from '../../../schema';
+import { Input } from '../../components/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/select';
+
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b px-3 py-2">
+      <div className="mb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-0.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right">{children}</span>
+    </div>
+  );
+}
+
+const fmt = (v: number): string => String(Number(v.toFixed(4)));
+
+/** Numeric input that commits on blur/Enter (one commit = one undo entry,
+ * §8.2a); Escape reverts to the current document value. */
+export function NumberField({
+  value,
+  onCommit,
+  min,
+  testId,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  min?: number;
+  testId?: string;
+}) {
+  const [text, setText] = useState(() => fmt(value));
+  // resync the draft whenever the document value changes
+  useEffect(() => setText(fmt(value)), [value]);
+  const commit = () => {
+    const v = Number(text);
+    if (Number.isFinite(v) && v !== value && (min === undefined || v >= min)) onCommit(v);
+    else setText(fmt(value));
+  };
+  return (
+    <Input
+      inputMode="decimal"
+      className="h-7 w-24 px-2 text-right md:text-xs"
+      value={text}
+      data-testid={testId}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') setText(fmt(value));
+      }}
+    />
+  );
+}
+
+export interface SelectOption {
+  id: string;
+  label: string;
+}
+
+/** Assignment Select with an explicit "none" entry mapping to undefined. A
+ * null `value` renders the placeholder (mixed multi-select values). */
+export function AssignSelect({
+  value,
+  options,
+  onChange,
+  placeholder,
+  testId,
+}: {
+  value: string | null | undefined;
+  options: SelectOption[];
+  onChange: (id: string | undefined) => void;
+  placeholder: string;
+  testId?: string;
+}) {
+  return (
+    <Select
+      value={value ?? undefined}
+      onValueChange={(v) => onChange(v === 'none' ? undefined : v)}
+    >
+      <SelectTrigger size="sm" className="h-7 w-full" data-testid={testId}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">— none —</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o.id} value={o.id}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export const REALIZATION_LABELS: Record<JointRealization, string> = {
+  heatWrapPivot: 'heat-wrapped pivot',
+  heatWrapRigid: 'heat-wrapped rigid',
+  nestedSleeve: 'nested sleeve',
+  nestedCoupler: 'nested coupler',
+  boltThrough: 'bolt-through',
+  fitting: 'tee/elbow/cross fitting',
+  conduitBox: 'conduit box',
+  ropeLashing: 'rope lashing',
+  clickDetachable: 'click/detachable',
+};
+
+export const REALIZATION_OPTIONS: SelectOption[] = jointRealizationSchema.options.map((r) => ({
+  id: r,
+  label: REALIZATION_LABELS[r],
+}));
+
+export const degrees = (rad: number): string => `${((rad * 180) / Math.PI).toFixed(1)}°`;
+export const metres = (m: number): string => `${Number(m.toFixed(4))} m`;
+export const kilograms = (kg: number): string => `${Number(kg.toFixed(3))} kg`;
