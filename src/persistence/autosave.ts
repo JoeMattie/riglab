@@ -8,6 +8,9 @@ export interface Autosaver {
   cancel(): void;
   /** True while a save is scheduled or running (drives the save indicator). */
   isDirty(): boolean;
+  /** True if an edit newer than the currently running save is scheduled —
+   * usable from inside the save callback, where isDirty() is always true. */
+  hasPending(): boolean;
 }
 
 export function createAutosaver(
@@ -50,7 +53,10 @@ export function createAutosaver(
       pending = null;
     },
     isDirty() {
-      return pending !== null || inFlight !== null;
+      return pending !== null || timer !== null || inFlight !== null;
+    },
+    hasPending() {
+      return pending !== null || timer !== null;
     },
   };
 }

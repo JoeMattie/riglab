@@ -181,6 +181,7 @@ export function fixtureProject(): Project {
             backlashRad: 0.05,
           },
         ],
+        pointMasses: [{ id: 'npm-1', name: 'head weight', massKg: 2.5, nodeId: 'n4' }],
         inputs: [
           {
             id: 'ch1',

@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "spike": "vite",
     "spike:build": "vite build --config spike/vite.pages.config.ts",
-    "spike:pages": "npm run spike:build && npx wrangler pages dev spike-dist"
+    "spike:pages": "npm run spike:build && npx wrangler pages dev spike-dist",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@dimforge/rapier2d-compat": "0.19.3",

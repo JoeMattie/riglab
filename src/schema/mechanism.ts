@@ -30,6 +30,15 @@ export const attachedPointMassSchema = z.object({
   t: z.number().min(0).max(1),
 });
 
+/** Point mass attached directly to a node — for masses that hang on ropes or
+ * sit at joints and therefore have no link to carry them. */
+export const nodePointMassSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  massKg: z.number().nonnegative(),
+  nodeId: idSchema,
+});
+
 const elementBase = {
   id: idSchema,
   maturity: maturitySchema,
@@ -210,6 +219,7 @@ export const mechanismSchema = z.object({
   gravityOn: z.boolean(),
   nodes: z.array(mechanismNodeSchema),
   elements: z.array(mechanismElementSchema),
+  pointMasses: z.array(nodePointMassSchema),
   inputs: z.array(inputChannelSchema),
   namedStates: z.array(namedStateSchema),
 });
@@ -225,6 +235,7 @@ export type RopeElement = z.infer<typeof ropeElementSchema>;
 export type ElasticElement = z.infer<typeof elasticElementSchema>;
 export type BowdenElement = z.infer<typeof bowdenElementSchema>;
 export type TorsionCableElement = z.infer<typeof torsionCableElementSchema>;
+export type NodePointMass = z.infer<typeof nodePointMassSchema>;
 export type InputChannel = z.infer<typeof inputChannelSchema>;
 export type NamedState = z.infer<typeof namedStateSchema>;
 export type Mechanism = z.infer<typeof mechanismSchema>;
