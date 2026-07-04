@@ -101,6 +101,8 @@ export const pivotElementSchema = z.object({
   memberIds: z.array(idSchema).min(2),
   /** pairs of member element ids rigidly welded to each other */
   welds: z.array(z.tuple([idSchema, idSchema])),
+  /** relative angle = signed deviation from the straight continuation of
+   * memberA through the pivot into memberB (0 = straight, like a knee) */
   angleLimit: z
     .object({
       memberA: idSchema,

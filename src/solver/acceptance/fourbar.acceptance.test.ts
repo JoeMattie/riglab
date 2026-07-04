@@ -1,9 +1,5 @@
 // Phase 1 acceptance (§11): dragging the crank of a four-bar traces the
 // analytic coupler solution within 1e-3 m.
-//
-// SKIP-MARKED until Phase 1 implements kinematic solve() — the agreed
-// convention (DECISIONS.md): tests are the executable spec, CI stays green.
-// UNSKIP at the START of Phase 1.
 import { describe, expect, it } from 'vitest';
 import type { Mechanism } from '../../schema';
 import { solve } from '..';
@@ -37,7 +33,7 @@ export function fourBarMechanism(): Mechanism {
   };
 }
 
-describe.skip('ACCEPTANCE Phase 1 — four-bar kinematic drag', () => {
+describe('ACCEPTANCE Phase 1 — four-bar kinematic drag', () => {
   it('coupler joint tracks the analytic solution within 1e-3 m over a full crank rotation', () => {
     const mechanism = fourBarMechanism();
     let prevB = fourBarInitial(FOUR_BAR).B;
