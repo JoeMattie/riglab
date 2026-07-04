@@ -345,6 +345,19 @@ integration.
    spring so it resolves to the physical trailing edge. Confirm this is the
    intended modelling of backlash.
 
+### Phase 2 solver-correctness review: SIGNED OFF (2026-07-04)
+
+All four questions answered by the user: (1) as-drawn static balance IS the
+intended meaning of `ropesRequiringCompression`; (2) the inferred drive
+frame (lowest-id incident link → rail, else lowest-id anchor, else world
++x) is accepted — no schema drive-frame field for now; (3) springs-as-
+forces deviation accepted; (4) backlash-resolved-by-return-spring modelling
+accepted. One robustness item carried forward out of the review: a rope
+loaded exactly at its taut limit reports "non-converged" while extracting
+the correct tension (inequality limit-cycles at the active boundary) —
+scheduled as a solver-robustness fix alongside Phase 3, per §12's guidance
+that tension-only constraints get the cleverness budget.
+
 ## Phase 2 — forces (UI)
 
 _This heading is kept separate from the solver agent's Phase 2 notes to ease
