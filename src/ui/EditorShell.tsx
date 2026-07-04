@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
 import { useAppStore } from '../state/appStore';
 import { useEditorStore } from '../state/editorStore';
+import { Badge } from './components/badge';
+import { Button } from './components/button';
 import { ConnectMenu } from './editor/ConnectMenu';
 import { ForcesPanel } from './editor/ForcesPanel';
 import { MechanismTabs } from './editor/MechanismTabs';
@@ -40,19 +42,22 @@ export function EditorShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  // test/debug hook: lets Playwright assert on the live document
+  // test/debug hook: lets Playwright assert on the live document. Merged (not
+  // replaced) so seams published by children — e.g. SketchCanvas's getView —
+  // survive this initializer regardless of effect ordering.
   useEffect(() => {
-    (window as unknown as { __riglab: object }).__riglab = {
-      getDoc: () => useAppStore.getState().current,
-      getEditor: () => {
-        const s = useEditorStore.getState();
-        return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
-      },
-      // seam for exercising the equilibrium force-overlay plumbing while the
-      // solver's equilibrium mode lands in a parallel branch (§5.2)
-      setEquilibrium: (readout: unknown) =>
-        useEditorStore.getState().setEquilibrium(readout as never),
+    const w = window as unknown as { __riglab?: Record<string, unknown> };
+    if (!w.__riglab) w.__riglab = {};
+    const hook = w.__riglab;
+    hook.getDoc = () => useAppStore.getState().current;
+    hook.getEditor = () => {
+      const s = useEditorStore.getState();
+      return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
     };
+    // seam for exercising the equilibrium force-overlay plumbing while the
+    // solver's equilibrium mode lands in a parallel branch (§5.2)
+    hook.setEquilibrium = (readout: unknown) =>
+      useEditorStore.getState().setEquilibrium(readout as never);
   }, []);
 
   if (!current) return null;
@@ -94,9 +99,9 @@ export function EditorShell() {
           onChange={(e) => updateCurrent((doc) => ({ ...doc, name: e.target.value }))}
           style={{ fontSize: 16, fontWeight: 600 }}
         />
-        <span data-testid="save-state" style={{ color: saveState === 'saved' ? '#282' : '#a60' }}>
+        <Badge data-testid="save-state" variant={saveState === 'saved' ? 'secondary' : 'outline'}>
           {saveState === 'saved' ? 'saved' : 'saving…'}
-        </span>
+        </Badge>
         <button type="button" data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
           ↶ undo
         </button>
@@ -104,9 +109,15 @@ export function EditorShell() {
           ↷ redo
         </button>
         <span style={{ flex: 1 }} />
-        <button type="button" data-testid="export-project" onClick={onExport}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="export-project"
+          onClick={onExport}
+        >
           Export JSON
-        </button>
+        </Button>
       </header>
       <MechanismTabs />
       <Toolbar />

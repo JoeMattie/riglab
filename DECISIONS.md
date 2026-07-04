@@ -624,3 +624,177 @@ relaxations.
 `biome check --write` on that file only (formatting, zero logic change) so the
 definition-of-done lint gate passes; called out here and in the summary rather
 than folded silently into the solver commit.
+
+## Phase 3 — UI infrastructure
+
+The two Phase 3 entry tasks (planfile §11): adopt shadcn/ui + Tailwind for
+panel UI, and integrate zoompinch canvas navigation behind a go/no-go spike.
+Infrastructure only — no feature UI (info panel/checklist/BOM land later).
+
+### DECISION: Tailwind v4 via the `@tailwindcss/vite` plugin
+
+`tailwindcss@4.3.2` + `@tailwindcss/vite@4.3.2`, pinned exact. The first-party
+Vite plugin is Tailwind v4's recommended integration (no `tailwind.config.js`,
+no PostCSS chain, no `content` globs — v4 auto-detects sources). Theme lives in
+CSS: `src/index.css` holds `@import 'tailwindcss'`, the shadcn design tokens on
+`:root`/`.dark` (oklch), and an `@theme inline` block mapping them to
+`--color-*`. Imported once from `src/main.tsx`. `tw-animate-css@1.4.0` (the
+Tailwind-v4 successor to the deprecated `tailwindcss-animate`) supplies the
+enter/exit keyframes shadcn overlays use.
+
+### DECISION: shadcn/ui vendored via CLI, base color neutral, into `src/ui/components/`
+
+Ran `shadcn@4.13.0 add …` against a hand-written `components.json` (style
+`new-york`, `baseColor: neutral`, `cssVariables: true`, `iconLibrary: lucide`,
+aliases pointing at `@/ui/components` + `@/ui/lib/utils`). Vendored the working
+set the later feature slices need: button, input, label, select, tabs,
+checkbox, table, dialog, dropdown-menu, tooltip, separator, badge, scroll-area,
+toggle, toggle-group. Per the scope-amendment decision there is **no runtime
+component-library dependency**: the components are source in the repo; their
+only npm deps are the consolidated `radix-ui@1.6.1` (current shadcn imports
+from the single `radix-ui` package, not per-primitive `@radix-ui/react-*`),
+`class-variance-authority@0.7.1`, `clsx@2.1.1`, `tailwind-merge@3.6.0`, and
+`lucide-react@1.23.0` — all pinned exact. The CLI added no dependency ranges
+(everything was pre-installed exact) and did not modify `index.css`.
+
+A `@/*` → `./src/*` path alias was added in both `tsconfig.json` (`paths`, no
+`baseUrl` — it's deprecated in TS 6) and `vite.config.ts` (`resolve.alias`), so
+the vendored components' `@/ui/lib/utils` imports resolve under tsc, Vite, and
+Vitest. Existing relative imports are untouched.
+
+### DECISION: vendored code is formatted to our Biome style, not exempted from lint
+
+The shadcn CLI emits double-quoted, semicolon-free source. Rather than relax or
+scope-off any lint rule for `src/ui/components/`, the vendored files were run
+through `biome check --write` once (→ single quotes, semicolons, organized
+imports). After formatting they pass `biome check` with **zero diagnostics and
+no rule suppressions** — shadcn's model is that you own these components, so
+treating them as first-party code (not vendored exceptions) is the lower-churn
+choice and keeps one consistent style.
+
+### DECISION [biome config change]: exclude the Tailwind entry CSS from Biome
+
+`biome.json` gains `files.includes: ["**", "!src/index.css"]`. Biome 2.5.2's
+CSS parser rejects Tailwind v4 at-rules (`@custom-variant`, `@theme`, `@apply`,
+`@import 'tailwindcss'`) — it emitted "Tailwind-specific syntax is disabled" and
+aborted. `src/index.css` is a Tailwind-v4/shadcn artifact that Biome would only
+mangle, so it is excluded from Biome entirely (any future *plain* CSS still gets
+linted). No lint *rule* was changed. Logged here per the CLAUDE.md rule that
+biome-config changes go through DECISIONS.md.
+
+### DECISION: preflight regression compensated with scoped base styles, not a redesign
+
+Tailwind v4's preflight strips the UA button/input/select affordances the
+inline-styled Phase 1–2 chrome (EditorShell, ProjectList, Toolbar,
+MechanismTabs, ForcesPanel, TransportBar, ConnectMenu) relied on — bare
+`<button>`/`<input>` lose padding, border, and background. Rather than restyle
+each component, `index.css` adds a small `@layer base` block restoring neutral
+affordances to native controls, scoped with `:not([data-slot])` so it never
+touches vendored shadcn components (all of which carry `data-slot`); inline
+styles on legacy elements still win, so icon buttons keep `border:none`. This is
+the planfile §3 "pre-existing chrome migrates opportunistically … fully
+converged by Phase 5" posture — deliberately minimal, no design pass (that is
+Phase 5, driven by the design handoff doc). One reference migration proves the
+stack: EditorShell's header Export button → shadcn `Button` (outline/sm) and the
+save-state indicator → shadcn `Badge`.
+
+Verification: `npm run e2e` (builds + runs the production build) — all 3 smoke
+specs green after preflight + the reference migration. (Incidentally corrected a
+pre-existing Biome format drift in `SketchCanvas.tsx` that was failing
+`npm run lint` on `main`, so the green gate could pass.)
+
+### DECISION: zoompinch integration spike — **NO-GO** → vendor its gesture model
+
+Spike verdict for the planfile §3 / §11 go/no-go: **NO-GO** on integrating the
+`@zoompinch/react` / `@zoompinch/core` library as a gesture/transform *source*
+for our Konva canvas. Evidence, read from the installed 0.0.18/0.0.42 source:
+
+1. **No headless gesture layer.** `@zoompinch/core`'s only output is a side
+   effect: `update()` (core `zoompinch.es.js:254`) unconditionally does
+   `element.querySelector('.canvas').style.transform = translate/scale/rotate`
+   on a `.canvas` child it *requires*. There is no API that yields raw pan/zoom
+   deltas or an absolute transform decoupled from a DOM node it mutates — the
+   "gesture math" is not exposed separately from the DOM-transform. Its
+   `"update"` event carries no payload; the readable `translateX/translateY/
+   scale/rotate` are expressed relative to the canvas element's natural-fit
+   `naturalScale` and a top-left origin, not our absolute px/m
+   `ViewTransform{scale,cx,cy}`, and its `min/maxScale` is a normalized clamp,
+   not our 40–3000 px/m — a lossy impedance layer either way.
+2. **Its interactive layer swallows pointer events.** The React wrapper attaches
+   mouse/touch/wheel listeners on the `.zoompinch` wrapper (`touch-action:none`)
+   and its only non-transformed overlay, `.matrix`, is `pointer-events:none`.
+   An interactive editor needs pointer events to reach individual Konva shapes
+   (node drag, draw tools, snapping); routing the Stage through zoompinch would
+   intercept those at the wrapper (breaking the behavior contract), and routing
+   through `.matrix` makes the content non-interactive.
+3. The only "consume state only" path is a throwaway hidden `.canvas` that it
+   CSS-transforms invisibly while we harvest `translateX/scale` per `update` —
+   i.e. carry a parallel DOM node + 2 ResizeObservers + ancestor-motion
+   listeners and reconcile two coordinate models, to replace ~4 pure functions
+   already in `viewTransform.ts`. Strictly more complexity/risk than the
+   documented fallback, discarding zoompinch's only real feature (the CSS
+   transform we must not use). The planfile §3 anticipated exactly this.
+
+**Resolution (per user steer "rip out the secret sauce and use that").** Rather
+than a from-scratch fallback *or* a literal copy, the reusable model of
+zoompinch's `handleWheel` is re-implemented in `src/ui/editor/gesture.ts` and
+applied to our own `ViewTransform` (never a CSS transform), so Konva stays
+vector-sharp. Re-implemented, **not copied**, because of a license finding
+below. The `@zoompinch/react`/`@zoompinch/core` deps were **removed** (nothing
+imports them), per the planfile's "remove the dependency again if no-go".
+
+**[correction] License.** The earlier scope-amendment entry recorded zoompinch
+as "MIT". That is inaccurate for the published artifacts: `@zoompinch/react`
+declares **ISC** and `@zoompinch/core` declares **no license** (GitHub's license
+endpoint 404s for the repo). Copying the core gesture source verbatim would be
+legally unclear, so `gesture.ts` re-expresses the *technique* (which is standard
+and non-proprietary — see the heuristic below) in our own code with attribution,
+rather than lifting bytes. Flagged to the user.
+
+### Wheel-mode heuristic (the fallback's gesture model)
+
+`gesture.ts` classifies each wheel event, all pointer-anchored, all via the pure
+`viewTransform.ts` helpers (`zoomAt` cursor-anchored + clamp 40–3000, `panBy`):
+
+- **`ctrlKey` ⇒ zoom.** The browser encodes a trackpad **pinch** as a wheel
+  event with `ctrlKey` set (every platform); an explicit Ctrl/⌘+wheel on a mouse
+  is the same intent. This is zoompinch's own heuristic and the Figma/Maps
+  idiom. Cursor-anchored via `zoomAt`.
+- **otherwise ⇒ pan.** A two-finger trackpad scroll (or a plain mouse wheel)
+  pans by `(deltaX, deltaY)` so content follows the fingers. (Deliberate
+  trackpad-first tradeoff: a mouse-wheel notch pans rather than zooms; the mouse
+  zoom path is Ctrl+wheel. This is what the planfile's "plain wheel without ctrl
+  → pan" calls for.)
+- `deltaMode === 0` (pixel) is the trackpad/precision signal — it selects
+  sensitivity only, never the pan-vs-zoom decision.
+- **Zoom factor is our own curve, not zoompinch's:** `exp(-notches · 0.5)`
+  clamped to `[0.5, 2]` per event (notches = pixel `deltaY/100`, else raw). The
+  library's linear `1 + k·Δ` goes **negative** for a coarse ctrl+wheel-down
+  (Chrome reports mouse wheels as pixel-mode ±100/notch), slamming zoom to the
+  floor — the scripted check below caught this; the exponential is always
+  positive, symmetric, and bounded.
+
+**Touch:** a two-finger pinch is added via native pointer listeners on the
+canvas container (`pinchStep`: finger-distance ratio → zoom, midpoint → anchor +
+pan). It only acts on ≥2 touch pointers, so single-pointer draw/drag/select
+still flows to Konva (behavior contract preserved); `touch-action:none` on the
+container keeps the browser from hijacking the gesture.
+
+**§11 acceptance line served — "pinch/wheel zoom keeps the content vector-sharp
+(no bitmap scaling) and pointer-anchored."** Gestures drive `view` React state;
+SketchCanvas converts world→screen per point every render, so there is never a
+CSS/bitmap scale — content re-renders vector-sharp at any zoom. `zoomAt` anchors
+at the cursor. Unit-tested in `gesture.test.ts` + `viewTransform.test.ts` (the
+factor stays positive/bounded for any delta; the world point under the cursor is
+invariant across zoom). Scripted browser check (throwaway headless Playwright vs
+`vite preview`, per the scripted-verification rule, asserting `window.__riglab.
+getView()`): ctrl+wheel zooms in/out symmetrically (227→414→227 px/m),
+pointer-anchor drift `0`, plain wheel pans without changing scale, no console
+errors. **Human gesture-feel check still owed:** real trackpad pinch/two-finger
+pan and touchscreen pinch *feel* (momentum, direction sign) on hardware — a
+synthetic wheel/pointer stream can't stand in for that.
+
+A tiny durable debug seam `window.__riglab.getView()` (SketchCanvas publishes
+its view; EditorShell's hook now *merges* rather than replaces so child seams
+survive) makes pan/zoom scriptable without parsing canvas pixels, matching the
+existing `getDoc`/`getEditor`/`setEquilibrium` seams.
