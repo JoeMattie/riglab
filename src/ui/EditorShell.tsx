@@ -3,6 +3,7 @@ import { exportProjectJson, suggestedFileName } from '../persistence/exportImpor
 import { useAppStore } from '../state/appStore';
 import { useEditorStore } from '../state/editorStore';
 import { ConnectMenu } from './editor/ConnectMenu';
+import { ForcesPanel } from './editor/ForcesPanel';
 import { MechanismTabs } from './editor/MechanismTabs';
 import { SketchCanvas } from './editor/SketchCanvas';
 import { Toolbar } from './editor/Toolbar';
@@ -47,6 +48,10 @@ export function EditorShell() {
         const s = useEditorStore.getState();
         return { activeMechanismId: s.activeMechanismId, dof: s.dof, tool: s.tool };
       },
+      // seam for exercising the equilibrium force-overlay plumbing while the
+      // solver's equilibrium mode lands in a parallel branch (§5.2)
+      setEquilibrium: (readout: unknown) =>
+        useEditorStore.getState().setEquilibrium(readout as never),
     };
   }, []);
 
@@ -102,6 +107,7 @@ export function EditorShell() {
         <SketchCanvas />
         <ConnectMenu />
       </div>
+      <ForcesPanel />
       <TransportBar />
     </div>
   );

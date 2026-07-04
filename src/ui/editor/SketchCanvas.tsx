@@ -1,17 +1,45 @@
 import Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, Layer, Line, Rect, Stage } from 'react-konva';
-import { addPipe, deleteElement, moveNodes, setNodeKind, addSkeletonBinding } from '../../state/docOps';
+import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import {
+  addBowden,
+  addElastic,
+  addPipe,
+  addRope,
+  addSkeletonBinding,
+  addTorsionCable,
+  deleteElement,
+  moveNodes,
+  setNodeKind,
+} from '../../state/docOps';
 import type { EndSpec } from '../../state/docOps';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { solve } from '../../solver';
 import type { Mechanism, Vec2 } from '../../schema';
 import { REST_POSE, bindingTargets, computeSilhouette, getClip, samplePose } from '../../wearer';
+import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
 import { GRID_M, findSnap, type Snap } from './snapping';
 import { initialView, panBy, toScreen, toWorld, zoomAt, type ViewTransform } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
+
+/** Screen-space triangle-wave points hinting a coil, between two endpoints. */
+function zigzag(a: Vec2, b: Vec2, segments = 9, ampPx = 5): number[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const pts: number[] = [a.x, a.y];
+  for (let i = 1; i < segments; i++) {
+    const t = i / segments;
+    const side = i % 2 === 1 ? 1 : -1;
+    pts.push(a.x + dx * t + nx * ampPx * side, a.y + dy * t + ny * ampPx * side);
+  }
+  pts.push(b.x, b.y);
+  return pts;
+}
 
 /** Ramer–Douglas–Peucker polyline simplification for the freehand tool. */
 function rdp(points: Vec2[], epsilon: number): Vec2[] {
@@ -85,6 +113,9 @@ export function SketchCanvas() {
   const setPendingConnect = useEditorStore((s) => s.setPendingConnect);
   const setDiagnostics = useEditorStore((s) => s.setDiagnostics);
   const violated = useEditorStore((s) => s.violated);
+  const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
+  const equilibrium = useEditorStore((s) => s.equilibrium);
+  const setEquilibrium = useEditorStore((s) => s.setEquilibrium);
 
   const mech: Mechanism | null = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
 
@@ -95,7 +126,27 @@ export function SketchCanvas() {
   const [hoverSnap, setHoverSnap] = useState<Snap | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
   const [bindFrom, setBindFrom] = useState<string | null>(null);
+  // force-tool drafting (§8.1: ropes/elastics/bowden/torsion drawn with their
+  // own tools). Rope routes through clicked waypoints; elastic/bowden are
+  // click-drag; bowden needs two segments; torsion couples two picked pivots.
+  const [ropeDraft, setRopeDraft] = useState<{ points: Snap[]; cursor: Vec2 } | null>(null);
+  const [dragCord, setDragCord] = useState<{ tool: 'elastic' | 'bowden'; start: Snap; cursor: Vec2 } | null>(null);
+  const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap } | null>(null);
+  const [torsionA, setTorsionA] = useState<{ pivotId: string; nodeId: string } | null>(null);
   const panRef = useRef<{ x: number; y: number } | null>(null);
+
+  const pivotAtNode = useCallback(
+    (nodeId: string) =>
+      mech?.elements.find((e) => e.type === 'pivot' && e.nodeId === nodeId)?.id ?? null,
+    [mech],
+  );
+
+  const resetForceDrafts = useCallback(() => {
+    setRopeDraft(null);
+    setDragCord(null);
+    setBowdenA(null);
+    setTorsionA(null);
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -134,7 +185,8 @@ export function SketchCanvas() {
     (dragTargets: Record<string, Vec2>) => {
       if (!doc || !mech) return null;
       const targets = { ...bindingTargets(mech, doc.wearer, pose), ...dragTargets };
-      const result = solve(mech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+      const result = solve(mech, { channelValues, dragTargets: targets }, 'kinematic');
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
         result.diagnostics.converged ? result.diagnostics.violated : result.diagnostics.violated,
@@ -155,6 +207,20 @@ export function SketchCanvas() {
       setPosePositions(null);
     }
   }, [mech, runSolve, playback.clipName, dragNode, setPosePositions]);
+
+  // Equilibrium force overlays (§5.2), behind the explicit toggle. Recomputed
+  // on edit/scrub but not per drag frame (labels refresh on release). The
+  // solver's equilibrium mode may be unavailable in this worktree — readEquilibrium
+  // degrades to an `unavailable` status instead of throwing.
+  useEffect(() => {
+    if (!mech || !doc || !equilibriumOn || dragNode) return;
+    const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+    const targets = bindingTargets(mech, doc.wearer, pose);
+    const readout = readEquilibrium(() =>
+      solve(mech, { channelValues, dragTargets: targets }, 'equilibrium'),
+    );
+    setEquilibrium(readout);
+  }, [mech, doc, equilibriumOn, dragNode, pose, setEquilibrium]);
 
   const stagePointer = (e: Konva.KonvaEventObject<MouseEvent>): Vec2 | null => {
     const stage = e.target.getStage();
@@ -242,6 +308,30 @@ export function SketchCanvas() {
       else setDraft({ ...draft, vertices: [...draft.vertices, snap.pos] });
       return;
     }
+    if (tool === 'rope') {
+      // click waypoints; double-click (two clicks on one spot) finishes.
+      // Points landing on a pipe become eyelets.
+      setRopeDraft((d) => (d ? { ...d, points: [...d.points, snap] } : { points: [snap], cursor: snap.pos }));
+      return;
+    }
+    if (tool === 'elastic' || tool === 'bowden') {
+      setDragCord({ tool, start: snap, cursor: snap.pos });
+      return;
+    }
+    if (tool === 'torsionCable') {
+      if (snap.kind !== 'node') return;
+      const pivotId = pivotAtNode(snap.nodeId);
+      if (!pivotId) return; // torsion couples pivots; ignore non-pivot nodes
+      if (!torsionA) {
+        setTorsionA({ pivotId, nodeId: snap.nodeId });
+      } else {
+        if (torsionA.pivotId !== pivotId) {
+          updateCurrent((cur) => addTorsionCable(cur, mech.id, torsionA.pivotId, pivotId).doc);
+        }
+        setTorsionA(null);
+      }
+      return;
+    }
     if (tool === 'bind') {
       if (snap.kind === 'node') setBindFrom(snap.nodeId);
       else if (snap.kind === 'skeleton' && bindFrom) {
@@ -274,7 +364,8 @@ export function SketchCanvas() {
         ...bindingTargets(liveMech, liveDoc.wearer, pose),
         [dragNode]: world,
       };
-      const result = solve(liveMech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      const channelValues = Object.fromEntries(liveMech.inputs.map((c) => [c.name, c.value]));
+      const result = solve(liveMech, { channelValues, dragTargets: targets }, 'kinematic');
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
         result.diagnostics.violated,
@@ -307,6 +398,10 @@ export function SketchCanvas() {
         setDraft({ ...draft, cursor: snap.pos });
       }
     }
+    // functional updates only touch the cursor: a mousemove firing before React
+    // commits an appended waypoint must not clobber `points` with a stale closure
+    if (ropeDraft) setRopeDraft((d) => (d ? { ...d, cursor: snap.pos } : d));
+    if (dragCord) setDragCord((d) => (d ? { ...d, cursor: snap.pos } : d));
   };
 
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -317,6 +412,29 @@ export function SketchCanvas() {
     if (tool === 'select' && dragNode) {
       setDragNode(null);
       endGesture();
+      return;
+    }
+    if ((tool === 'elastic' || tool === 'bowden') && dragCord) {
+      const endSnap = snapAt(screen);
+      const start = dragCord.start.pos;
+      if (Math.hypot(endSnap.pos.x - start.x, endSnap.pos.y - start.y) < 0.02) {
+        setDragCord(null); // too short — cancelled click
+        return;
+      }
+      const a = snapToEndSpec(dragCord.start, 'pivot');
+      const b = snapToEndSpec(endSnap, 'pivot');
+      if (tool === 'elastic') {
+        updateCurrent((cur) => addElastic(cur, mech.id, a, b).doc);
+      } else if (!bowdenA) {
+        // first stroke: remember segment A, prompt for segment B
+        setBowdenA({ start: dragCord.start, end: endSnap });
+      } else {
+        const a0 = snapToEndSpec(bowdenA.start, 'pivot');
+        const a1 = snapToEndSpec(bowdenA.end, 'pivot');
+        updateCurrent((cur) => addBowden(cur, mech.id, a0, a1, a, b).doc);
+        setBowdenA(null);
+      }
+      setDragCord(null);
       return;
     }
     if (draft && (draft.mode === 'pipe' || draft.mode === 'freehand')) {
@@ -336,6 +454,27 @@ export function SketchCanvas() {
     if (tool === 'polyline' && draft) {
       const endSnap = snapAt(screen);
       finishPipe(draft, endSnap, screen);
+      return;
+    }
+    if (tool === 'rope' && ropeDraft) {
+      const pts = ropeDraft.points;
+      // Konva's dblclick is time-based (fires for any two clicks within its
+      // window, regardless of position), so a real finish is only the case
+      // where the two clicks landed on the same spot — the last two waypoints
+      // are coincident. Otherwise this is a rapid pair of distinct waypoints;
+      // keep drafting.
+      const n = pts.length;
+      const finishing =
+        n >= 2 && Math.hypot(pts[n - 1]!.pos.x - pts[n - 2]!.pos.x, pts[n - 1]!.pos.y - pts[n - 2]!.pos.y) <= 1e-6;
+      if (!finishing) return;
+      const dedup = pts.filter(
+        (s, i) => i === 0 || Math.hypot(s.pos.x - pts[i - 1]!.pos.x, s.pos.y - pts[i - 1]!.pos.y) > 1e-6,
+      );
+      if (dedup.length >= 2) {
+        const specs = dedup.map((s) => snapToEndSpec(s, 'pivot'));
+        updateCurrent((cur) => addRope(cur, mech.id, specs).doc);
+      }
+      setRopeDraft(null);
       return;
     }
     if (tool === 'select') {
@@ -365,6 +504,7 @@ export function SketchCanvas() {
         setDraft(null);
         setBindFrom(null);
         setPendingConnect(null);
+        resetForceDrafts();
       }
       if ((ev.key === 'Delete' || ev.key === 'Backspace') && selectedElementId && mech) {
         const target = ev.target as HTMLElement;
@@ -375,7 +515,7 @@ export function SketchCanvas() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedElementId, mech, updateCurrent, select, setPendingConnect]);
+  }, [selectedElementId, mech, updateCurrent, select, setPendingConnect, resetForceDrafts]);
 
   if (!doc || !mech) {
     return (
@@ -417,6 +557,17 @@ export function SketchCanvas() {
 
   const strokeFor = (id: string): string =>
     violated.includes(id) ? '#d22' : selectedElementId === id ? '#d80' : '#324';
+
+  const compressionRopes = new Set(equilibrium.ropesRequiringCompression);
+  const cordStroke = (id: string, base: string): string =>
+    compressionRopes.has(id) || violated.includes(id)
+      ? '#d22'
+      : selectedElementId === id
+        ? '#d80'
+        : base;
+  const showForces =
+    equilibriumOn && (equilibrium.status === 'converged' || equilibrium.status === 'nonConverged');
+  const units = doc.unitsPreference;
 
   return (
     <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative' }} data-testid="sketch-canvas">
@@ -477,6 +628,78 @@ export function SketchCanvas() {
                 />
               );
             }
+            if (el.type === 'rope') {
+              return (
+                <Line
+                  key={el.id}
+                  points={flat(el.path.map(nodePos))}
+                  stroke={cordStroke(el.id, '#557')}
+                  strokeWidth={1.5}
+                  dash={[3, 3]}
+                  lineCap="round"
+                  lineJoin="round"
+                  onClick={() => tool === 'select' && select(el.id)}
+                  hitStrokeWidth={12}
+                />
+              );
+            }
+            if (el.type === 'elastic') {
+              const a = S(nodePos(el.nodeA));
+              const b = S(nodePos(el.nodeB));
+              return (
+                <Line
+                  key={el.id}
+                  points={zigzag(a, b)}
+                  stroke={cordStroke(el.id, '#2a8a4a')}
+                  strokeWidth={2}
+                  lineJoin="round"
+                  onClick={() => tool === 'select' && select(el.id)}
+                  hitStrokeWidth={12}
+                />
+              );
+            }
+            if (el.type === 'bowden') {
+              const a1 = S(nodePos(el.a1));
+              const a2 = S(nodePos(el.a2));
+              const b1 = S(nodePos(el.b1));
+              const b2 = S(nodePos(el.b2));
+              const midA = { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 };
+              const midB = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
+              const stroke = cordStroke(el.id, '#8a5cd0');
+              return (
+                <Group key={el.id} onClick={() => tool === 'select' && select(el.id)}>
+                  {/* faint tie between the two coupled segments (routing-independent) */}
+                  <Line
+                    points={[midA.x, midA.y, midB.x, midB.y]}
+                    stroke="#8a5cd0"
+                    strokeWidth={1}
+                    dash={[1, 5]}
+                    opacity={0.5}
+                    listening={false}
+                  />
+                  <Line points={[a1.x, a1.y, a2.x, a2.y]} stroke={stroke} strokeWidth={2.5} dash={[8, 3, 2, 3]} lineCap="round" hitStrokeWidth={12} />
+                  <Line points={[b1.x, b1.y, b2.x, b2.y]} stroke={stroke} strokeWidth={2.5} dash={[8, 3, 2, 3]} lineCap="round" hitStrokeWidth={12} />
+                </Group>
+              );
+            }
+            if (el.type === 'torsionCable') {
+              const pa = mech.elements.find((e) => e.id === el.pivotA);
+              const pb = mech.elements.find((e) => e.id === el.pivotB);
+              if (!pa || pa.type !== 'pivot' || !pb || pb.type !== 'pivot') return null;
+              const a = S(nodePos(pa.nodeId));
+              const b = S(nodePos(pb.nodeId));
+              return (
+                <Line
+                  key={el.id}
+                  points={[a.x, a.y, b.x, b.y]}
+                  stroke={selectedElementId === el.id ? '#d80' : '#c0459a'}
+                  strokeWidth={1.5}
+                  dash={[2, 4]}
+                  onClick={() => tool === 'select' && select(el.id)}
+                  hitStrokeWidth={12}
+                />
+              );
+            }
             return null;
           })}
 
@@ -504,6 +727,62 @@ export function SketchCanvas() {
               listening={false}
             />
           )}
+
+          {/* force-tool previews */}
+          {ropeDraft && (
+            <Line
+              points={flat([...ropeDraft.points.map((s) => s.pos), ropeDraft.cursor])}
+              stroke="#88a"
+              strokeWidth={1.5}
+              dash={[3, 3]}
+              listening={false}
+            />
+          )}
+          {dragCord && dragCord.tool === 'elastic' && (
+            <Line points={zigzag(S(dragCord.start.pos), S(dragCord.cursor))} stroke="#2a8a4a" strokeWidth={2} opacity={0.7} listening={false} />
+          )}
+          {dragCord && dragCord.tool === 'bowden' && (
+            <Line points={flat([dragCord.start.pos, dragCord.cursor])} stroke="#8a5cd0" strokeWidth={2.5} dash={[8, 3, 2, 3]} opacity={0.7} listening={false} />
+          )}
+          {bowdenA && (
+            <Line points={flat([bowdenA.start.pos, bowdenA.end.pos])} stroke="#8a5cd0" strokeWidth={2.5} dash={[8, 3, 2, 3]} listening={false} />
+          )}
+          {torsionA && renderPositions[torsionA.nodeId] && (
+            <Circle
+              x={S(renderPositions[torsionA.nodeId]!).x}
+              y={S(renderPositions[torsionA.nodeId]!).y}
+              radius={10}
+              stroke="#c0459a"
+              strokeWidth={2}
+              listening={false}
+            />
+          )}
+
+          {/* equilibrium force readouts + rope-compression warnings (§5.2) */}
+          {showForces &&
+            mech.elements.filter(carriesForceLabel).map((el) => {
+              const anchor = forceLabelAnchor(el, (id) => renderPositions[id]);
+              if (!anchor) return null;
+              const p = S(anchor);
+              const compression = compressionRopes.has(el.id);
+              const label = compression
+                ? '⚠ needs compression'
+                : formatForce(equilibrium.elementForces[el.id] ?? 0, units);
+              return (
+                <Text
+                  key={`force-${el.id}`}
+                  x={p.x + 6}
+                  y={p.y - 6}
+                  text={label}
+                  fontSize={11}
+                  fill={compression ? '#c00' : '#036'}
+                  shadowColor="#fff"
+                  shadowBlur={2}
+                  shadowOpacity={1}
+                  listening={false}
+                />
+              );
+            })}
 
           {mech.nodes.map((n) => {
             const p = S(nodePos(n.id));
