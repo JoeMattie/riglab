@@ -379,16 +379,16 @@ class RopeC implements EqConstraint {
       if (i > 0) {
         const q = this.nodes[i - 1]!;
         const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
-        g[i * 3] += ux;
-        g[i * 3 + 1] += uy;
-        g[i * 3 + 2] += uz;
+        g[i * 3]! += ux;
+        g[i * 3 + 1]! += uy;
+        g[i * 3 + 2]! += uz;
       }
       if (i < this.nodes.length - 1) {
         const q = this.nodes[i + 1]!;
         const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
-        g[i * 3] += ux;
-        g[i * 3 + 1] += uy;
-        g[i * 3 + 2] += uz;
+        g[i * 3]! += ux;
+        g[i * 3 + 1]! += uy;
+        g[i * 3 + 2]! += uz;
       }
     }
   }
