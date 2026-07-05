@@ -6,10 +6,12 @@ import { type RightTab, useEditorStore } from '../../state/editorStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/tabs';
 import { ChecklistPanel } from './ChecklistPanel';
 import { InfoPanel } from './infopanel/InfoPanel';
+import { MaterialsPanel } from './MaterialsPanel';
 
 const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'inspector', label: 'Inspector' },
   { id: 'checklist', label: 'Checklist' },
+  { id: 'materials', label: 'Materials' },
 ];
 
 export function RightDock() {
@@ -45,6 +47,9 @@ export function RightDock() {
         </TabsContent>
         <TabsContent value="checklist" className="min-h-0 flex-1 overflow-y-auto">
           <ChecklistPanel />
+        </TabsContent>
+        <TabsContent value="materials" className="min-h-0 flex-1 overflow-y-auto">
+          <MaterialsPanel />
         </TabsContent>
       </Tabs>
     </div>

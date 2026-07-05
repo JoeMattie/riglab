@@ -13,7 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/select';
-import { formatLength, formatMass, lengthFromDisplay, lengthToDisplay } from '../../units';
+import {
+  formatLength,
+  formatMass,
+  lengthFromDisplay,
+  lengthToDisplay,
+  massFromDisplay,
+  massToDisplay,
+} from '../../units';
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -126,6 +133,29 @@ export function LengthField({
       min={minM === undefined ? undefined : lengthToDisplay(minM, units)}
       testId={testId}
       onCommit={(v) => onCommitM(lengthFromDisplay(v, units))}
+    />
+  );
+}
+
+/** NumberField for a mass stored in SI kilograms: displays and edits in the
+ * project's preferred unit, commits back in kilograms. */
+export function MassField({
+  valueKg,
+  onCommitKg,
+  units,
+  testId,
+}: {
+  valueKg: number;
+  onCommitKg: (kg: number) => void;
+  units: UnitsPreference;
+  testId?: string;
+}) {
+  return (
+    <NumberField
+      value={massToDisplay(valueKg, units)}
+      min={0}
+      testId={testId}
+      onCommit={(v) => onCommitKg(massFromDisplay(v, units))}
     />
   );
 }

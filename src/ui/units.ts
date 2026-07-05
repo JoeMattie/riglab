@@ -18,6 +18,16 @@ export const lengthToDisplay = (m: number, units: UnitsPreference): number =>
 export const lengthFromDisplay = (v: number, units: UnitsPreference): number =>
   units === 'imperial' ? v * M_PER_IN : v;
 
+export const massUnit = (units: UnitsPreference): string => (units === 'imperial' ? 'lb' : 'kg');
+
+/** SI kilograms → the number the user sees/edits (pounds when imperial). */
+export const massToDisplay = (kg: number, units: UnitsPreference): number =>
+  units === 'imperial' ? kg / KG_PER_LB : kg;
+
+/** The number the user typed → SI kilograms. */
+export const massFromDisplay = (v: number, units: UnitsPreference): number =>
+  units === 'imperial' ? v * KG_PER_LB : v;
+
 const trim = (v: number, dp: number): string => String(Number(v.toFixed(dp)));
 
 export function formatLength(m: number, units: UnitsPreference): string {
