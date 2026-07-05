@@ -1038,3 +1038,84 @@ which is the same convention node-dragging already uses. Each field commit
   connection navigation. Radix Select dropdown interaction is deliberately
   not driven in jsdom (portal/pointer-capture friction for no coverage
   gain); the assignment ops are unit-tested in docOps.design.test.ts.
+
+## Phase 3 — design face UI (stage 2b)
+
+The remaining Phase 3 feature scope, implemented in the main session after
+the user retired the subagent workflow mid-phase: units toggle + conversion,
+material-density plumbing into equilibrium, the docked resolution checklist
+with click-to-fix, the editable materials panel with the live nesting
+matrix, and the BOM panel with CSV export.
+
+### DECISION: units conversion at the display boundary; toggle on the project
+
+`src/ui/units.ts` (exact factors: 1 in = 0.0254 m, 1 lb = 0.45359237 kg)
+converts for display/editing only — every stored quantity stays SI, per the
+schema policy. The top-bar toggle (§8.3) writes `Project.unitsPreference`
+and mirrors to the localStorage pref, which now seeds NEW projects (the
+previously dead `prefs.getUnitsPref` seam). Length-dimensioned inspector
+fields display and edit in the preferred unit through `LengthField`/
+`MassField` wrappers (typing 100 in an imperial length field commits
+2.54 m). Deliberately still SI regardless of preference: linear densities
+(kg/m), spring rates (N/m), pressures/none — converting shop-familiar
+lengths and weights covers the §11 need without inventing lb/ft plumbing;
+revisit if real use asks for it.
+
+### DECISION: engineered densities reach solve() via the caller
+
+`elementLinearDensities` (src/design/densities.ts, pure) maps engineered
+pipes to their material's kg/m — a telescope gets the effective density
+reproducing computeBom's member split (outer L/2, inner L/2 + overlap) —
+and SketchCanvas passes it with the generic-pipe fallback into
+`solve('equilibrium')` only. The kinematic drag path is untouched (mass is
+irrelevant there and the drag loop is the hot path). bentLink densities
+integrate over the polyline length inside the solver while the BOM uses
+fillet-aware developed length — an accepted small approximation for
+equilibrium mass, noted here rather than papered over.
+
+### DECISION: checklist click-to-fix via a one-shot transient focusHint
+
+The design face docks a tabbed right panel (Inspector | Checklist |
+Materials | BOM — §8.2's "docks alongside" reading at laptop widths).
+Checklist items come from the shared resolution module; clicking one
+selects the element, switches to the Inspector tab, and sets
+`editorStore.focusHint` ({control: material|realization|channel}); the
+matching `FocusTarget` wrapper (or the ForcesPanel channel chip) scrolls
+into view, ring-highlights, and clears the hint after ~1.6 s. Warning-only
+items with no element (overconstrained) are informational, not clickable.
+
+### DECISION: BOM is partial-with-banner, not gated (§11 "gated on (or
+clearly partial until) checklist completion")
+
+Hard-gating the BOM on checklist completion would punish the play-first
+loop (§2) — a half-engineered sketch still has a useful shopping list. The
+BOM tab renders everything resolvable and shows a prominent "Partial BOM —
+N elements without engineering data excluded" banner that routes to the
+checklist; the banner disappears at zero unresolved. computeBom already
+reported the unresolved set, so the UI adds no second bookkeeping.
+
+### DECISION: approximate-flag clearing rule
+
+Editing any NUMERIC field of a materials row clears its `approximate` flag
+(the user is presumed to have entered a measured value — §6.1 calipered
+overrides); renames and enum changes keep it. Add-row defaults are plausible
+placeholders flagged approximate. Delete is disabled while
+`materialReferenceCount` > 0, so the panel cannot produce dangling material
+references.
+
+### "balance report" in the §11 live-update acceptance — Phase 3 reading
+
+§11 asks that a pipe-size change updates "weights, balance report, and
+nesting matrix live". The seesaw balance report proper is a Phase 4 3D
+assembly output (§5.4); in Phase 3 the equilibrium force readouts are the
+balance-shaped consumer of mass, and they re-solve on every document edit
+(now with real material densities). Weights (BOM tab + design-face summary)
+and the nesting matrix recompute live from the same document change.
+
+### Materials panel layout note
+
+Rows are card-shaped (name line + labelled numeric grid) rather than wide
+tables — the dock is 384 px and OD/ID/density/socket fields would not fit
+legible table columns. The nesting matrix is a real table (outer rows ×
+inner columns, §6.1) with per-cell classification badges and mm-clearance
+tooltips, horizontally scrollable past ~6 pipes.
