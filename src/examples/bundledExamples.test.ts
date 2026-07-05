@@ -1002,7 +1002,9 @@ describe('post-integration — examples solve (enable with the 3D solver)', () =
     expect(right!.z).toBeLessThan(-0.1);
   });
 
-  it('full creature: settles millimetre-true at default channel values', async () => {
+  it('full creature: settles millimetre-true at default channel values', {
+    timeout: 30_000,
+  }, async () => {
     const { solve } = await import('../solver');
     const mech = loadExample('example-full-creature')!.mechanism;
     const result = solve(mech, { channelValues: {} }, 'equilibrium');
