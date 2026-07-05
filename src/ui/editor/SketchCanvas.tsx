@@ -18,6 +18,7 @@ import {
   deleteElement,
   groundNodeAtAnchor,
   moveNodes,
+  releaseNodeConnection,
   setNodeKind,
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
@@ -47,6 +48,10 @@ import { scenePalette, T } from './theme';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
+/** Drag distance (screen px) past which a wearer-connected node tears off
+ * its snap point — comfortably beyond the snap tolerance so a small jiggle
+ * cannot disconnect anything (PLANFILE-wearer-attachments-and-floor, B). */
+const TEAR_OFF_PX = SNAP_TOL_PX * 2;
 
 /** Screen-space triangle-wave points hinting a coil, between two endpoints. */
 function zigzag(a: Vec2, b: Vec2, segments = 9, ampPx = 5): number[] {
@@ -195,6 +200,11 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   const [draft, setDraft] = useState<Draft | null>(null);
   const [hoverSnap, setHoverSnap] = useState<Snap | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
+  /** tear-off state for a drag that started on a wearer-connected node
+   * (skeleton-bound, anchor-attached, or plain grounded): the node holds its
+   * point until the pointer travels TEAR_OFF_PX from mousedown, then the
+   * connection is released and the drag continues live */
+  const dragTetherRef = useRef<{ torn: boolean } | null>(null);
   const [endpointDrag, setEndpointDrag] = useState<EndpointDrag | null>(null);
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [bindFrom, setBindFrom] = useState<string | null>(null);
@@ -600,6 +610,12 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
             return;
           }
         }
+        const grabbed = mech.nodes.find((x) => x.id === snap.nodeId);
+        const connected =
+          grabbed?.kind === 'anchor' ||
+          mech.skeletonBindings.some((b) => b.nodeId === snap.nodeId) ||
+          mech.anchorBindings.some((b) => b.nodeId === snap.nodeId);
+        dragTetherRef.current = connected ? { torn: false } : null;
         beginGesture();
         setDragNode(snap.nodeId);
         useEditorStore.getState().clearTrace();
@@ -704,6 +720,17 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     }
 
     if (tool === 'select' && dragNode) {
+      // tear-off (slice B): a wearer-connected node holds its point until
+      // the pointer leaves the deadzone; crossing it releases the connection
+      // (still inside this gesture's undo step) and the drag continues live
+      const tether = dragTetherRef.current;
+      if (tether && !tether.torn) {
+        const start = mouseDownScreenRef.current;
+        const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
+        if (movedPx < TEAR_OFF_PX) return;
+        tether.torn = true;
+        updateCurrent((cur) => releaseNodeConnection(cur, mech.id, dragNode));
+      }
       // solve from the LIVE document, not this render's closure — fast event
       // bursts can outrun React renders, and a stale mechanism here would
       // solve from outdated geometry
@@ -807,7 +834,9 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       const start = mouseDownScreenRef.current;
       const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
       const nodeId = dragNode;
+      const tether = dragTetherRef.current;
       setDragNode(null);
+      dragTetherRef.current = null;
       endGesture();
       setHoverSnap(null);
       // a stationary click on a node selects the joint element living there
@@ -817,6 +846,9 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         openJointPopover(nodeId, e.evt);
         return;
       }
+      // a connected node released inside the deadzone never moved — the
+      // release point (up to TEAR_OFF_PX away) must not re-bind it elsewhere
+      if (tether && !tether.torn) return;
       // dropped on a skeleton binding point → bind the node to it, so it now
       // tracks that body point during clip playback (planfile §7.3); dropped
       // on a pack-frame anchor → ground it there, same as drawing onto one

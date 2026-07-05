@@ -605,6 +605,21 @@ export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: stri
   }));
 }
 
+/** Tear a node off whatever wearer connection it has (drag past the tear-off
+ * deadzone, PLANFILE-wearer-attachments-and-floor slice B): drops any
+ * skeleton binding or anchor attachment, and un-grounds a grounded node so
+ * the drag can move it freely. Driven nodes keep their channel. */
+export function releaseNodeConnection(doc: Project, mechId: string, nodeId: string): Project {
+  return withMechanism(doc, mechId, (m) => ({
+    ...m,
+    nodes: m.nodes.map((n) =>
+      n.id === nodeId && n.kind === 'anchor' ? { ...n, kind: 'free' as const } : n,
+    ),
+    skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
+    anchorBindings: m.anchorBindings.filter((b) => b.nodeId !== nodeId),
+  }));
+}
+
 /** Dropping a node on a pack-frame/wearer anchor grounds it there AND
  * attaches it — the ground point rides the wearer anchor through pose/clip
  * playback (PLANFILE-wearer-attachments-and-floor slice A). The drag-gesture

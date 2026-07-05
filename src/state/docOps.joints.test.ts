@@ -8,6 +8,7 @@ import {
   addSkeletonBinding,
   detachNode,
   groundNodeAtAnchor,
+  releaseNodeConnection,
   reverseLink,
   setLengthLocked,
   setNodeJoint,
@@ -163,5 +164,38 @@ describe('groundNodeAtAnchor', () => {
     doc = groundNodeAtAnchor(doc, 'm1', 'n2', 'beltR', { x: 0, y: 0 });
     expect(m0(doc).nodes.find((n) => n.id === 'n1')!.kind).toBe('free');
     expect(m0(doc).skeletonBindings).toHaveLength(1);
+  });
+});
+
+// Tear-off (PLANFILE-wearer-attachments-and-floor slice B): dragging a
+// connected node past the deadzone releases whatever holds it to the wearer.
+describe('releaseNodeConnection', () => {
+  it('removes a skeleton binding', () => {
+    let doc = addSkeletonBinding(project(), 'm1', 'handR', 'n2');
+    doc = releaseNodeConnection(doc, 'm1', 'n2');
+    expect(m0(doc).skeletonBindings).toHaveLength(0);
+    expect(m0(doc).nodes.find((n) => n.id === 'n2')!.kind).toBe('free');
+  });
+
+  it('removes an anchor attachment and un-grounds the node', () => {
+    let doc = groundNodeAtAnchor(project(), 'm1', 'n2', 'beltR', { x: 0, y: 0.9 });
+    doc = releaseNodeConnection(doc, 'm1', 'n2');
+    expect(m0(doc).anchorBindings).toHaveLength(0);
+    expect(m0(doc).nodes.find((n) => n.id === 'n2')!.kind).toBe('free');
+  });
+
+  it('un-grounds a plain grounded node with no attachment', () => {
+    let doc = setNodeJoint(project(), 'm1', 'n2', 'anchor');
+    doc = releaseNodeConnection(doc, 'm1', 'n2');
+    expect(m0(doc).nodes.find((n) => n.id === 'n2')!.kind).toBe('free');
+  });
+
+  it('is a no-op on a bare free node and leaves others untouched', () => {
+    let doc = addSkeletonBinding(project(), 'm1', 'handL', 'n3');
+    doc = groundNodeAtAnchor(doc, 'm1', 'n1', 'beltL', { x: 0, y: 0.9 });
+    const released = releaseNodeConnection(doc, 'm1', 'n2');
+    expect(released).toEqual(doc);
+    expect(m0(released).skeletonBindings).toHaveLength(1);
+    expect(m0(released).anchorBindings).toHaveLength(1);
   });
 });
