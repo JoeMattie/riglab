@@ -1732,3 +1732,19 @@ heat-wrap connector, every socketed end gets `fitting`; zero-allowance ends
 (boltThrough/conduitBox/ropeLashing) are not proposed — noise, not parts. No
 structural/strength reasoning — stated in the preview UI. Proposals are
 transient (no schema change, no schemaVersion bump).
+
+### DECISION: drag-drop on a pack-frame anchor grounds the node (parity with skeleton drop)
+Joe asked that pivots snap to pack-frame points the same way they snap to
+body points (2026-07-04). `findSnap` already ranked wearer anchors at
+priority 1 alongside skeleton points, but the select-tool node drag only
+honored `skeleton` snaps. The drag now attracts to both; the drop semantics
+differ by target because the underlying model differs: a skeleton point drop
+binds (node tracks the body point through clips, as before), while an anchor
+drop **grounds** the node at the anchor — the gesture counterpart of drawing
+a pipe end onto an anchor, which has always produced a grounded node
+(`EndSpec` `anchorNode`, docOps). Grounding clears any skeleton binding on
+the node (`groundNodeAtAnchor`): a grounded node cannot also be clip-driven —
+`bindingTargets` would feed the solver a drag target that fights the ground.
+Anchors are treated as static mount points even though the mannequin's
+anchors move slightly with pose (pelvisRise/lean); that matches the existing
+drawing semantics and Phase 1's "anchor = fixed to mechanism ground" model.

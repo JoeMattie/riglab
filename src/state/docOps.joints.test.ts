@@ -5,7 +5,9 @@ import { mech, node, testMaterials } from '../bom/testHelpers';
 import type { LinkElement, MechanismElement, PivotElement, Project } from '../schema';
 import { createEmptyProject } from '../schema';
 import {
+  addSkeletonBinding,
   detachNode,
+  groundNodeAtAnchor,
   reverseLink,
   setLengthLocked,
   setNodeJoint,
@@ -128,5 +130,30 @@ describe('splitLinkAtMidpoint', () => {
   it('is a no-op for non-link elements', () => {
     const doc = splitLinkAtMidpoint(project(), 'm1', 'nope');
     expect(m0(doc).elements).toHaveLength(2);
+  });
+});
+
+// Dropping a dragged node on a pack-frame anchor grounds it there — the
+// select-gesture counterpart of drawing a pipe end onto an anchor.
+describe('groundNodeAtAnchor', () => {
+  it('moves the node to the anchor position and makes it grounded', () => {
+    const doc = groundNodeAtAnchor(project(), 'm1', 'n2', { x: 0.12, y: 0.9 });
+    const n2 = m0(doc).nodes.find((n) => n.id === 'n2')!;
+    expect(n2.kind).toBe('anchor');
+    expect(n2.position).toEqual({ x: 0.12, y: 0.9 });
+  });
+
+  it('removes any skeleton binding — a grounded node cannot be clip-driven', () => {
+    let doc = addSkeletonBinding(project(), 'm1', 'handR', 'n2');
+    expect(m0(doc).skeletonBindings).toHaveLength(1);
+    doc = groundNodeAtAnchor(doc, 'm1', 'n2', { x: 0.12, y: 0.9 });
+    expect(m0(doc).skeletonBindings).toHaveLength(0);
+  });
+
+  it('leaves other nodes and bindings untouched', () => {
+    let doc = addSkeletonBinding(project(), 'm1', 'handL', 'n3');
+    doc = groundNodeAtAnchor(doc, 'm1', 'n2', { x: 0, y: 0 });
+    expect(m0(doc).nodes.find((n) => n.id === 'n1')!.kind).toBe('free');
+    expect(m0(doc).skeletonBindings).toHaveLength(1);
   });
 });

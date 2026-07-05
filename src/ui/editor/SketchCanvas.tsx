@@ -16,6 +16,7 @@ import {
   addSkeletonBinding,
   addTorsionCable,
   deleteElement,
+  groundNodeAtAnchor,
   moveNodes,
   setNodeKind,
 } from '../../state/docOps';
@@ -694,10 +695,11 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       const liveDoc = useAppStore.getState().current;
       const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
       if (!liveDoc || !liveMech) return;
-      // a drag that lands on a skeleton point snaps to it and binds on release
-      // (planfile §7.3: bind silhouette points to nodes — available in select)
+      // a drag that lands on a skeleton point snaps to it and binds on
+      // release (planfile §7.3: bind silhouette points to nodes — available
+      // in select); a pack-frame anchor attracts the same way and grounds
       const dropSnap = snapAt(screen, new Set([dragNode]));
-      const bindSnap = dropSnap.kind === 'skeleton' ? dropSnap : null;
+      const bindSnap = dropSnap.kind === 'skeleton' || dropSnap.kind === 'anchor' ? dropSnap : null;
       setHoverSnap(bindSnap);
       const targets = {
         ...bindingTargets(liveMech, liveDoc.wearer, pose),
@@ -792,10 +794,13 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         return;
       }
       // dropped on a skeleton binding point → bind the node to it, so it now
-      // tracks that body point during clip playback (planfile §7.3)
+      // tracks that body point during clip playback (planfile §7.3); dropped
+      // on a pack-frame anchor → ground it there, same as drawing onto one
       const dropSnap = snapAt(screen, new Set([nodeId]));
       if (dropSnap.kind === 'skeleton') {
         updateCurrent((cur) => addSkeletonBinding(cur, mech.id, dropSnap.point, nodeId));
+      } else if (dropSnap.kind === 'anchor') {
+        updateCurrent((cur) => groundNodeAtAnchor(cur, mech.id, nodeId, dropSnap.pos));
       }
       return;
     }
@@ -1105,7 +1110,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           ))}
           {/* skeleton binding points and structural anchors are always shown
               (planfile §7.1: named anchors and skeleton points are snappable
-              underlay points) — a pivot can be dropped on one to bind it */}
+              underlay points) — a pivot dropped on a skeleton point binds to
+              it; dropped on a pack-frame anchor it grounds there */}
           {silhouette &&
             Object.entries(silhouette.points).map(([name, p]) => (
               <Circle

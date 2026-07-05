@@ -600,6 +600,22 @@ export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: stri
   }));
 }
 
+/** Dropping a node on a pack-frame/wearer anchor grounds it there — the
+ * drag-gesture counterpart of drawing's `anchorNode` end spec. A grounded
+ * node cannot also be skeleton-driven, so any binding is removed. */
+export function groundNodeAtAnchor(
+  doc: Project,
+  mechId: string,
+  nodeId: string,
+  pos: Vec2,
+): Project {
+  return withMechanism(doc, mechId, (m) => ({
+    ...m,
+    nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
+    skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
+  }));
+}
+
 // ── design-face assignment ops (§8.2, §8.2a) ────────────────────────────────
 // Every assignment re-derives the element's maturity (derivedMaturity in
 // src/design/resolution.ts) so maturity always agrees with the data —

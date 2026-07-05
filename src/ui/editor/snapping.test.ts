@@ -111,10 +111,10 @@ describe('findSnap excludeElements', () => {
   });
 });
 
-// A pivot can always be snapped (and so bound) to a skeleton binding point:
-// the skeleton points sit at priority 1 — above pipe spans and grid, below a
-// live node — so a drag landing near one resolves to a `skeleton` snap that
-// the canvas turns into a binding on release.
+// A pivot can always be snapped to a skeleton binding point or a pack-frame
+// anchor: both sit at priority 1 — above pipe spans and grid, below a live
+// node — so a drag landing near one resolves to a `skeleton`/`anchor` snap
+// that the canvas turns into a binding / grounded node on release.
 describe('findSnap skeleton binding points', () => {
   const at = (x: number, y: number): Vec2 => ({ x, y });
   const points = { handR: at(1, 1), handL: at(-1, 1), pelvis: at(0, 0) } as Record<
@@ -139,6 +139,21 @@ describe('findSnap skeleton binding points', () => {
     );
     expect(snap.kind).toBe('skeleton');
     if (snap.kind === 'skeleton') expect(snap.point).toBe('handR');
+  });
+
+  it('snaps a dragged node onto a nearby pack-frame anchor (excluding itself)', () => {
+    const snap = findSnap(
+      { x: 0.503, y: 1.996 },
+      {
+        mechanism: m,
+        positions,
+        silhouette,
+        tolM: 0.02,
+        exclude: new Set(['n1']),
+      },
+    );
+    expect(snap.kind).toBe('anchor');
+    if (snap.kind === 'anchor') expect(snap.anchor).toBe('beltR');
   });
 
   it('prefers a coincident live node over the skeleton point beneath it', () => {
