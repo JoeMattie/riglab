@@ -1563,3 +1563,48 @@ Phase-4 UI is verifiable before the Phase-5 "New from example" menu exists.
 `e2e/assembly.spec.ts` loads the full creature, switches to 3D, and asserts the
 WebGL viewport mounts, the mass readout is a plausible creature weight, and the
 seesaw readout renders with no page errors.
+
+## Phase 4.5 — controls & channel animation (§4.4)
+
+### DECISION: controls are a layer over channels, resolved through one path
+Per §4.4 controls are "a grouping-and-manipulation layer over the channel
+machinery, not a parallel input system." So `src/controls/mapping.ts` resolves a
+control's axes to channel-name→value (range map + invert + clamp), and
+`resolveChannelValues`/`projectControlChannels` compose a playing control clip
+(base layer) with live control values (override). Those values feed the SAME
+`channelValues` argument the 2D `solve()` and 3D `composeProject` already take —
+no new solver input. An axis drag, a control clip, and a manual override all
+flow through this one resolution.
+
+### DECISION: manual-override precedence via a held-channel set
+A channel a control clip animates keeps the clip value UNLESS the control is
+held (a widget under active drag), in which case the live value wins; a channel
+the clip does NOT animate always takes the live control value; with no clip,
+controls apply everywhere. Callers pass a defined `heldChannels` set during
+playback (empty = nothing held → clip wins) and omit it for static resolves
+(→ controls win). Pinned by unit tests + the full-creature control acceptance.
+
+### DECISION: control clips share the movement-clip transport + one timeline
+`controlClipName` lives on the same `playback` state as `clipName`, driven by the
+same `tS`. TransportPill owns `tS` when a movement clip plays; the ControlsDock
+raf advances `tS` for control-only playback and captures record frames.
+Recording is "scrub while it runs": frames of live control channel values are
+captured each tick, then `buildControlClip` (pure, tested) collapses them into
+one keyframe track per channel. This promotes the §4.4 animation-timeline slice
+without a full multi-track choreography editor (still out of v1).
+
+### DECISION: schema v5 + migration; example 7 completed
+`controls` + `controlClips` are project-level (channels are global), schema v5
+with a 4→5 migration adding empty arrays. The full-creature example now ships
+the §9-item-7 yoke (mounted to hand.R, tilt/twist/trigger → steer pitch / steer
+pan / jaw trigger) and the looping "head sweep + jaw snap" control clip, closing
+the last example-7 deferral from the Phase-5 examples-slice sequencing note.
+
+### [deviation] Widget composition + mount scope
+Per-type widgets (§4.4): 2D pad (yoke tilt/twist, slider2d), rotary dial
+(twistGrip), sliders (lever/trigger + spare axes) — all live during playback,
+bracketed as one undo gesture and marking their channels held. A 3-axis yoke
+puts tilt/twist on the pad and remaining axes (trigger) on sliders rather than a
+dedicated dial. Mounts offer wearer anchors (the §11 hand.R case) + none; the
+schema also allows instance-node mounts, not yet surfaced in the builder
+dropdown. Called out per CLAUDE.md; revisit in the Phase-5 polish pass.

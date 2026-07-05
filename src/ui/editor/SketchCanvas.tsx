@@ -1,6 +1,7 @@
 import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { projectControlChannels } from '../../controls';
 import { elementLinearDensities } from '../../design/densities';
 import type { Mechanism, PivotElement, SliderElement, Vec2 } from '../../schema';
 import { solve } from '../../solver';
@@ -143,6 +144,7 @@ export function SketchCanvas() {
   const posePositions = useEditorStore((s) => s.posePositions);
   const setPosePositions = useEditorStore((s) => s.setPosePositions);
   const playback = useEditorStore((s) => s.playback);
+  const heldChannels = useEditorStore((s) => s.heldChannels);
   const tracing = useEditorStore((s) => s.tracing);
   const tracePath = useEditorStore((s) => s.tracePath);
   const appendTrace = useEditorStore((s) => s.appendTrace);
@@ -297,6 +299,23 @@ export function SketchCanvas() {
     return clip ? samplePose(clip, playback.tS, { amplitude: playback.amplitude }) : REST_POSE;
   }, [playback.clipName, playback.tS, playback.amplitude]);
 
+  // live control channel values (§4.4): controls + a playing control clip drive
+  // input channels by name, overlaid on each mechanism's authored input values
+  const controlChannels = useMemo(
+    () =>
+      doc
+        ? projectControlChannels({
+            controls: doc.controls,
+            controlClips: doc.controlClips,
+            controlClipName: playback.controlClipName,
+            tS: playback.tS,
+            speed: playback.speed,
+            heldChannels: new Set(heldChannels),
+          })
+        : {},
+    [doc, playback.controlClipName, playback.tS, playback.speed, heldChannels],
+  );
+
   const silhouette = useMemo(
     () => (doc && mech ? computeSilhouette(doc.wearer, pose, mech.viewOrientation) : null),
     [doc, mech, pose],
@@ -365,7 +384,10 @@ export function SketchCanvas() {
     (dragTargets: Record<string, Vec2>) => {
       if (!doc || !mech) return null;
       const targets = { ...bindingTargets(mech, doc.wearer, pose), ...dragTargets };
-      const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+      const channelValues = {
+        ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
+        ...controlChannels,
+      };
       const result = solve(mech, { channelValues, dragTargets: targets }, 'kinematic');
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
@@ -373,7 +395,7 @@ export function SketchCanvas() {
       );
       return result;
     },
-    [doc, mech, pose, setDiagnostics],
+    [doc, mech, pose, controlChannels, setDiagnostics],
   );
 
   // diagnostics on edit; pose-driven solve during playback/scrub
@@ -394,7 +416,10 @@ export function SketchCanvas() {
   // degrades to an `unavailable` status instead of throwing.
   useEffect(() => {
     if (!mech || !doc || !equilibriumOn || dragNode) return;
-    const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+    const channelValues = {
+      ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
+      ...controlChannels,
+    };
     const targets = bindingTargets(mech, doc.wearer, pose);
     // materials integration (§4.2): engineered pipes weigh what their material
     // weighs; sketch pipes fall back to the configurable generic density
@@ -411,7 +436,7 @@ export function SketchCanvas() {
       ),
     );
     setEquilibrium(readout);
-  }, [mech, doc, equilibriumOn, dragNode, pose, setEquilibrium]);
+  }, [mech, doc, equilibriumOn, dragNode, pose, controlChannels, setEquilibrium]);
 
   const stagePointer = (e: Konva.KonvaEventObject<MouseEvent>): Vec2 | null => {
     const stage = e.target.getStage();

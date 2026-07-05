@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { type Control, type ControlAxis, type ControlClip, projectSchema } from '../schema';
+import {
+  type Control,
+  type ControlAxis,
+  type ControlClip,
+  controlClipSchema,
+  projectSchema,
+} from '../schema';
 import { fixtureProject } from '../schema/fixtures';
 import {
   axisChannelValue,
+  buildControlClip,
   controlChannelValues,
   lockedChannels,
   resolveChannelValues,
@@ -136,6 +143,41 @@ describe('resolveChannelValues — clip + live controls compose (§4.4/§7)', ()
       heldChannels: new Set(), // nothing held
     });
     expect(vals.pan).toBeCloseTo(15, 9); // clip value stands
+  });
+});
+
+describe('buildControlClip — record by scrubbing', () => {
+  it('collapses captured frames into one track per channel', () => {
+    const clip = buildControlClip('rec', [
+      { tS: 0, values: { pan: 0, jaw: 0 } },
+      { tS: 0.5, values: { pan: 10, jaw: 0.2 } },
+      { tS: 1, values: { pan: 20, jaw: 0 } },
+    ]);
+    expect(clip).not.toBeNull();
+    expect(clip!.durationS).toBeCloseTo(1, 9);
+    expect(clip!.tracks.pan!.values).toEqual([0, 10, 20]);
+    expect(clip!.tracks.jaw!.timesS).toEqual([0, 0.5, 1]);
+    // the recorded clip validates against the schema
+    expect(controlClipSchema.parse(clip)).toEqual(clip);
+  });
+
+  it('rebases to start at 0 and equalises endpoints for a loop', () => {
+    const clip = buildControlClip(
+      'rec',
+      [
+        { tS: 2, values: { pan: 5 } },
+        { tS: 3, values: { pan: 9 } },
+      ],
+      true,
+    );
+    expect(clip!.tracks.pan!.timesS).toEqual([0, 1]);
+    expect(clip!.tracks.pan!.values).toEqual([5, 5]); // loop equalised
+    expect(clip!.loop).toBe(true);
+  });
+
+  it('returns null for an empty or zero-span recording', () => {
+    expect(buildControlClip('x', [])).toBeNull();
+    expect(buildControlClip('x', [{ tS: 1, values: { pan: 3 } }])).toBeNull();
   });
 });
 

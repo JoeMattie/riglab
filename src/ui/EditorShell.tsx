@@ -9,6 +9,7 @@ import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { useEditorStore } from '../state/editorStore';
 import { AssemblyView } from './assembly/AssemblyView';
+import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
 import { DofPill } from './editor/DofPill';
 import { ProjectChip } from './editor/ProjectChip';
@@ -26,6 +27,8 @@ export function EditorShell() {
   const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
   const face = useEditorStore((s) => s.face);
   const mode = useEditorStore((s) => s.mode);
+  const controlsOpen = useEditorStore((s) => s.controlsOpen);
+  const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
 
   // keep an active mechanism selected whenever one exists
   useEffect(() => {
@@ -108,6 +111,31 @@ export function EditorShell() {
       {mode === '2d' && <ToolPill />}
       <TransportPill />
       {mode === '2d' && <DofPill />}
+
+      {/* controls dock (§4.4): a toggled bottom panel in either mode; in 2D it
+          clears the left tool pill */}
+      {controlsOpen ? (
+        <ControlsDock left={mode === '2d' ? 196 : EDGE} />
+      ) : (
+        <button
+          type="button"
+          data-testid="controls-toggle"
+          onClick={() => setControlsOpen(true)}
+          style={{
+            ...panelStyle,
+            position: 'absolute',
+            left: mode === '2d' ? 196 : EDGE,
+            bottom: 76,
+            padding: '7px 12px',
+            font: `500 12.5px ${T.sans}`,
+            color: T.text,
+            cursor: 'pointer',
+            zIndex: 45,
+          }}
+        >
+          Controls
+        </button>
+      )}
 
       {/* design face: the tabbed inspector/checklist/materials/BOM dock
           floats as a right-hand column (its feature scope is unchanged by

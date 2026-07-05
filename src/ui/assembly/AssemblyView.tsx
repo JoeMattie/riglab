@@ -73,7 +73,7 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
   const instances = useAppStore((s) => s.current?.assembly.instances);
   const gizmoRef = useRef<Group>(null);
 
-  const { bones, instanceLines, composition } = scene;
+  const { bones, instanceLines, composition, controlMounts } = scene;
   const cg = composition.cg;
   const selected = instances?.find((i) => i.id === selectedInstanceId);
   const selectable = selected && selected.transformDrive.kind === 'fixed';
@@ -111,6 +111,14 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
           color={inst.id === selectedInstanceId ? T.accent : '#5b6472'}
           width={inst.id === selectedInstanceId ? 3 : 2}
         />
+      ))}
+
+      {/* mounted controls (§4.4) — ride their attach point (e.g. a yoke on handR) */}
+      {controlMounts.map((c) => (
+        <mesh key={c.id} position={tuple(c.world)}>
+          <boxGeometry args={[0.06, 0.06, 0.12]} />
+          <meshStandardMaterial color="#0ea5a0" />
+        </mesh>
       ))}
 
       {/* point-mass markers */}

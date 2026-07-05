@@ -4,6 +4,9 @@
 import { derivedMaturity } from '../design/resolution';
 import type {
   BowdenElement,
+  Control,
+  ControlAxis,
+  ControlClip,
   ElasticElement,
   InputChannel,
   JointRealization,
@@ -973,4 +976,107 @@ export function setPointMassKg(doc: Project, pointMassId: string, massKg: number
       ),
     },
   };
+}
+
+// ── Controls + control clips (§4.4) ────────────────────────────────────────
+
+/** Create a control of the given type with one default axis mapped to the
+ * first available channel name (or a placeholder). Returns the new id. */
+export function addControl(
+  doc: Project,
+  type: Control['type'],
+  channelName: string,
+): { doc: Project; controlId: string } {
+  const controlId = uid();
+  const control: Control = {
+    id: controlId,
+    name: `${type[0]!.toUpperCase()}${type.slice(1)} ${doc.controls.length + 1}`,
+    type,
+    axes: [
+      {
+        id: uid(),
+        name: 'axis 1',
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName,
+        outMin: 0,
+        outMax: 1,
+        invert: false,
+        locked: false,
+      },
+    ],
+  };
+  return { doc: { ...doc, controls: [...doc.controls, control] }, controlId };
+}
+
+export function removeControl(doc: Project, controlId: string): Project {
+  return { ...doc, controls: doc.controls.filter((c) => c.id !== controlId) };
+}
+
+function withControl(doc: Project, controlId: string, fn: (c: Control) => Control): Project {
+  return { ...doc, controls: doc.controls.map((c) => (c.id === controlId ? fn(c) : c)) };
+}
+
+export function renameControl(doc: Project, controlId: string, name: string): Project {
+  return withControl(doc, controlId, (c) => ({ ...c, name }));
+}
+
+export function setControlMount(doc: Project, controlId: string, mount: Control['mount']): Project {
+  return withControl(doc, controlId, (c) => ({ ...c, mount }));
+}
+
+export function addControlAxis(doc: Project, controlId: string, channelName: string): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: [
+      ...c.axes,
+      {
+        id: uid(),
+        name: `axis ${c.axes.length + 1}`,
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName,
+        outMin: 0,
+        outMax: 1,
+        invert: false,
+        locked: false,
+      },
+    ],
+  }));
+}
+
+export function removeControlAxis(doc: Project, controlId: string, axisId: string): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: c.axes.filter((a) => a.id !== axisId),
+  }));
+}
+
+export function patchControlAxis(
+  doc: Project,
+  controlId: string,
+  axisId: string,
+  patch: Partial<ControlAxis>,
+): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: c.axes.map((a) => (a.id === axisId ? { ...a, ...patch } : a)),
+  }));
+}
+
+/** Add (or replace by name) a control clip. */
+export function upsertControlClip(doc: Project, clip: ControlClip): Project {
+  const exists = doc.controlClips.some((c) => c.name === clip.name);
+  return {
+    ...doc,
+    controlClips: exists
+      ? doc.controlClips.map((c) => (c.name === clip.name ? clip : c))
+      : [...doc.controlClips, clip],
+  };
+}
+
+export function deleteControlClip(doc: Project, name: string): Project {
+  return { ...doc, controlClips: doc.controlClips.filter((c) => c.name !== name) };
 }
