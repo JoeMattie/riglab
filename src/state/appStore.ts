@@ -1,5 +1,6 @@
 import { temporal } from 'zundo';
 import { create } from 'zustand';
+import { EXAMPLES } from '../examples';
 import { createAutosaver } from '../persistence/autosave';
 import { importProjectJson } from '../persistence/exportImport';
 import { getUnitsPref, setLastProjectId } from '../persistence/prefs';
@@ -19,6 +20,8 @@ export interface AppState {
   saveState: SaveState;
   refreshProjects(): Promise<void>;
   createProject(name: string): Promise<void>;
+  /** Create a new project seeded from a bundled example (§9), then open it. */
+  createFromExample(exampleId: string): Promise<void>;
   openProject(id: string): Promise<void>;
   closeProject(): Promise<void>;
   renameProject(id: string, name: string): Promise<void>;
@@ -60,6 +63,18 @@ export function createAppStore(store: ProjectStore = new ProjectStore()) {
           async createProject(name) {
             // new projects inherit the last units choice (localStorage UI pref)
             const doc = await store.createProject(name, undefined, getUnitsPref());
+            setLastProjectId(doc.id);
+            set({ current: doc, saveState: 'saved' });
+            useStore.temporal.getState().clear();
+            await get().refreshProjects();
+          },
+
+          async createFromExample(exampleId) {
+            const example = EXAMPLES.find((e) => e.id === exampleId);
+            if (!example) throw new Error(`no example ${exampleId}`);
+            // a fresh id so the same example can be opened many times
+            const doc: Project = { ...example.load(), id: crypto.randomUUID() };
+            await store.saveProject(doc);
             setLastProjectId(doc.id);
             set({ current: doc, saveState: 'saved' });
             useStore.temporal.getState().clear();

@@ -533,6 +533,49 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
   });
 }
 
+/** Duplicate a pipe element (link/bentLink/telescope) with fresh nodes offset
+ * slightly so the copy is visible and independently draggable (§5 keyboard
+ * shortcut). Returns the new element id, or null for element types whose copy
+ * isn't well-defined on its own (joints, ropes — they reference other parts). */
+export function duplicateElement(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+): { doc: Project; newElementId: string | null } {
+  const mech = doc.mechanisms.find((m) => m.id === mechId);
+  const el = mech?.elements.find((e) => e.id === elementId);
+  if (!mech || !el || (el.type !== 'link' && el.type !== 'bentLink' && el.type !== 'telescope')) {
+    return { doc, newElementId: null };
+  }
+  const off = (p: Vec2): Vec2 => ({ x: p.x + 0.1, y: p.y - 0.1 });
+  const nodeCopies = new Map<string, string>();
+  const oldIds = el.type === 'bentLink' ? el.nodeIds : [el.nodeA, el.nodeB];
+  for (const id of oldIds) if (!nodeCopies.has(id)) nodeCopies.set(id, uid());
+  const newNodes = oldIds.map((id) => {
+    const src = mech.nodes.find((n) => n.id === id)!;
+    // duplicated nodes are free (the copy floats, not grounded/driven)
+    return { id: nodeCopies.get(id)!, kind: 'free' as const, position: off(src.position) };
+  });
+  const newElementId = uid();
+  const copy: MechanismElement =
+    el.type === 'bentLink'
+      ? { ...el, id: newElementId, nodeIds: el.nodeIds.map((id) => nodeCopies.get(id)!) }
+      : {
+          ...el,
+          id: newElementId,
+          nodeA: nodeCopies.get(el.nodeA)!,
+          nodeB: nodeCopies.get(el.nodeB)!,
+        };
+  return {
+    doc: withMechanism(doc, mechId, (m) => ({
+      ...m,
+      nodes: [...m.nodes, ...newNodes],
+      elements: [...m.elements, copy],
+    })),
+    newElementId,
+  };
+}
+
 export function addSkeletonBinding(
   doc: Project,
   mechId: string,

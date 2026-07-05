@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
+import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 
 export function ProjectList() {
   const projects = useAppStore((s) => s.projects);
   const createProject = useAppStore((s) => s.createProject);
+  const createFromExample = useAppStore((s) => s.createFromExample);
   const openProject = useAppStore((s) => s.openProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
   const renameProject = useAppStore((s) => s.renameProject);
@@ -67,6 +69,37 @@ export function ProjectList() {
           import failed: {error}
         </p>
       )}
+
+      {/* New from example (§9): seed a fresh project from a bundled build */}
+      <section data-testid="examples-menu" style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>Start from an example</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
+          {EXAMPLES.map((ex) => (
+            <li key={ex.id}>
+              <button
+                type="button"
+                data-testid={`example-${ex.id}`}
+                onClick={() => void createFromExample(ex.id)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  border: '1px solid #ddd',
+                  borderRadius: 8,
+                  background: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                <strong style={{ fontSize: 13.5 }}>{ex.name}</strong>
+                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{ex.description}</div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>Your projects</h2>
       <ul data-testid="project-list" style={{ listStyle: 'none', padding: 0 }}>
         {projects.map((p) => (
           <li
