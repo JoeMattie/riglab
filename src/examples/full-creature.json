@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-full-creature",
   "name": "Example — Raptor (full creature)",
   "unitsPreference": "imperial",
@@ -931,6 +931,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     },
@@ -1144,6 +1145,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [
         {
           "id": "chSteerPitch",
@@ -1395,6 +1397,7 @@
       ],
       "pointMasses": [],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [
         {
           "id": "chSteerPan",
@@ -1584,6 +1587,7 @@
       ],
       "pointMasses": [],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [
         {
           "id": "chJawTrigger",
@@ -1896,6 +1900,7 @@
           "nodeId": "wShoe"
         }
       ],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     },
@@ -2198,6 +2203,7 @@
           "nodeId": "wShoe"
         }
       ],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     },
@@ -2348,6 +2354,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     },
@@ -2456,6 +2463,7 @@
           "nodeId": "armHand"
         }
       ],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     }

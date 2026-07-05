@@ -30,6 +30,18 @@ export const migrations: Record<number, Migration> = {
   // v4 → v5: project gained controls + controlClips (§4.4); old docs get empty
   // arrays.
   4: (doc) => ({ ...doc, controls: [], controlClips: [] }),
+  // v5 → v6: mechanisms gained anchorBindings (wearer-anchor attachments for
+  // grounded nodes; PLANFILE-wearer-attachments-and-floor slice A). Add-if-
+  // missing so a doc that somehow carries the field keeps it.
+  5: (doc) => ({
+    ...doc,
+    mechanisms: Array.isArray(doc.mechanisms)
+      ? (doc.mechanisms as Array<Record<string, unknown>>).map((m) => ({
+          ...m,
+          anchorBindings: m.anchorBindings ?? [],
+        }))
+      : doc.mechanisms,
+  }),
 };
 
 export class MigrationError extends Error {}

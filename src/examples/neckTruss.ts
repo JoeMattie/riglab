@@ -171,6 +171,7 @@ export function buildNeckTrussMechanism(): Mechanism {
     elements,
     pointMasses: [{ id: 'headMass', name: 'head', massKg: 1.2, nodeId: 'head' }],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [
       {
         id: 'chSteerPitch',

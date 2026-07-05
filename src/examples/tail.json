@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-tail",
   "name": "Example — tail",
   "unitsPreference": "imperial",
@@ -770,6 +770,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     }

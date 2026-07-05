@@ -183,6 +183,7 @@ export function fixtureProject(): Project {
         ],
         pointMasses: [{ id: 'npm-1', name: 'head weight', massKg: 2.5, nodeId: 'n4' }],
         skeletonBindings: [{ id: 'sb-1', point: 'handR', nodeId: 'n6' }],
+        anchorBindings: [{ id: 'ab-1', anchor: 'beltR', nodeId: 'n1' }],
         inputs: [
           {
             id: 'ch1',
@@ -288,7 +289,7 @@ export function fixtureProjectV1(): Record<string, unknown> {
     ...rest,
     schemaVersion: 1,
     mechanisms: (p.mechanisms as Array<Record<string, unknown>>).map((m) => {
-      const { skeletonBindings: _sb, ...mRest } = m;
+      const { skeletonBindings: _sb, anchorBindings: _ab, ...mRest } = m;
       return mRest;
     }),
   };
@@ -316,4 +317,18 @@ export function fixtureProjectV4(): Record<string, unknown> {
   const p = fixtureProject() as unknown as Record<string, unknown>;
   const { controls: _c, controlClips: _cc, ...rest } = p;
   return { ...rest, schemaVersion: 4 };
+}
+
+/** A version-5 document (no anchorBindings yet) — exercises the 5→6
+ * migration that adds the empty wearer-anchor attachment array. */
+export function fixtureProjectV5(): Record<string, unknown> {
+  const p = fixtureProject() as unknown as Record<string, unknown>;
+  return {
+    ...p,
+    schemaVersion: 5,
+    mechanisms: (p.mechanisms as Array<Record<string, unknown>>).map((m) => {
+      const { anchorBindings: _ab, ...mRest } = m;
+      return mRest;
+    }),
+  };
 }

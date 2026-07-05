@@ -23,6 +23,7 @@ import type {
   TorsionCableElement,
   Vec2,
   ViewOrientation,
+  WearerAnchor,
 } from '../schema';
 
 const uid = (): string => crypto.randomUUID();
@@ -63,6 +64,7 @@ export function addMechanism(
     elements: [],
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };
@@ -81,8 +83,9 @@ export function deleteMechanism(doc: Project, mechId: string): Project {
 export type EndSpec =
   | { kind: 'existingNode'; nodeId: string; connect: 'pivot' | 'weld' }
   | { kind: 'newNode'; pos: Vec2 }
-  /** snapped to a pack-frame/wearer anchor → grounded node */
-  | { kind: 'anchorNode'; pos: Vec2 }
+  /** snapped to a pack-frame/wearer anchor → grounded node attached to (and
+   * riding) that anchor */
+  | { kind: 'anchorNode'; pos: Vec2; anchor: WearerAnchor }
   /** snapped to a skeleton point → free node driven by clips via binding */
   | { kind: 'boundNode'; pos: Vec2; point: SkeletonPoint }
   /** snapped mid-span on an existing pipe */
@@ -166,6 +169,7 @@ function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
         mechanism: {
           ...m,
           nodes: [...m.nodes, { id: nodeId, kind: 'anchor', position: spec.pos }],
+          anchorBindings: [...m.anchorBindings, { id: uid(), anchor: spec.anchor, nodeId }],
         },
         nodeId,
       };
@@ -530,6 +534,7 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
       elements: remaining,
       nodes: m.nodes.filter((n) => used.has(n.id)),
       skeletonBindings: m.skeletonBindings.filter((b) => used.has(b.nodeId)),
+      anchorBindings: m.anchorBindings.filter((b) => used.has(b.nodeId)),
       pointMasses: m.pointMasses.filter((p) => used.has(p.nodeId)),
     };
   });
@@ -600,19 +605,26 @@ export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: stri
   }));
 }
 
-/** Dropping a node on a pack-frame/wearer anchor grounds it there — the
- * drag-gesture counterpart of drawing's `anchorNode` end spec. A grounded
- * node cannot also be skeleton-driven, so any binding is removed. */
+/** Dropping a node on a pack-frame/wearer anchor grounds it there AND
+ * attaches it — the ground point rides the wearer anchor through pose/clip
+ * playback (PLANFILE-wearer-attachments-and-floor slice A). The drag-gesture
+ * counterpart of drawing's `anchorNode` end spec. A grounded node cannot
+ * also be skeleton-driven, so any skeleton binding is removed. */
 export function groundNodeAtAnchor(
   doc: Project,
   mechId: string,
   nodeId: string,
+  anchor: WearerAnchor,
   pos: Vec2,
 ): Project {
   return withMechanism(doc, mechId, (m) => ({
     ...m,
     nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
     skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
+    anchorBindings: [
+      ...m.anchorBindings.filter((b) => b.nodeId !== nodeId),
+      { id: uid(), anchor, nodeId },
+    ],
   }));
 }
 

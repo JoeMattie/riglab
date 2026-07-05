@@ -133,26 +133,34 @@ describe('splitLinkAtMidpoint', () => {
   });
 });
 
-// Dropping a dragged node on a pack-frame anchor grounds it there — the
-// select-gesture counterpart of drawing a pipe end onto an anchor.
+// Dropping a dragged node on a pack-frame anchor grounds it there AND
+// attaches it to the wearer anchor — the select-gesture counterpart of
+// drawing a pipe end onto an anchor (PLANFILE-wearer-attachments-and-floor).
 describe('groundNodeAtAnchor', () => {
-  it('moves the node to the anchor position and makes it grounded', () => {
-    const doc = groundNodeAtAnchor(project(), 'm1', 'n2', { x: 0.12, y: 0.9 });
+  it('moves the node to the anchor position, grounds it, and records the attachment', () => {
+    const doc = groundNodeAtAnchor(project(), 'm1', 'n2', 'hipRectBackL', { x: 0.12, y: 0.9 });
     const n2 = m0(doc).nodes.find((n) => n.id === 'n2')!;
     expect(n2.kind).toBe('anchor');
     expect(n2.position).toEqual({ x: 0.12, y: 0.9 });
+    expect(m0(doc).anchorBindings).toMatchObject([{ anchor: 'hipRectBackL', nodeId: 'n2' }]);
+  });
+
+  it('re-grounding on another anchor replaces the attachment', () => {
+    let doc = groundNodeAtAnchor(project(), 'm1', 'n2', 'hipRectBackL', { x: 0.12, y: 0.9 });
+    doc = groundNodeAtAnchor(doc, 'm1', 'n2', 'beltBack', { x: -0.1, y: 0.93 });
+    expect(m0(doc).anchorBindings).toMatchObject([{ anchor: 'beltBack', nodeId: 'n2' }]);
   });
 
   it('removes any skeleton binding — a grounded node cannot be clip-driven', () => {
     let doc = addSkeletonBinding(project(), 'm1', 'handR', 'n2');
     expect(m0(doc).skeletonBindings).toHaveLength(1);
-    doc = groundNodeAtAnchor(doc, 'm1', 'n2', { x: 0.12, y: 0.9 });
+    doc = groundNodeAtAnchor(doc, 'm1', 'n2', 'beltR', { x: 0.12, y: 0.9 });
     expect(m0(doc).skeletonBindings).toHaveLength(0);
   });
 
   it('leaves other nodes and bindings untouched', () => {
     let doc = addSkeletonBinding(project(), 'm1', 'handL', 'n3');
-    doc = groundNodeAtAnchor(doc, 'm1', 'n2', { x: 0, y: 0 });
+    doc = groundNodeAtAnchor(doc, 'm1', 'n2', 'beltR', { x: 0, y: 0 });
     expect(m0(doc).nodes.find((n) => n.id === 'n1')!.kind).toBe('free');
     expect(m0(doc).skeletonBindings).toHaveLength(1);
   });

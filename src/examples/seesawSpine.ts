@@ -196,6 +196,7 @@ export function buildSeesawSpineProject(): Project {
       { id: 'tailMass', name: 'tail', massKg: 0.8, nodeId: 'tail' },
     ],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-leg-exoskeleton",
   "name": "Example — leg exoskeleton",
   "unitsPreference": "imperial",
@@ -922,6 +922,7 @@
           "nodeId": "wShoe"
         }
       ],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     }

@@ -101,6 +101,7 @@ export function buildTailMechanism(): Mechanism {
     elements,
     pointMasses: [{ id: 'tailTipMass', name: 'tail tip', massKg: 0.5, nodeId: 'tailTip' }],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

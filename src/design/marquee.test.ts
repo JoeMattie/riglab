@@ -119,6 +119,7 @@ function testMech(): Mechanism {
     ],
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

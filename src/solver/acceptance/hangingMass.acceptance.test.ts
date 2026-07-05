@@ -30,6 +30,7 @@ function hangingMassMechanism(): Mechanism {
     ],
     pointMasses: [{ id: 'm', name: 'weight', massKg: MASS_KG, nodeId: 'M' }],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

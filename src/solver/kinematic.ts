@@ -254,7 +254,15 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   const driven = drivenTargets(mechanism, inputs);
   const particles = new Map<string, P>(
     mechanism.nodes.map((n) => {
-      const target = n.kind === 'driven' ? driven[n.id] : undefined;
+      // driven nodes follow their channel; anchor nodes follow the wearer
+      // attachment target when one is supplied (groundTargets) — both are
+      // prescribed (weight 0), so the structure hangs off the moved point
+      const target =
+        n.kind === 'driven'
+          ? driven[n.id]
+          : n.kind === 'anchor'
+            ? inputs.groundTargets?.[n.id]
+            : undefined;
       const p = target ?? n.position;
       return [
         n.id,

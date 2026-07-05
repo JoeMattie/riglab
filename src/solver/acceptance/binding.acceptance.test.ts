@@ -3,7 +3,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Mechanism } from '../../schema';
 import { DEFAULT_WEARER } from '../../schema';
-import { bindingTargets, computeSkeleton, getClip, projectPoint, samplePose } from '../../wearer';
+import {
+  anchorTargets,
+  bindingTargets,
+  computeSkeleton,
+  getClip,
+  projectPoint,
+  samplePose,
+} from '../../wearer';
 import { solve } from '..';
 
 function boundMechanism(): Mechanism {
@@ -28,6 +35,7 @@ function boundMechanism(): Mechanism {
     ],
     pointMasses: [],
     skeletonBindings: [{ id: 'b', point: 'handR', nodeId: 'free' }],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };
@@ -84,5 +92,46 @@ describe('ACCEPTANCE Phase 1 — skeleton binding drives nodes through walk', ()
     }
     // the arm swing actually animates the node (it travels a real distance)
     expect(moved).toBeGreaterThan(0.3);
+  });
+});
+
+describe('wearer-anchor attachments ride the pack frame / body through walk', () => {
+  it('an attached ground follows the projected anchor path; hung pipe keeps length', () => {
+    const walk = getClip('walk')!;
+    let cur: Mechanism = {
+      ...boundMechanism(),
+      skeletonBindings: [],
+      anchorBindings: [{ id: 'ab', anchor: 'beltBack', nodeId: 'anchor' }],
+    };
+    for (let i = 0; i <= 24; i++) {
+      const t = (i / 24) * walk.durationS;
+      const pose = samplePose(walk, t);
+      const targets = anchorTargets(cur, DEFAULT_WEARER, pose);
+      const expected = projectPoint(
+        'side-left',
+        computeSkeleton(DEFAULT_WEARER, pose).anchors.beltBack,
+      );
+      expect(targets.anchor).toEqual(expected);
+      const result = solve(cur, { channelValues: {}, groundTargets: targets }, 'kinematic');
+      // the ground point is exactly ON the wearer anchor (prescribed, not pulled)
+      expect(result.positions.anchor!.x).toBeCloseTo(expected.x, 9);
+      expect(result.positions.anchor!.y).toBeCloseTo(expected.y, 9);
+      const tip = result.positions.tip!;
+      const g = result.positions.anchor!;
+      expect(Math.hypot(tip.x - g.x, tip.y - g.y)).toBeCloseTo(0.4, 4);
+      cur = {
+        ...cur,
+        nodes: cur.nodes.map((n) => {
+          const p = result.positions[n.id];
+          return p ? { ...n, position: p } : n;
+        }),
+      };
+    }
+  });
+
+  it('anchorTargets is empty when the mechanism has no attachments', () => {
+    expect(
+      anchorTargets(boundMechanism(), DEFAULT_WEARER, samplePose(getClip('walk')!, 0)),
+    ).toEqual({});
   });
 });

@@ -57,6 +57,7 @@ function makeProject(elements: MechanismElement[], nodeCount = 4): Project {
     elements,
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

@@ -5,6 +5,7 @@ import {
   fixtureProjectV2,
   fixtureProjectV3,
   fixtureProjectV4,
+  fixtureProjectV5,
 } from './fixtures';
 import {
   applyMigrations,
@@ -44,6 +45,7 @@ describe('v1 → latest migration chain', () => {
     const migrated = migrateToLatest(fixtureProjectV1());
     expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.mechanisms[0]!.skeletonBindings).toEqual([]);
+    expect(migrated.mechanisms[0]!.anchorBindings).toEqual([]);
     expect(migrated.wearer).toEqual({ heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 });
     expect(migrated.bomSettings).toEqual({ heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 });
     // nothing else was touched
@@ -79,6 +81,20 @@ describe('v4 → v5 migration', () => {
     expect(migrated.controls).toEqual([]);
     expect(migrated.controlClips).toEqual([]);
     expect(migrated).toEqual(fixtureProject());
+  });
+});
+
+describe('v5 → v6 migration', () => {
+  it('adds an empty anchorBindings array to each mechanism', () => {
+    const v5 = fixtureProjectV5();
+    expect((v5.mechanisms as Array<Record<string, unknown>>)[0]!.anchorBindings).toBeUndefined();
+    const migrated = migrateToLatest(v5);
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(migrated.mechanisms[0]!.anchorBindings).toEqual([]);
+    // everything else survives intact
+    expect(migrated.mechanisms[0]!.skeletonBindings).toEqual(
+      fixtureProject().mechanisms[0]!.skeletonBindings,
+    );
   });
 });
 

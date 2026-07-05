@@ -19,3 +19,22 @@ export function bindingTargets(
   }
   return out;
 }
+
+/** Resolve a mechanism's wearer-anchor attachments for a pose: each attached
+ * grounded node gets the projected position of its wearer anchor. Feeds
+ * solve() as groundTargets — prescribed, unlike bindingTargets' soft pull —
+ * so the ground point rides the pack frame / body (PLANFILE-wearer-
+ * attachments-and-floor, slice A). */
+export function anchorTargets(
+  mechanism: Mechanism,
+  params: WearerParams,
+  pose: JointPose,
+): Record<string, Vec2> {
+  if (mechanism.anchorBindings.length === 0) return {};
+  const frame = computeSkeleton(params, pose);
+  const out: Record<string, Vec2> = {};
+  for (const b of mechanism.anchorBindings) {
+    out[b.nodeId] = projectPoint(mechanism.viewOrientation, frame.anchors[b.anchor]);
+  }
+  return out;
+}

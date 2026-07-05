@@ -752,7 +752,14 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
     // drags, mirroring kinematic mode.
     const dragHold = n.kind === 'free' ? inputs.dragTargets?.[n.id] : undefined;
     const held = n.kind === 'anchor' || n.kind === 'driven' || dragHold !== undefined;
-    const prescribed = n.kind === 'driven' ? targets[n.id] : dragHold;
+    // anchor nodes attached to the wearer (anchorBindings) are held AT the
+    // caller's ground target — the pack frame / body carries the ground point
+    const prescribed =
+      n.kind === 'driven'
+        ? targets[n.id]
+        : n.kind === 'anchor'
+          ? inputs.groundTargets?.[n.id]
+          : dragHold;
     const pos = prescribed ?? n.position;
     const mass = masses.get(n.id) ?? 0;
     particles.set(n.id, {

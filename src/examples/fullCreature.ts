@@ -91,6 +91,7 @@ export function buildArmsMechanism(): Mechanism {
     // the puppet hand rides the wearer's right hand, so the walk clip's arm
     // swing animates the arm in 2D and in the 3D assembly (§7.3, Phase 4).
     skeletonBindings: [{ id: 'bindArmHand', point: 'handR', nodeId: 'armHand' }],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

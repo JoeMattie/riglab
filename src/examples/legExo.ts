@@ -154,6 +154,7 @@ export function buildLegExoMechanism(side: 'left' | 'right'): Mechanism {
     elements,
     pointMasses: [{ id: 'pawMass', name: 'paw claw', massKg: 0.1, nodeId: 'eToe' }],
     skeletonBindings: bindings,
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };

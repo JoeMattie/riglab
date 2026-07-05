@@ -121,6 +121,7 @@ export function buildSteerMirrorMechanism(): Mechanism {
     elements,
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [
       // the steer IS the input device: panning the handle drives the tip
       // around its pivot; the crossed ropes mirror the head to the same side

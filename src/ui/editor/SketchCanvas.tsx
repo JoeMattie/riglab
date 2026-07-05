@@ -22,7 +22,14 @@ import {
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
-import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
+import {
+  anchorTargets,
+  bindingTargets,
+  computeSilhouette,
+  getClip,
+  REST_POSE,
+  samplePose,
+} from '../../wearer';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
 import {
@@ -101,7 +108,7 @@ function snapToEndSpec(snap: Snap, connect: 'pivot' | 'weld' | 'slider' | 'detac
     case 'skeleton':
       return { kind: 'boundNode', pos: snap.pos, point: snap.point };
     case 'anchor':
-      return { kind: 'anchorNode', pos: snap.pos };
+      return { kind: 'anchorNode', pos: snap.pos, anchor: snap.anchor };
     case 'grid':
       return { kind: 'newNode', pos: snap.pos };
   }
@@ -418,7 +425,15 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
         ...controlChannels,
       };
-      const result = solve(mech, { channelValues, dragTargets: targets }, 'kinematic');
+      const result = solve(
+        mech,
+        {
+          channelValues,
+          dragTargets: targets,
+          groundTargets: anchorTargets(mech, doc.wearer, pose),
+        },
+        'kinematic',
+      );
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
         result.diagnostics.converged ? result.diagnostics.violated : result.diagnostics.violated,
@@ -433,7 +448,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     if (!mech) return;
     const result = runSolve({});
     if (!result) return;
-    if (playback.clipName && mech.skeletonBindings.length > 0) {
+    if (playback.clipName && (mech.skeletonBindings.length > 0 || mech.anchorBindings.length > 0)) {
       setPosePositions(result.positions);
     } else if (!dragNode) {
       setPosePositions(null);
@@ -459,6 +474,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         {
           channelValues,
           dragTargets: targets,
+          groundTargets: anchorTargets(mech, doc.wearer, pose),
           linkDensityKgPerM: doc.materials.genericPipeLinearDensityKgPerM,
           elementLinearDensityKgPerM: elementLinearDensities(mech, doc.materials),
         },
@@ -706,7 +722,15 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         [dragNode]: bindSnap ? bindSnap.pos : world,
       };
       const channelValues = Object.fromEntries(liveMech.inputs.map((c) => [c.name, c.value]));
-      const result = solve(liveMech, { channelValues, dragTargets: targets }, 'kinematic');
+      const result = solve(
+        liveMech,
+        {
+          channelValues,
+          dragTargets: targets,
+          groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+        },
+        'kinematic',
+      );
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
         result.diagnostics.violated,
@@ -800,7 +824,9 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       if (dropSnap.kind === 'skeleton') {
         updateCurrent((cur) => addSkeletonBinding(cur, mech.id, dropSnap.point, nodeId));
       } else if (dropSnap.kind === 'anchor') {
-        updateCurrent((cur) => groundNodeAtAnchor(cur, mech.id, nodeId, dropSnap.pos));
+        updateCurrent((cur) =>
+          groundNodeAtAnchor(cur, mech.id, nodeId, dropSnap.anchor, dropSnap.pos),
+        );
       }
       return;
     }

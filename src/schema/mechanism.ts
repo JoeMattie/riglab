@@ -6,6 +6,7 @@ import {
   skeletonPointSchema,
   vec2Schema,
   viewOrientationSchema,
+  wearerAnchorSchema,
 } from './common';
 
 // Mechanism (2D planar linkage) — §4.2. Elements are a discriminated union;
@@ -222,6 +223,16 @@ export const skeletonBindingSchema = z.object({
   nodeId: idSchema,
 });
 
+/** Attaches a grounded (kind 'anchor') node to a wearer anchor: the ground
+ * point rides the pack frame / body through pose and clip playback. Hard
+ * counterpart of skeletonBindingSchema's soft pull (PLANFILE-wearer-
+ * attachments-and-floor, slice A). */
+export const anchorBindingSchema = z.object({
+  id: idSchema,
+  anchor: wearerAnchorSchema,
+  nodeId: idSchema,
+});
+
 export const namedStateSchema = z.object({
   name: z.string().min(1),
   positions: z.record(idSchema, vec2Schema),
@@ -238,6 +249,7 @@ export const mechanismSchema = z.object({
   elements: z.array(mechanismElementSchema),
   pointMasses: z.array(nodePointMassSchema),
   skeletonBindings: z.array(skeletonBindingSchema),
+  anchorBindings: z.array(anchorBindingSchema),
   inputs: z.array(inputChannelSchema),
   namedStates: z.array(namedStateSchema),
 });
@@ -255,6 +267,7 @@ export type BowdenElement = z.infer<typeof bowdenElementSchema>;
 export type TorsionCableElement = z.infer<typeof torsionCableElementSchema>;
 export type NodePointMass = z.infer<typeof nodePointMassSchema>;
 export type SkeletonBinding = z.infer<typeof skeletonBindingSchema>;
+export type AnchorBinding = z.infer<typeof anchorBindingSchema>;
 export type InputChannel = z.infer<typeof inputChannelSchema>;
 export type NamedState = z.infer<typeof namedStateSchema>;
 export type Mechanism = z.infer<typeof mechanismSchema>;

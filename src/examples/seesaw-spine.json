@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-seesaw-spine",
   "name": "Example — seesaw spine",
   "unitsPreference": "imperial",
@@ -931,6 +931,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [],
       "namedStates": []
     }

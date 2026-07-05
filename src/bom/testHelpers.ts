@@ -98,6 +98,7 @@ export function mech(
     elements,
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
     ...extras,

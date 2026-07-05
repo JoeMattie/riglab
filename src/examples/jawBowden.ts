@@ -154,6 +154,7 @@ export function buildJawBowdenMechanism(): Mechanism {
     elements,
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [
       {
         id: 'chJawTrigger',

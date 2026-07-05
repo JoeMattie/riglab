@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-jaw-bowden",
   "name": "Example — jaw + Bowden",
   "unitsPreference": "imperial",
@@ -799,6 +799,7 @@
       ],
       "pointMasses": [],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [
         {
           "id": "chJawTrigger",

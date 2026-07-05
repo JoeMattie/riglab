@@ -31,6 +31,7 @@ function shoulderBoom(): Mechanism {
     ],
     pointMasses: [{ id: 'm', name: 'tip', massKg: TIP_KG, nodeId: 'E' }],
     skeletonBindings: [{ id: 'b', point: 'shoulderR', nodeId: 'S' }],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };
@@ -95,6 +96,7 @@ describe('ACCEPTANCE — drag-held node is a moving anchor in equilibrium', () =
       elements: [{ id: 'rope', type: 'rope', maturity: 'sketch', path: ['H', 'A'], lengthM: 0.7 }],
       pointMasses: [{ id: 'm', name: 'pack', massKg: 3, nodeId: 'H' }],
       skeletonBindings: [{ id: 'b', point: 'shoulderR', nodeId: 'H' }],
+      anchorBindings: [],
       inputs: [],
       namedStates: [],
     };

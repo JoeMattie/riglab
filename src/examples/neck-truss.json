@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "id": "example-neck-truss",
   "name": "Example — neck truss (pitch)",
   "unitsPreference": "imperial",
@@ -833,6 +833,7 @@
         }
       ],
       "skeletonBindings": [],
+      "anchorBindings": [],
       "inputs": [
         {
           "id": "chSteerPitch",

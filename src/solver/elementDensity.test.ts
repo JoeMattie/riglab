@@ -33,6 +33,7 @@ function hangingLink(): Mechanism {
     ],
     pointMasses: [],
     skeletonBindings: [],
+    anchorBindings: [],
     inputs: [],
     namedStates: [],
   };
