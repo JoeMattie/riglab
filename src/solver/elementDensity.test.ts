@@ -1,5 +1,5 @@
-// Phase 3 solver plumbing: SolveInputs.elementLinearDensityKgPerM lets the BOM
-// layer feed per-element (engineered) linear densities into equilibrium mass,
+// Solver plumbing: SolveInputs.elementLinearDensityKgPerM lets the BOM layer
+// feed per-element (engineered) linear densities into equilibrium mass,
 // falling back to the generic linkDensityKgPerM. Additive, non-breaking.
 import { describe, expect, it } from 'vitest';
 import type { Mechanism } from '../schema';
@@ -14,11 +14,9 @@ function hangingLink(): Mechanism {
   return {
     id: 'hl',
     name: 'hanging link',
-    viewOrientation: 'side-left',
-    gravityOn: true,
     nodes: [
-      { id: 'A', kind: 'anchor', position: { x: 0, y: 1 } },
-      { id: 'B', kind: 'free', position: { x: 0, y: 0 } },
+      { id: 'A', kind: 'anchor', position: { x: 0, y: 1, z: 0.2 } },
+      { id: 'B', kind: 'free', position: { x: 0, y: 0, z: 0.2 } },
     ],
     elements: [
       {
@@ -48,7 +46,7 @@ const tensionFor = (density: number, key: 'element' | 'generic'): number => {
   return Math.abs(r.forces.elements.link ?? Number.NaN);
 };
 
-describe('elementLinearDensityKgPerM (Phase 3)', () => {
+describe('elementLinearDensityKgPerM', () => {
   it("changes an engineered link's equilibrium tension analytically", () => {
     // L = 1 m, tension = (L·density/2)·g
     expect(tensionFor(0.4, 'element')).toBeCloseTo((0.4 / 2) * G, 1);

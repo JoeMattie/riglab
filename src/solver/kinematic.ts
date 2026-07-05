@@ -1,13 +1,16 @@
-// Kinematic drag mode (§5.1): gravity/springs ignored; position projection
-// satisfies rigid constraints and limits. Stateless per call — rest lengths
-// come from the mechanism's drawn geometry (except telescope, whose length
-// is the design parameter), drag targets are wishes projected before the
-// constraints so pipe lengths always win over the pointer.
+// Kinematic drag mode (§5.1), fully 3D (PLANFILE-3d-conversion.md): gravity/
+// springs ignored; position projection satisfies rigid constraints and limits.
+// Stateless per call — rest lengths come from the mechanism's drawn geometry
+// (except telescope, whose length is the design parameter), drag targets are
+// wishes projected before the constraints so pipe lengths always win over the
+// pointer. Hinge pivots gain a solver-internal virtual axis particle (see
+// hinge.ts); spherical pivots are the plain shared node.
 //
 // Determinism: fixed iteration count, constraints sorted by element id,
 // drags sorted by node id, no randomness (§12).
-import type { Mechanism, Vec2 } from '../schema';
+import type { Mechanism, Vec3 } from '../schema';
 import { drivenTargets } from './equilibrium';
+import { adjacentNodeId, angle3, type HingePlan, hingePlan } from './hinge';
 import type { SolveInputs, SolveResult } from './types';
 
 const ITERATIONS = 300;
@@ -16,12 +19,23 @@ const ITERATIONS = 300;
  * constraint cycle never converges), and since callers recompute rest
  * lengths from returned positions, that error would compound per frame */
 const SETTLE_ITERATIONS = 100;
+/** 3D tradeoff: a rigid all-pairs body (bentLink) ROTATING OUT OF PLANE
+ * relaxes under Gauss–Seidel at only ~0.995 per sweep — far slower than any
+ * in-plane case — so a single 100-sweep settle can leave ~1e-4 violation
+ * that the per-frame rest-length recompute would ratchet into permanent
+ * distortion. The settle therefore runs in blocks of SETTLE_ITERATIONS with
+ * an early exit once under tolerance, capped at SETTLE_BLOCKS blocks:
+ * ordinary frames still pay exactly one block, pathological rotations keep
+ * sweeping until the body is rigid again. Still deterministic — the exit
+ * condition depends only on deterministic state (§12). */
+const SETTLE_BLOCKS = 10;
 const CONVERGE_TOL = 1e-5;
 
 interface P {
   id: string;
   x: number;
   y: number;
+  z: number;
   w: number;
 }
 
@@ -36,8 +50,6 @@ interface KConstraint {
   mobilityEqualities: number;
 }
 
-const perp = (x: number, y: number): Vec2 => ({ x: -y, y: x });
-
 class DistanceC implements KConstraint {
   constructor(
     readonly elementId: string,
@@ -50,8 +62,10 @@ class DistanceC implements KConstraint {
   ) {}
 
   private C(): number {
-    const len = Math.hypot(this.p1.x - this.p2.x, this.p1.y - this.p2.y);
-    const c = len - this.rest;
+    const dx = this.p1.x - this.p2.x;
+    const dy = this.p1.y - this.p2.y;
+    const dz = this.p1.z - this.p2.z;
+    const c = Math.sqrt(dx * dx + dy * dy + dz * dz) - this.rest;
     if (this.kind === 'max') return Math.max(0, c);
     if (this.kind === 'min') return Math.min(0, c);
     return c;
@@ -62,17 +76,21 @@ class DistanceC implements KConstraint {
     if (C === 0) return;
     const dx = this.p1.x - this.p2.x;
     const dy = this.p1.y - this.p2.y;
-    const len = Math.hypot(dx, dy);
+    const dz = this.p1.z - this.p2.z;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len < 1e-12) return;
     const wSum = this.p1.w + this.p2.w;
     if (wSum === 0) return;
     const s = -C / wSum;
     const nx = dx / len;
     const ny = dy / len;
+    const nz = dz / len;
     this.p1.x += this.p1.w * s * nx;
     this.p1.y += this.p1.w * s * ny;
+    this.p1.z += this.p1.w * s * nz;
     this.p2.x -= this.p2.w * s * nx;
     this.p2.y -= this.p2.w * s * ny;
+    this.p2.z -= this.p2.w * s * nz;
   }
 
   violation(): number {
@@ -80,10 +98,8 @@ class DistanceC implements KConstraint {
   }
 }
 
-/** Joint angle limit. The relative angle is the signed deviation from the
- * straight continuation of memberA through the pivot into memberB
- * (0 = straight, like a knee), so the atan2 discontinuity sits at the
- * physically implausible fully-folded pose instead of at straight. */
+/** Hinge angle limit: signed angle about the pivot's current axis direction
+ * (pivot → virtual particle), same 0-=-straight convention as 2D (hinge.ts). */
 class AngleLimitC implements KConstraint {
   readonly mobilityEqualities = 0;
   constructor(
@@ -91,61 +107,51 @@ class AngleLimitC implements KConstraint {
     private readonly pivot: P,
     private readonly a: P,
     private readonly b: P,
+    private readonly axisTip: P,
     private readonly minRad: number,
     private readonly maxRad: number,
   ) {}
 
-  private theta(): number {
-    const vax = this.pivot.x - this.a.x; // continuation of memberA through P
-    const vay = this.pivot.y - this.a.y;
-    const vbx = this.b.x - this.pivot.x;
-    const vby = this.b.y - this.pivot.y;
-    return Math.atan2(vax * vby - vay * vbx, vax * vbx + vay * vby);
-  }
-
-  private C(): number {
-    const t = this.theta();
-    if (t < this.minRad) return t - this.minRad;
-    if (t > this.maxRad) return t - this.maxRad;
+  private C(theta: number): number {
+    if (theta < this.minRad) return theta - this.minRad;
+    if (theta > this.maxRad) return theta - this.maxRad;
     return 0;
   }
 
   project(): void {
-    const C = this.C();
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
+    if (!ag) return;
+    const C = this.C(ag.theta);
     if (C === 0) return;
-    const vax = this.pivot.x - this.a.x;
-    const vay = this.pivot.y - this.a.y;
-    const vbx = this.b.x - this.pivot.x;
-    const vby = this.b.y - this.pivot.y;
-    const la2 = vax * vax + vay * vay;
-    const lb2 = vbx * vbx + vby * vby;
-    if (la2 < 1e-12 || lb2 < 1e-12) return;
-    const ga = perp(vax / la2, vay / la2); // ∂θ/∂a = +perp(va′)/|va′|²
-    const gb = perp(vbx / lb2, vby / lb2); // ∂θ/∂b = +perp(vb)/|vb|²
-    const gp = { x: -(ga.x + gb.x), y: -(ga.y + gb.y) }; // ∂θ/∂P = −(ga+gb)
     const denom =
-      this.a.w * (ga.x * ga.x + ga.y * ga.y) +
-      this.b.w * (gb.x * gb.x + gb.y * gb.y) +
-      this.pivot.w * (gp.x * gp.x + gp.y * gp.y);
+      this.a.w * (ag.ga.x ** 2 + ag.ga.y ** 2 + ag.ga.z ** 2) +
+      this.b.w * (ag.gb.x ** 2 + ag.gb.y ** 2 + ag.gb.z ** 2) +
+      this.pivot.w * (ag.gp.x ** 2 + ag.gp.y ** 2 + ag.gp.z ** 2);
     if (denom === 0) return;
     const s = -C / denom;
-    this.a.x += this.a.w * s * ga.x;
-    this.a.y += this.a.w * s * ga.y;
-    this.b.x += this.b.w * s * gb.x;
-    this.b.y += this.b.w * s * gb.y;
-    this.pivot.x += this.pivot.w * s * gp.x;
-    this.pivot.y += this.pivot.w * s * gp.y;
+    this.a.x += this.a.w * s * ag.ga.x;
+    this.a.y += this.a.w * s * ag.ga.y;
+    this.a.z += this.a.w * s * ag.ga.z;
+    this.b.x += this.b.w * s * ag.gb.x;
+    this.b.y += this.b.w * s * ag.gb.y;
+    this.b.z += this.b.w * s * ag.gb.z;
+    this.pivot.x += this.pivot.w * s * ag.gp.x;
+    this.pivot.y += this.pivot.w * s * ag.gp.y;
+    this.pivot.z += this.pivot.w * s * ag.gp.z;
   }
 
   violation(): number {
-    return Math.abs(this.C());
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
+    return ag ? Math.abs(this.C(ag.theta)) : 0;
   }
 }
 
 /** Node on the axis of a link (A→B), with travel limits on the projected
- * parameter. Gradients distributed barycentrically to the rail ends. */
+ * parameter. In 3D the on-line condition removes TWO translational DOF, so it
+ * counts 2 mobility equalities; the perpendicular offset is projected out as
+ * one scalar along its own direction each pass. Gradients distributed
+ * barycentrically to the rail ends. */
 class PointOnLineC implements KConstraint {
-  readonly mobilityEqualities = 1;
   constructor(
     readonly elementId: string,
     private readonly n: P,
@@ -153,30 +159,37 @@ class PointOnLineC implements KConstraint {
     private readonly b: P,
     private readonly travelMin: number,
     private readonly travelMax: number,
+    readonly mobilityEqualities: number,
   ) {}
 
   project(): void {
     const ux = this.b.x - this.a.x;
     const uy = this.b.y - this.a.y;
-    const L = Math.hypot(ux, uy);
+    const uz = this.b.z - this.a.z;
+    const L = Math.sqrt(ux * ux + uy * uy + uz * uz);
     if (L < 1e-12) return;
-    const nx = -uy / L;
-    const ny = ux / L;
+    const ex = ux / L;
+    const ey = uy / L;
+    const ez = uz / L;
     const relx = this.n.x - this.a.x;
     const rely = this.n.y - this.a.y;
-    const t = (relx * (ux / L) + rely * (uy / L)) / L;
-    // perpendicular (equality)
-    const Cperp = relx * nx + rely * ny;
-    this.apply(Cperp, nx, ny, t);
+    const relz = this.n.z - this.a.z;
+    const s = relx * ex + rely * ey + relz * ez;
+    const t = s / L;
+    // perpendicular offset (equality): project it out along its own direction
+    const px = relx - s * ex;
+    const py = rely - s * ey;
+    const pz = relz - s * ez;
+    const cPerp = Math.sqrt(px * px + py * py + pz * pz);
+    if (cPerp > 1e-12) this.apply(cPerp, px / cPerp, py / cPerp, pz / cPerp, t);
     // travel limits (inequalities), along the axis
-    const s = relx * (ux / L) + rely * (uy / L);
     const sMin = this.travelMin * L;
     const sMax = this.travelMax * L;
-    if (s < sMin) this.apply(s - sMin, ux / L, uy / L, t);
-    else if (s > sMax) this.apply(s - sMax, ux / L, uy / L, t);
+    if (s < sMin) this.apply(s - sMin, ex, ey, ez, t);
+    else if (s > sMax) this.apply(s - sMax, ex, ey, ez, t);
   }
 
-  private apply(C: number, gx: number, gy: number, t: number): void {
+  private apply(C: number, gx: number, gy: number, gz: number, t: number): void {
     if (C === 0) return;
     const wa = this.a.w * (1 - t) * (1 - t);
     const wb = this.b.w * t * t;
@@ -185,32 +198,41 @@ class PointOnLineC implements KConstraint {
     const s = -C / denom;
     this.n.x += this.n.w * s * gx;
     this.n.y += this.n.w * s * gy;
+    this.n.z += this.n.w * s * gz;
     this.a.x -= this.a.w * (1 - t) * s * gx;
     this.a.y -= this.a.w * (1 - t) * s * gy;
+    this.a.z -= this.a.w * (1 - t) * s * gz;
     this.b.x -= this.b.w * t * s * gx;
     this.b.y -= this.b.w * t * s * gy;
+    this.b.z -= this.b.w * t * s * gz;
   }
 
   violation(): number {
     const ux = this.b.x - this.a.x;
     const uy = this.b.y - this.a.y;
-    const L = Math.hypot(ux, uy);
+    const uz = this.b.z - this.a.z;
+    const L = Math.sqrt(ux * ux + uy * uy + uz * uz);
     if (L < 1e-12) return 0;
     const relx = this.n.x - this.a.x;
     const rely = this.n.y - this.a.y;
-    const cPerp = Math.abs((relx * -uy + rely * ux) / L);
-    const s = (relx * ux + rely * uy) / L;
+    const relz = this.n.z - this.a.z;
+    const s = (relx * ux + rely * uy + relz * uz) / L;
+    const px = relx - (s / L) * ux;
+    const py = rely - (s / L) * uy;
+    const pz = relz - (s / L) * uz;
+    const cPerp = Math.sqrt(px * px + py * py + pz * pz);
     const under = Math.max(0, this.travelMin * L - s);
     const over = Math.max(0, s - this.travelMax * L);
     return Math.max(cPerp, under, over);
   }
 }
 
-/** Ground plane y ≥ 0 (PLANFILE-wearer-attachments-and-floor, slice C):
- * free nodes cannot pass below the floor in non-`top` views. A pure clamp —
- * zero mobility cost, and floors project last in every pass, so the floor
- * itself is always satisfied afterwards and never appears in `violated`;
- * geometry that cannot stay above it reports on its own elements. */
+/** Ground plane y ≥ 0 (v6 slice C, carried to world y): free USER nodes
+ * cannot pass below the floor. A pure clamp — zero mobility cost, and floors
+ * project last in every pass, so the floor itself is always satisfied
+ * afterwards and never appears in `violated`; geometry that cannot stay above
+ * it reports on its own elements. Virtual axis particles are exempt (solver
+ * internals, not physical pipe ends). */
 class FloorC implements KConstraint {
   readonly elementId = '__floor__';
   readonly mobilityEqualities = 0;
@@ -231,40 +253,19 @@ class FloorC implements KConstraint {
 class DragC {
   constructor(
     private readonly p: P,
-    readonly target: Vec2,
+    readonly target: Vec3,
   ) {}
 
   project(): void {
     if (this.p.w === 0) return;
     this.p.x = this.target.x;
     this.p.y = this.target.y;
+    this.p.z = this.target.z;
   }
 }
 
-function dist(a: Vec2, b: Vec2): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-/** The member's node adjacent to the pivot node — the lever arm used for
- * welds and angle limits. */
-function adjacentNodeId(
-  element: Mechanism['elements'][number],
-  pivotNodeId: string,
-): string | null {
-  switch (element.type) {
-    case 'link':
-    case 'telescope':
-      if (element.nodeA === pivotNodeId) return element.nodeB;
-      if (element.nodeB === pivotNodeId) return element.nodeA;
-      return null;
-    case 'bentLink': {
-      const i = element.nodeIds.indexOf(pivotNodeId);
-      if (i < 0) return null;
-      return element.nodeIds[i + 1] ?? element.nodeIds[i - 1] ?? null;
-    }
-    default:
-      return null;
-  }
+function dist(a: Vec3, b: Vec3): number {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 }
 
 export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): SolveResult {
@@ -286,10 +287,17 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
       const p = target ?? n.position;
       return [
         n.id,
-        { id: n.id, x: p.x, y: p.y, w: n.kind === 'anchor' || n.kind === 'driven' ? 0 : 1 },
+        {
+          id: n.id,
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          w: n.kind === 'anchor' || n.kind === 'driven' ? 0 : 1,
+        },
       ];
     }),
   );
+  const userIds = new Set(mechanism.nodes.map((n) => n.id));
   const pos = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const get = (id: string): P => {
     const p = particles.get(id);
@@ -298,11 +306,36 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   };
   const elementById = new Map(mechanism.elements.map((e) => [e.id, e]));
   const free = new Set(mechanism.nodes.filter((n) => n.kind === 'free').map((n) => n.id));
-  // an equality only reduces mobility if it touches at least one free node
+  const sortedElements = [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id));
+
+  // virtual axis particles for hinge pivots (hinge.ts), created before the
+  // constraint pass so ties can reference them; pinned axes (grounded hinges)
+  // get weight 0 at (current pivot + drawn axis·h)
+  const hingePlans = new Map<string, HingePlan>();
+  let freeVirtualCount = 0;
+  for (const el of sortedElements) {
+    if (el.type !== 'pivot') continue;
+    const plan = hingePlan(el, pos, elementById, (id) => get(id).w === 0);
+    if (!plan) continue;
+    hingePlans.set(el.id, plan);
+    const pivot = get(plan.pivotNodeId);
+    particles.set(plan.virtualId, {
+      id: plan.virtualId,
+      x: pivot.x + plan.axis.x * plan.h,
+      y: pivot.y + plan.axis.y * plan.h,
+      z: pivot.z + plan.axis.z * plan.h,
+      w: plan.pinned ? 0 : 1,
+    });
+    if (!plan.pinned) {
+      free.add(plan.virtualId);
+      freeVirtualCount++;
+    }
+  }
+  // an equality only reduces mobility if it touches at least one free particle
   const mob = (...ids: string[]): 0 | 1 => (ids.some((id) => free.has(id)) ? 1 : 0);
 
   const constraints: KConstraint[] = [];
-  for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const el of sortedElements) {
     switch (el.type) {
       case 'link': {
         const rest = dist(pos.get(el.nodeA)!, pos.get(el.nodeB)!);
@@ -325,10 +358,10 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
         break;
       }
       case 'bentLink': {
-        // all-pairs distances for projection robustness; only 2k−3 count
+        // all-pairs distances for projection robustness; only 3k−6 count
         // toward mobility (the rest are redundant rigid-body constraints)
         const ids = el.nodeIds;
-        let mobilityLeft = 2 * ids.length - 3;
+        let mobilityLeft = 3 * ids.length - 6;
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
             const rest = dist(pos.get(ids[i]!)!, pos.get(ids[j]!)!);
@@ -350,22 +383,48 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
           const rest = dist(pos.get(a)!, pos.get(b)!);
           constraints.push(new DistanceC(el.id, get(a), get(b), rest, mob(a, b)));
         }
-        if (el.angleLimit) {
-          const elA = elementById.get(el.angleLimit.memberA);
-          const elB = elementById.get(el.angleLimit.memberB);
-          const a = elA ? adjacentNodeId(elA, el.nodeId) : null;
-          const b = elB ? adjacentNodeId(elB, el.nodeId) : null;
-          if (a && b) {
+        const plan = hingePlans.get(el.id);
+        if (plan) {
+          const virtual = get(plan.virtualId);
+          constraints.push(
+            new DistanceC(
+              el.id,
+              virtual,
+              get(plan.pivotNodeId),
+              plan.h,
+              mob(plan.virtualId, plan.pivotNodeId),
+            ),
+          );
+          for (const tie of plan.ties) {
             constraints.push(
-              new AngleLimitC(
+              new DistanceC(
                 el.id,
-                get(el.nodeId),
-                get(a),
-                get(b),
-                el.angleLimit.minRad,
-                el.angleLimit.maxRad,
+                virtual,
+                get(tie.nodeId),
+                tie.rest,
+                mob(plan.virtualId, tie.nodeId),
               ),
             );
+          }
+          // angle limits are hinge-only (measured about the axis)
+          if (el.angleLimit) {
+            const elA = elementById.get(el.angleLimit.memberA);
+            const elB = elementById.get(el.angleLimit.memberB);
+            const a = elA ? adjacentNodeId(elA, el.nodeId) : null;
+            const b = elB ? adjacentNodeId(elB, el.nodeId) : null;
+            if (a && b) {
+              constraints.push(
+                new AngleLimitC(
+                  el.id,
+                  get(el.nodeId),
+                  get(a),
+                  get(b),
+                  virtual,
+                  el.angleLimit.minRad,
+                  el.angleLimit.maxRad,
+                ),
+              );
+            }
           }
         }
         break;
@@ -381,12 +440,13 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
               get(rail.nodeB),
               el.travelMin,
               el.travelMax,
+              mob(el.nodeId) ? 2 : 0,
             ),
           );
         }
         break;
       }
-      // force elements are inert in kinematic mode until Phase 2
+      // force elements are inert in kinematic mode
       case 'rope':
       case 'elastic':
       case 'bowden':
@@ -395,12 +455,9 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     }
   }
 
-  // floor last so each pass ends with y ≥ 0 for every free node
-  const floorOn = mechanism.viewOrientation !== 'top';
-  if (floorOn) {
-    for (const n of mechanism.nodes) {
-      if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
-    }
+  // floor last so each pass ends with y ≥ 0 for every free user node
+  for (const n of mechanism.nodes) {
+    if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
   }
 
   // a drag wish cannot point underground: clamped to the floor surface, so a
@@ -409,21 +466,23 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   // cannot escape — the floor clamp kills the downward half of every nudge)
   const drags: DragC[] = Object.entries(inputs.dragTargets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
-    .filter(([id]) => particles.has(id))
+    .filter(([id]) => particles.has(id) && userIds.has(id))
     .map(
-      ([id, target]) =>
-        new DragC(get(id), floorOn ? { x: target.x, y: Math.max(0, target.y) } : target),
+      ([id, target]) => new DragC(get(id), { x: target.x, y: Math.max(0, target.y), z: target.z }),
     );
 
-  const settle = () => {
-    for (let it = 0; it < SETTLE_ITERATIONS; it++) {
-      for (const c of constraints) c.project();
-    }
-  };
   const maxViolation = () => {
     let r = 0;
     for (const c of constraints) r = Math.max(r, c.violation());
     return r;
+  };
+  const settle = () => {
+    for (let b = 0; b < SETTLE_BLOCKS; b++) {
+      for (let it = 0; it < SETTLE_ITERATIONS; it++) {
+        for (const c of constraints) c.project();
+      }
+      if (maxViolation() <= CONVERGE_TOL) return;
+    }
   };
 
   for (let it = 0; it < ITERATIONS; it++) {
@@ -435,8 +494,9 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
 
   // degenerate configurations (e.g. links dragged exactly collinear) leave
   // Gauss–Seidel with no perpendicular gradient to escape along; a tiny
-  // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry.
-  // Truly conflicting constraints stay violated and get reported below.
+  // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry
+  // (with a z component in 3D). Truly conflicting constraints stay violated
+  // and get reported below.
   for (let round = 0; round < 3 && maxViolation() > CONVERGE_TOL; round++) {
     // escalate per round: 1e-6 breaks exact collinearity; a floor wedge (the
     // satisfying pose is well above ground, the iterate pinned onto the
@@ -451,7 +511,8 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
       // a particle resting on the floor can only escape upward, and by the
       // full magnitude — the clamp erases downward nudges, and a golden-angle
       // fraction can be arbitrarily small for exactly the stuck particle
-      p.y += floorOn && p.y <= CONVERGE_TOL ? mag : 1e-6 * Math.cos(k * 2.39996);
+      p.y += p.y <= CONVERGE_TOL ? mag : 1e-6 * Math.cos(k * 2.39996);
+      p.z += 1e-6 * Math.sin(k * 2.39996 * 0.5 + 1);
     }
     settle();
   }
@@ -464,16 +525,18 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     if (v > CONVERGE_TOL) violatedSet.add(c.elementId);
   }
 
-  // mobility: particle-space DOF (2 per free node) minus independent
-  // equality constraints that touch at least one free node — equivalent to
-  // the Grübler count for this pin-lattice model (see DECISIONS.md)
-  const freeCount = mechanism.nodes.filter((n) => n.kind !== 'anchor').length;
+  // mobility: particle-space DOF (3 per mobile particle, virtual axis
+  // particles included) minus independent equality constraints that touch at
+  // least one free particle (PLANFILE-3d-conversion.md)
+  const freeCount = mechanism.nodes.filter((n) => n.kind !== 'anchor').length + freeVirtualCount;
   let equalities = 0;
   for (const c of constraints) equalities += c.mobilityEqualities;
-  const dof = 2 * freeCount - equalities;
+  const dof = 3 * freeCount - equalities;
 
-  const positions: Record<string, Vec2> = {};
-  for (const p of particles.values()) positions[p.id] = { x: p.x, y: p.y };
+  const positions: Record<string, Vec3> = {};
+  for (const p of particles.values()) {
+    if (userIds.has(p.id)) positions[p.id] = { x: p.x, y: p.y, z: p.z };
+  }
 
   return {
     positions,

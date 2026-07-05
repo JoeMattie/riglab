@@ -17,7 +17,7 @@ export interface SolveInputs {
    * pose and clip playback. Applied in both modes; entries for non-anchor
    * nodes are ignored. Rest lengths still derive from document positions
    * (PLANFILE-wearer-attachments-and-floor, slice A). */
-  groundTargets?: Record<string, Vec2>;
+  groundTargets?: Record<string, Vec3>;
   /** Generic-pipe linear density (kg/m) used for sketch-maturity link
    * self-weight in equilibrium mode (§4.2, §5.1). The materials DB lives in
    * the Project (outside this pure interface), so the caller passes the
