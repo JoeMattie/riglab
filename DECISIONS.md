@@ -1732,3 +1732,15 @@ heat-wrap connector, every socketed end gets `fitting`; zero-allowance ends
 (boltThrough/conduitBox/ropeLashing) are not proposed — noise, not parts. No
 structural/strength reasoning — stated in the preview UI. Proposals are
 transient (no schema change, no schemaVersion bump).
+
+## Process rule change (2026-07-04)
+
+### DECISION: tests-first requirement dropped (Joe's direction)
+The "write acceptance tests before implementation" rule for solver and BOM
+math is removed from CLAUDE.md, planfile §11/§12, and the README. Joe's
+reasoning: tests are useful, but mandatory TDD is a crutch. The invariant
+that survives: solver and BOM math must still be covered by the phase's
+acceptance tests, and a phase (or feature slice) isn't done until they
+pass — only the required ordering (tests before code) is gone. The
+skip-marked future-phase-test convention above remains valid history but is
+no longer mandated going forward.

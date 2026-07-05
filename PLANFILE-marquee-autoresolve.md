@@ -76,7 +76,7 @@ Feature planfile for two additions agreed 2026-07-04. Extends `PLANFILE-pvc-rig-
 ## Slices (CI green at each commit)
 
 1. Marquee: `marquee.ts` + tests, `setSelection`, canvas gesture + space/middle pan.
-2. `autoResolve.ts` engine, acceptance tests first.
+2. `autoResolve.ts` engine + acceptance tests.
 3. `applyAutoResolve` + preview UI + entry points.
 Each slice updates `PLANFILE-pvc-rig-lab.md` §8.2/§8.2a and `DECISIONS.md` where it
 changes agreed scope.
