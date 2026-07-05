@@ -1,6 +1,7 @@
 // Multi-select + face-toggle semantics (§8, §8.2a) and the v7 single-document
 // transient reset (PLANFILE-3d-conversion.md: no per-mechanism activation).
 import { beforeEach, describe, expect, it } from 'vitest';
+import { getQuadLayoutPref, setQuadLayoutPref } from '../persistence/prefs';
 import { useEditorStore } from './editorStore';
 
 const state = () => useEditorStore.getState();
@@ -111,5 +112,84 @@ describe('3D pose plumbing', () => {
     ]);
     state().setTracing(false);
     expect(state().tracePath).toEqual([]);
+  });
+});
+
+describe('quad layout state (PLANFILE-quad-panel-controls)', () => {
+  beforeEach(() => {
+    useEditorStore.setState({
+      quadSplit: { x: 0.5, y: 0.5 },
+      panelsVisible: { top: true, persp: true, front: true, side: true },
+      quadMaximized: null,
+      activePanel: 'side',
+    });
+  });
+
+  it('setQuadSplit merges per-axis and clamps to [0.15, 0.85]', () => {
+    state().setQuadSplit({ x: 0.3 });
+    expect(state().quadSplit).toEqual({ x: 0.3, y: 0.5 });
+    state().setQuadSplit({ y: 0.99 });
+    expect(state().quadSplit).toEqual({ x: 0.3, y: 0.85 });
+    state().setQuadSplit({ x: -1 });
+    expect(state().quadSplit.x).toBe(0.15);
+  });
+
+  it('resetQuadSplit resets only the given axes (double-click a splitter)', () => {
+    state().setQuadSplit({ x: 0.3, y: 0.7 });
+    state().resetQuadSplit(['x']);
+    expect(state().quadSplit).toEqual({ x: 0.5, y: 0.7 });
+    state().setQuadSplit({ x: 0.3 });
+    state().resetQuadSplit(['x', 'y']);
+    expect(state().quadSplit).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('togglePanelVisible flips panels but refuses to hide the last one', () => {
+    state().togglePanelVisible('persp');
+    expect(state().panelsVisible.persp).toBe(false);
+    state().togglePanelVisible('persp');
+    expect(state().panelsVisible.persp).toBe(true);
+    for (const p of ['top', 'persp', 'front'] as const) state().togglePanelVisible(p);
+    expect(state().panelsVisible).toEqual({ top: false, persp: false, front: false, side: true });
+    state().togglePanelVisible('side'); // last visible — refused
+    expect(state().panelsVisible.side).toBe(true);
+  });
+
+  it('hiding the maximized panel restores the grid', () => {
+    state().setQuadMaximized('front');
+    state().togglePanelVisible('front');
+    expect(state().quadMaximized).toBeNull();
+    expect(state().panelsVisible.front).toBe(false);
+  });
+
+  it('hiding the active panel moves activation to the first visible one', () => {
+    state().setActivePanel('top');
+    state().togglePanelVisible('top');
+    expect(state().activePanel).toBe('persp');
+  });
+
+  it('persists split + visibility as a UI pref that restores clamped', () => {
+    state().setQuadSplit({ x: 0.3 });
+    state().togglePanelVisible('persp');
+    expect(getQuadLayoutPref()).toEqual({
+      split: { x: 0.3, y: 0.5 },
+      visible: { top: true, persp: false, front: true, side: true },
+    });
+    // a corrupt all-hidden pref must never restore an empty workspace
+    setQuadLayoutPref({
+      split: { x: 0.05, y: 2 },
+      visible: { top: false, persp: false, front: false, side: false },
+    });
+    expect(getQuadLayoutPref()).toEqual({
+      split: { x: 0.15, y: 0.85 },
+      visible: { top: true, persp: true, front: true, side: true },
+    });
+  });
+
+  it('layout survives resetTransient (a workspace pref, not document state)', () => {
+    state().setQuadSplit({ x: 0.3 });
+    state().togglePanelVisible('top');
+    state().resetTransient();
+    expect(state().quadSplit.x).toBe(0.3);
+    expect(state().panelsVisible.top).toBe(false);
   });
 });

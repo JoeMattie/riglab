@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { ProposedChange } from '../design/autoResolve';
+import { getQuadLayoutPref, setQuadLayoutPref } from '../persistence/prefs';
 import type { Vec2, Vec3 } from '../schema';
+import { clampSplit, PANEL_ORDER, type QuadSplit } from '../ui/quad/quadLayout';
+
+// workspace layout prefs (splitter fractions + panel visibility) restore at
+// module load and re-persist on every change — like the night pref
+const storedLayout = getQuadLayoutPref();
 
 // Transient editor/UI state — never persisted, never in undo history.
 //
@@ -176,6 +182,13 @@ export interface EditorState {
   /** the panel currently maximized (double-click header); a maximized ortho
    * panel is the old focused-2D feel */
   quadMaximized: QuadPanelId | null;
+  /** shared splitter fractions: workspace share of the left column (x) and
+   * top row (y). Clamped to [0.15, 0.85]; persisted as a UI pref
+   * (PLANFILE-quad-panel-controls A) */
+  quadSplit: QuadSplit;
+  /** per-panel visibility (top-bar toggles); at least one stays true.
+   * Persisted with the splitter fractions (PLANFILE-quad-panel-controls B) */
+  panelsVisible: Record<QuadPanelId, boolean>;
   /** per-panel active work-plane depth along the panel normal (m) */
   panelDepths: PanelDepths;
   /** the panel that last received pointer input — floating per-selection UI
@@ -224,6 +237,12 @@ export interface EditorState {
   setAutoProposal(p: AutoProposalState | null): void;
   setAssemblyRender(render: 'wire' | 'pipe'): void;
   setQuadMaximized(panel: QuadPanelId | null): void;
+  /** drag a splitter: set either/both fractions (clamped, persisted) */
+  setQuadSplit(split: Partial<QuadSplit>): void;
+  /** double-click a splitter: reset its axis/axes to 50/50 */
+  resetQuadSplit(axes: ReadonlyArray<'x' | 'y'>): void;
+  /** top-bar visibility toggle; refuses to hide the last visible panel */
+  togglePanelVisible(panel: QuadPanelId): void;
   setPanelDepth(panel: OrthoPanelId, depthM: number): void;
   setActivePanel(panel: QuadPanelId): void;
   setControlsOpen(open: boolean): void;
@@ -261,6 +280,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   autoProposal: null,
   assemblyRender: 'wire',
   quadMaximized: null,
+  quadSplit: storedLayout?.split ?? { x: 0.5, y: 0.5 },
+  panelsVisible: storedLayout?.visible ?? { top: true, persp: true, front: true, side: true },
   panelDepths: { top: 0, front: 0, side: 0 },
   activePanel: 'side',
   controlsOpen: false,
@@ -336,6 +357,41 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setAutoProposal: (autoProposal) => set({ autoProposal }),
   setAssemblyRender: (assemblyRender) => set({ assemblyRender }),
   setQuadMaximized: (quadMaximized) => set({ quadMaximized }),
+  setQuadSplit: (split) =>
+    set((s) => {
+      const quadSplit: QuadSplit = {
+        x: clampSplit(split.x ?? s.quadSplit.x),
+        y: clampSplit(split.y ?? s.quadSplit.y),
+      };
+      setQuadLayoutPref({ split: quadSplit, visible: s.panelsVisible });
+      return { quadSplit };
+    }),
+  resetQuadSplit: (axes) =>
+    set((s) => {
+      const quadSplit: QuadSplit = {
+        x: axes.includes('x') ? 0.5 : s.quadSplit.x,
+        y: axes.includes('y') ? 0.5 : s.quadSplit.y,
+      };
+      setQuadLayoutPref({ split: quadSplit, visible: s.panelsVisible });
+      return { quadSplit };
+    }),
+  togglePanelVisible: (panel) =>
+    set((s) => {
+      const panelsVisible = { ...s.panelsVisible, [panel]: !s.panelsVisible[panel] };
+      // at least one panel always on: hiding the last visible one is refused
+      if (!PANEL_ORDER.some((p) => panelsVisible[p])) return {};
+      const patch: Partial<EditorState> = { panelsVisible };
+      if (!panelsVisible[panel]) {
+        // hiding the maximized panel restores the grid; hiding the active
+        // panel moves activation to the first visible one
+        if (s.quadMaximized === panel) patch.quadMaximized = null;
+        if (s.activePanel === panel) {
+          patch.activePanel = PANEL_ORDER.find((p) => panelsVisible[p])!;
+        }
+      }
+      setQuadLayoutPref({ split: s.quadSplit, visible: panelsVisible });
+      return patch;
+    }),
   setPanelDepth: (panel, depthM) =>
     set((s) => ({ panelDepths: { ...s.panelDepths, [panel]: depthM } })),
   setActivePanel: (activePanel) => set({ activePanel }),
