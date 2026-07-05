@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ProposedChange } from '../design/autoResolve';
 import type { Vec2 } from '../schema';
 
 // Transient editor/UI state — never persisted, never in undo history.
@@ -88,6 +89,16 @@ export interface LengthEdit {
   draft: string;
 }
 
+/** A pending auto-resolve preview (PLANFILE-marquee-autoresolve.md). `docRef`
+ * is the document object the proposal was computed from — any edit produces a
+ * new document object, so `docRef !== current` marks the proposal stale and
+ * the preview hides itself rather than applying against moved ground. */
+export interface AutoProposalState {
+  docRef: unknown;
+  mechId: string;
+  changes: ProposedChange[];
+}
+
 export interface PlaybackState {
   clipName: string | null;
   playing: boolean;
@@ -123,6 +134,8 @@ export interface EditorState {
    * sketch face hides forces by default (§8.1) */
   equilibriumOn: boolean;
   equilibrium: EquilibriumReadout;
+  /** pending auto-resolve preview; null = none */
+  autoProposal: AutoProposalState | null;
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
@@ -149,6 +162,7 @@ export interface EditorState {
   setDiagnostics(dof: EditorState['dof'], violated: string[]): void;
   setEquilibriumOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
+  setAutoProposal(p: AutoProposalState | null): void;
 }
 
 export const useEditorStore = create<EditorState>()((set) => ({
@@ -171,6 +185,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
   dof: null,
   equilibriumOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
+  autoProposal: null,
 
   // face is deliberately kept on mechanism switch — it is a lens, not a
   // per-mechanism property (§8)
@@ -182,6 +197,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
       tracePath: [],
       openPopover: null,
       lengthEdit: null,
+      autoProposal: null,
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
   setMode: (mode) => set({ mode, openPopover: null, lengthEdit: null, pendingConnect: null }),
@@ -221,4 +237,5 @@ export const useEditorStore = create<EditorState>()((set) => ({
       equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM,
     }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
+  setAutoProposal: (autoProposal) => set({ autoProposal }),
 }));

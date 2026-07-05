@@ -1,6 +1,7 @@
 // Pure document transforms for sketch editing. All editing flows through
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
+import type { ProposedChange } from '../design/autoResolve';
 import { derivedMaturity } from '../design/resolution';
 import type {
   BowdenElement,
@@ -723,6 +724,33 @@ export function assignEndRealization(
         : { ...el, endRealizationB: realization }
       : el,
   );
+}
+
+/** Apply an accepted auto-resolve proposal (PLANFILE-marquee-autoresolve.md)
+ * by folding every change through the existing assignment ops, so maturity
+ * derivation stays in one place. Callers run this inside a single
+ * updateCurrent — one undo step for the whole proposal. */
+export function applyAutoResolve(
+  doc: Project,
+  mechId: string,
+  changes: readonly ProposedChange[],
+): Project {
+  return changes.reduce((d, c) => {
+    switch (c.slot) {
+      case 'pipeMaterial':
+        return assignPipeMaterial(d, mechId, [c.elementId], c.after);
+      case 'outerPipeMaterial':
+        return assignTelescopeMaterial(d, mechId, c.elementId, 'outer', c.after);
+      case 'innerPipeMaterial':
+        return assignTelescopeMaterial(d, mechId, c.elementId, 'inner', c.after);
+      case 'realization':
+        return assignRealization(d, mechId, [c.elementId], c.after as JointRealization);
+      case 'endRealizationA':
+        return assignEndRealization(d, mechId, c.elementId, 'A', c.after as JointRealization);
+      case 'endRealizationB':
+        return assignEndRealization(d, mechId, c.elementId, 'B', c.after as JointRealization);
+    }
+  }, doc);
 }
 
 /** Inline dimension edit (§8.2, §11): set a link/telescope length by keeping

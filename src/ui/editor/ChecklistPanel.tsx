@@ -6,6 +6,7 @@ import { mechanismResolution, type ResolutionItem } from '../../design/resolutio
 import { useAppStore } from '../../state/appStore';
 import { type FocusHint, useEditorStore } from '../../state/editorStore';
 import { Badge } from '../components/badge';
+import { AutoResolvePanel } from './AutoResolvePanel';
 import { useDiagnosticsShim } from './infopanel/diagnosticsShim';
 
 function hintFor(item: ResolutionItem): FocusHint | null {
@@ -56,6 +57,7 @@ export function ChecklistPanel() {
           <Badge variant="secondary">{items.length} open</Badge>
         )}
       </div>
+      <AutoResolvePanel doc={doc} mech={mech} />
       {buildable ? (
         <div className="px-3 py-2 text-muted-foreground">
           Nothing unresolved — every element is buildable as engineered.

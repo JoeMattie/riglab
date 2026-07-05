@@ -210,7 +210,7 @@ A right-side panel, present in both faces, that reacts to the current selection 
 ### 8.2 Design face (guided refinement)
 A toggle on the same canvas that overlays engineering state and opens the right inspector:
 - **Resolution checklist** (persistent panel): every unresolved item as a clickable to-do — links without materials, joints without physical realizations, `telescope` pairs failing nesting compatibility, ropes required to push, over/under-constrained warnings, unbound input channels. Clicking an item selects the element and opens exactly the needed control. The checklist reaching zero means "buildable"; a progress indicator shows it.
-- **Bulk assignment**: select-many → assign material/realization in one action (most pipes in a build share one size); "apply to similar" affordance.
+- **Bulk assignment**: select-many → assign material/realization in one action (most pipes in a build share one size); "apply to similar" affordance. **Auto-resolve** (see PLANFILE-marquee-autoresolve.md): one action proposing materials and joint/end realizations that minimize purchased parts (nested slip fit ≻ heat-wrap ≻ hardware; in-use sizes preferred), fill-gaps by default with an explicit re-solve opt-in, shown as a reviewable preview applied in one undo step. Available for the whole mechanism (checklist header) or the current selection (multi-inspector).
 - **Force overlays**: equilibrium mode toggle; tensions/loads/reactions rendered on the elements; required-input-force per channel.
 - Dimension labels editable inline (type a length, geometry updates).
 

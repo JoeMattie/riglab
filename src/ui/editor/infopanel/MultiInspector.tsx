@@ -1,6 +1,7 @@
 // Multi-selection inspector (§8.2a): shared editable properties — the §8.2
 // bulk material/realization assignment surface. Assignment controls are
 // design-face scope; the sketch face shows the selection composition only.
+import { autoResolve } from '../../../design/autoResolve';
 import { elementTypeLabel } from '../../../design/resolution';
 import type { JointRealization, Mechanism, MechanismElement, Project } from '../../../schema';
 import { useAppStore } from '../../../state/appStore';
@@ -9,7 +10,8 @@ import {
   assignPipeMaterial,
   assignRealization,
 } from '../../../state/docOps';
-import type { Face } from '../../../state/editorStore';
+import { type Face, useEditorStore } from '../../../state/editorStore';
+import { Button } from '../../components/button';
 import { AssignSelect, REALIZATION_OPTIONS, Row, Section } from './fields';
 
 /** The one shared value across `values`, or null when mixed/empty. */
@@ -30,6 +32,8 @@ export function MultiInspector({
   face: Face;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const setAutoProposal = useEditorStore((s) => s.setAutoProposal);
+  const setRightTab = useEditorStore((s) => s.setRightTab);
 
   const counts = new Map<string, number>();
   for (const el of els) {
@@ -62,6 +66,28 @@ export function MultiInspector({
             {n}
           </Row>
         ))}
+        {face === 'design' && (
+          <div className="px-3 py-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="auto-resolve-selection"
+              onClick={() => {
+                // proposal scoped to the selection; the preview lives in the
+                // checklist tab, so hand the user over to it
+                setAutoProposal({
+                  docRef: doc,
+                  mechId: mech.id,
+                  changes: autoResolve(doc, mech.id, { elementIds: ids }).changes,
+                });
+                setRightTab('checklist');
+              }}
+            >
+              Auto-resolve selection
+            </Button>
+          </div>
+        )}
       </Section>
 
       {face === 'design' && structural.length > 0 && (
