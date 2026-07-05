@@ -29,6 +29,20 @@ export interface SolveInputs {
    * linkDensityKgPerM when an element is absent. The BOM/materials layer feeds
    * these from assigned pipe materials. Additive, equilibrium-only. */
   elementLinearDensityKgPerM?: Record<string, number>;
+  /** Warm-start seed for equilibrium mode: starting positions for FREE nodes,
+   * typically a previous solve's `positions` (PLANFILE-forces-playback-perf).
+   * Held/prescribed nodes and unknown ids are ignored; rest lengths and
+   * constraint targets still derive from drawn document positions, so the
+   * seed changes where the relaxation starts, never what it converges to.
+   * Part of the inputs, so determinism holds: same seed ⇒ identical output.
+   * Ignored in kinematic mode. */
+  seedPositions?: Record<string, Vec3>;
+  /** Cap on equilibrium relaxation substeps for this call, clamped to
+   * [1, MAX_STEPS] (PLANFILE-forces-playback-perf). Hitting the cap before
+   * quiescence returns the partial (constraint-projected) pose with
+   * `converged: false`; a caller seeding from the previous result carries the
+   * settle forward across calls. Ignored in kinematic mode. */
+  maxSubsteps?: number;
 }
 
 export interface SolveForces {

@@ -2123,3 +2123,40 @@ remains the single gate — the Git integration builds on Cloudflare's side
 and would deploy even when our test suite fails. PR preview deployments
 deliberately not added (scope).
 
+### DECISION: forces-playback perf — warm-started, substep-budgeted equilibrium readout (2026-07-05)
+Playback with the forces overlay on was ~0.5 fps. Measurement (not the
+original hypothesis) pinned the cause: the full-creature equilibrium solve
+NEVER converges — at rest and walk poses alike it burns the entire
+MAX_STEPS=6000 relaxation cap (~1.7 s) and reports `converged:false`, and
+`useGlobalSolve` ran that synchronously on the main thread every playback
+frame (its "not per drag frame" comment was true for drags, false for
+playback). Fix, per `docs/planfiles/PLANFILE-forces-playback-perf.md`:
+`SolveInputs` gains equilibrium-only `seedPositions` (warm-start from a
+previous solve's positions; held nodes and unknown ids ignored; rest lengths
+still derive from drawn positions, so the seed moves the start point, never
+the answer) and `maxSubsteps` (per-call cap, clamped to [1, MAX_STEPS];
+truncation reports `converged:false` honestly). Both are plain-data inputs,
+so purity and determinism (same inputs ⇒ identical output) are preserved; no
+schema change (SolveInputs is not persisted). The UI seeds each frame from
+the previous frame's result and budgets 10 substeps while playing (≈5 ms on
+the full creature; presented as `settling` — the readout is a damped
+transient tracking the animation) and 1200 substeps (three pose-quiescence
+windows, ≈330 ms, one-off) on pause/edit for the settled verdict.
+**[deviation]** The planfile draft said pause runs uncapped; measurement
+showed uncapped = a 1.7 s freeze for the same non-converged verdict on the
+full creature, so pause is budgeted too. Also fixed: `RopeC` gradient buffer
+allocated per projection inside the innermost loop (now preallocated), and
+`elementLinearDensities` recomputed per frame (now memoized). Coverage:
+`warmStart.acceptance.test.ts` (seeded-parity, determinism, honest
+truncation, seed hygiene) and the previously missing equilibrium case in
+`perf.test.ts` (warm-started walk frames, median-of-60 < 16 ms — it measured
+5.1 ms). Headed-browser scripted check: forces-on playback went from ~1.7 s
+to 16.7 ms median rAF (60 fps), honest `non-converged` on pause. Phase 2
+(equilibrium island decomposition, worker offload, WARM_ITERS reduction when
+seeded) deferred — the budget target is met without it. Two findings logged
+for later, out of scope here: (1) the full creature never converging is a
+pre-existing solver-robustness item (same family as the "honest-solve
+calibration" cases); (2) headless-Chromium playback measures ~200 ms/frame
+regardless of forces because SwiftShader software-renders the perspective
+panel — GPU browsers play at 60 fps, so scripted rAF perf checks must run
+headed.

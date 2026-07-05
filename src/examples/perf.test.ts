@@ -6,7 +6,9 @@
 // solve + compose loop. The assertion uses the MEDIAN of 60 frames: a robust
 // per-frame statistic that a GC pause or a parallel test worker cannot flip.
 import { describe, expect, it } from 'vitest';
+import { elementLinearDensities } from '../design/densities';
 import type { Project } from '../schema';
+import type { SolveResult } from '../solver';
 import { solve } from '../solver';
 import { anchorTargets, bindingTargets, getClip, samplePose } from '../wearer';
 import { buildBodyFrameProject } from './bodyFrame';
@@ -50,6 +52,52 @@ describe('compound solve stays within the frame budget', () => {
   // than the full creature but exercise new per-frame content (pinned-axis
   // wag, crossed rope pairs, splayed hinge ties) — same walk-pose kinematic
   // frame, same median-of-60 statistic, same 16 ms budget
+  // the equilibrium readout runs per playback frame when the forces overlay
+  // is on (PLANFILE-forces-playback-perf): frame i is warm-started from frame
+  // i−1's settled positions with the playback substep budget, exactly as
+  // useGlobalSolve invokes it. Same median-of-60 statistic, same 16 ms budget.
+  it('solves the full-creature equilibrium readout, warm-started, in <16 ms/frame (median)', () => {
+    const project = buildFullCreatureProject();
+    const mechanism = project.mechanism;
+    const walk = getClip('walk');
+    expect(walk).toBeTruthy();
+    const densities = elementLinearDensities(mechanism, project.materials);
+    // keep in step with PLAYBACK_EQ_SUBSTEP_BUDGET in useGlobalSolve.ts
+    const PLAYBACK_EQ_SUBSTEP_BUDGET = 10;
+    let prev: SolveResult | null = null;
+    const frame = (t: number) => {
+      const pose = samplePose(walk!, t);
+      prev = solve(
+        mechanism,
+        {
+          channelValues: Object.fromEntries(mechanism.inputs.map((c) => [c.name, c.value])),
+          dragTargets: bindingTargets(mechanism, project.wearer, pose),
+          groundTargets: anchorTargets(mechanism, project.wearer, pose),
+          linkDensityKgPerM: project.materials.genericPipeLinearDensityKgPerM,
+          elementLinearDensityKgPerM: densities,
+          seedPositions: prev?.positions,
+          maxSubsteps: PLAYBACK_EQ_SUBSTEP_BUDGET,
+        },
+        'equilibrium',
+      );
+      return prev;
+    };
+    for (let i = 0; i < 20; i++) frame(i * 0.05);
+    const N = 60;
+    const times: number[] = [];
+    for (let i = 0; i < N; i++) {
+      const t0 = performance.now();
+      frame(i * 0.03);
+      times.push(performance.now() - t0);
+    }
+    times.sort((a, b) => a - b);
+    const median = times[N / 2]!;
+    expect(
+      median,
+      `median frame time ${median.toFixed(2)} ms (min ${times[0]!.toFixed(2)}, max ${times[N - 1]!.toFixed(2)})`,
+    ).toBeLessThan(16);
+  });
+
   const NEW_EXAMPLES: Array<[string, () => Project]> = [
     ['body frame', buildBodyFrameProject],
     ['splayed legs', buildSplayedLegsProject],

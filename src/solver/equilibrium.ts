@@ -342,12 +342,17 @@ class DistanceC implements EqConstraint {
 class RopeC implements EqConstraint {
   lambda = 0;
   readonly mobility = 0; // inequalities don't reduce DOF (§5.3)
+  /** flat [x,y,z per node] gradient buffer, reused across projections — this
+   * runs inside the innermost settle loop, so no per-call allocation */
+  private readonly g: number[];
   constructor(
     readonly elementId: string,
     private readonly nodes: Particle[],
     private readonly l0: number,
     private readonly compliance = 0,
-  ) {}
+  ) {
+    this.g = new Array(nodes.length * 3).fill(0);
+  }
 
   reset(): void {
     this.lambda = 0;
@@ -365,45 +370,49 @@ class RopeC implements EqConstraint {
     return t;
   }
 
-  private grads(): Array<[number, number, number]> {
-    const g: Array<[number, number, number]> = this.nodes.map(() => [0, 0, 0]);
+  /** fill the reusable flat gradient buffer `g` for the current positions */
+  private grads(): void {
+    const g = this.g;
+    g.fill(0);
     for (let i = 0; i < this.nodes.length; i++) {
       const p = this.nodes[i]!;
       if (i > 0) {
         const q = this.nodes[i - 1]!;
         const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
-        g[i]![0] += ux;
-        g[i]![1] += uy;
-        g[i]![2] += uz;
+        g[i * 3] += ux;
+        g[i * 3 + 1] += uy;
+        g[i * 3 + 2] += uz;
       }
       if (i < this.nodes.length - 1) {
         const q = this.nodes[i + 1]!;
         const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
-        g[i]![0] += ux;
-        g[i]![1] += uy;
-        g[i]![2] += uz;
+        g[i * 3] += ux;
+        g[i * 3 + 1] += uy;
+        g[i * 3 + 2] += uz;
       }
     }
-    return g;
   }
 
   project(): void {
     const C = this.total() - this.l0;
     if (C <= 0) return; // slack: tension-only
-    const g = this.grads();
+    this.grads();
+    const g = this.g;
     const at = this.compliance * INV_DT2;
     let denom = at;
     for (let i = 0; i < this.nodes.length; i++) {
-      denom += this.nodes[i]!.w * (g[i]![0] * g[i]![0] + g[i]![1] * g[i]![1] + g[i]![2] * g[i]![2]);
+      denom +=
+        this.nodes[i]!.w *
+        (g[i * 3]! * g[i * 3]! + g[i * 3 + 1]! * g[i * 3 + 1]! + g[i * 3 + 2]! * g[i * 3 + 2]!);
     }
     if (denom <= 0) return;
     const dl = (-C - at * this.lambda) / denom;
     this.lambda += dl;
     for (let i = 0; i < this.nodes.length; i++) {
       const p = this.nodes[i]!;
-      p.x += p.w * dl * g[i]![0];
-      p.y += p.w * dl * g[i]![1];
-      p.z += p.w * dl * g[i]![2];
+      p.x += p.w * dl * g[i * 3]!;
+      p.y += p.w * dl * g[i * 3 + 1]!;
+      p.z += p.w * dl * g[i * 3 + 2]!;
     }
   }
 
@@ -412,10 +421,11 @@ class RopeC implements EqConstraint {
   }
 
   addForces(force: Map<string, Vec3>): void {
-    const g = this.grads();
+    this.grads();
+    const g = this.g;
     const f = this.lambda * INV_DT2;
     for (let i = 0; i < this.nodes.length; i++) {
-      addForce(force, this.nodes[i]!.id, f * g[i]![0], f * g[i]![1], f * g[i]![2]);
+      addForce(force, this.nodes[i]!.id, f * g[i * 3]!, f * g[i * 3 + 1]!, f * g[i * 3 + 2]!);
     }
   }
 
@@ -863,7 +873,13 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         : n.kind === 'anchor'
           ? inputs.groundTargets?.[n.id]
           : dragHold;
-    const pos = prescribed ?? n.position;
+    // non-held nodes may start from a warm-start seed (a previous solve's
+    // settled positions); held nodes (anchor/driven/drag-held) never take the
+    // seed — an anchor without a ground target must stay at its drawn
+    // position — and rest lengths still come from drawn positions below, so
+    // the seed only moves the relaxation's start point
+    const seeded = held ? undefined : inputs.seedPositions?.[n.id];
+    const pos = prescribed ?? seeded ?? n.position;
     const mass = masses.get(n.id) ?? 0;
     particles.set(n.id, {
       id: n.id,
@@ -1202,7 +1218,7 @@ function substep(built: Built, free: Particle[]): number {
   return maxSpeed;
 }
 
-function settle(built: Built): boolean {
+function settle(built: Built, maxSteps: number): boolean {
   const free = [...built.particles.values()].filter((p) => !p.held);
   if (free.length === 0) return true;
   // Constraint-only warm start: propagate driven-input steps and any drawn
@@ -1233,7 +1249,7 @@ function settle(built: Built): boolean {
   let snapX = free.map((p) => p.x);
   let snapY = free.map((p) => p.y);
   let snapZ = free.map((p) => p.z);
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     if (substep(built, free) < SETTLE_SPEED_EPS) return true;
     if ((step + 1) % POSE_QUIESCENCE_WINDOW === 0) {
       let maxDrift = 0;
@@ -1569,7 +1585,11 @@ export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): Sol
   const density = inputs.linkDensityKgPerM ?? 0;
   const elementDensity = inputs.elementLinearDensityKgPerM ?? {};
   const built = build(mechanism, inputs);
-  const settled = settle(built);
+  const maxSteps =
+    inputs.maxSubsteps === undefined
+      ? MAX_STEPS
+      : Math.min(MAX_STEPS, Math.max(1, Math.floor(inputs.maxSubsteps)));
+  const settled = settle(built, maxSteps);
   const nodeForce = measure(built);
 
   const positions: Record<string, Vec3> = {};
