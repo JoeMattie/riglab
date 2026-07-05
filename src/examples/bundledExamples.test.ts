@@ -24,6 +24,7 @@ const FILE_BY_ID: Record<string, string> = {
   'example-tail': 'tail.json',
   'example-full-creature': 'full-creature.json',
   'example-body-frame': 'body-frame.json',
+  'example-splayed-legs': 'splayed-legs.json',
 };
 
 const pivotsOf = (p: Project): PivotElement[] =>
@@ -83,7 +84,7 @@ function elementRefsOf(el: MechanismElement): string[] {
 
 describe('bundled example registry (§9)', () => {
   it('ships all bundled examples, each JSON valid and matching its builder', () => {
-    expect(EXAMPLES).toHaveLength(8);
+    expect(EXAMPLES).toHaveLength(9);
     for (const example of EXAMPLES) {
       const project = example.load();
       const builder = ARTIFACT_BUILDERS[FILE_BY_ID[example.id]!]!;
@@ -518,6 +519,94 @@ describe('example 8 — body frame (suspended), fully-3D closed frame', () => {
   });
 });
 
+describe('example 9 — splayed legs (3D gait), hinge axes off every panel normal', () => {
+  const project = loadExample('example-splayed-legs')!;
+  const mech = project.mechanism;
+
+  it('is a true mirror pair: every node matches across z = 0, axes as axial vectors', () => {
+    const left = mech.nodes.filter((n) => n.id.startsWith('legL.'));
+    expect(left.length).toBeGreaterThan(0);
+    for (const node of left) {
+      const twin = mech.nodes.find((n) => n.id === node.id.replace('legL.', 'legR.'));
+      expect(twin, node.id).toBeDefined();
+      expect(twin!.position.x).toBe(node.position.x);
+      expect(twin!.position.y).toBe(node.position.y);
+      expect(twin!.position.z).toBeCloseTo(-node.position.z, 9);
+      expect(twin!.kind).toBe(node.kind);
+    }
+    // splayed geometry is NOT mirror-invariant about +z: hinge axes mirror
+    // as axial vectors, (x, y, z) → (−x, −y, z), preserving limit signs
+    for (const id of ['yawPivot', 'kneePivot', 'anklePivot', 'toePivot']) {
+      const l = pivot(project, `legL.${id}`);
+      const r = pivot(project, `legR.${id}`);
+      if (l.joint.kind !== 'hinge' || r.joint.kind !== 'hinge') throw new Error('hinges expected');
+      expect(r.joint.axis.x).toBeCloseTo(-l.joint.axis.x, 9);
+      expect(r.joint.axis.y).toBeCloseTo(-l.joint.axis.y, 9);
+      expect(r.joint.axis.z).toBeCloseTo(l.joint.axis.z, 9);
+      expect(r.angleLimit?.minRad).toBe(l.angleLimit?.minRad);
+      expect(r.angleLimit?.maxRad).toBe(l.angleLimit?.maxRad);
+    }
+  });
+
+  it('rotates the leg hinge axes off every panel normal (unit, |x| > 0.2)', () => {
+    for (const side of ['legL', 'legR']) {
+      for (const id of ['kneePivot', 'anklePivot', 'toePivot']) {
+        const piv = pivot(project, `${side}.${id}`);
+        if (piv.joint.kind !== 'hinge') throw new Error('hinge expected');
+        const { x, y, z } = piv.joint.axis;
+        expect(Math.hypot(x, y, z), piv.id).toBeCloseTo(1, 3);
+        expect(Math.abs(x), piv.id).toBeGreaterThan(0.2);
+      }
+    }
+  });
+
+  it('stacks a sprung hip yaw on the swing linkage, centred at the drawn splay', () => {
+    for (const side of ['legL', 'legR']) {
+      const yaw = pivot(project, `${side}.yawPivot`);
+      expect(yaw.joint.kind).toBe('hinge');
+      if (yaw.joint.kind !== 'hinge') throw new Error('hinge expected');
+      // vertical bearing at an anchored yoke (frame-pinned axis)
+      expect(Math.abs(yaw.joint.axis.y)).toBe(1);
+      const yoke = mech.nodes.find((n) => n.id === yaw.nodeId)!;
+      expect(yoke.kind).toBe('anchor');
+      expect(yaw.torsionSpring).toBeDefined();
+      expect(yaw.torsionSpring!.stiffnessNmPerRad).toBe(40);
+      // the spring rests at the drawn splay angle and the limit brackets it
+      const rest = yaw.torsionSpring!.restAngleRad;
+      expect(yaw.angleLimit!.minRad).toBeCloseTo(rest - 0.35, 3);
+      expect(yaw.angleLimit!.maxRad).toBeCloseTo(rest + 0.35, 3);
+    }
+  });
+
+  it('keeps the leg-exo gait harness: bindings, heel elastic, toe rope-as-limit', () => {
+    expect(mech.skeletonBindings.map((b) => b.point).sort()).toEqual([
+      'hipL',
+      'hipR',
+      'kneeL',
+      'kneeR',
+      'shoeL',
+      'shoeR',
+    ]);
+    for (const side of ['legL', 'legR']) {
+      const rope = mech.elements.find((e) => e.id === `${side}.toeLimitRope`);
+      if (rope?.type !== 'rope') throw new Error('toe rope expected');
+      const drawn = dist3(nodePos(project, rope.path[0]!), nodePos(project, rope.path[1]!));
+      expect(rope.lengthM).toBeCloseTo(drawn + 0.02, 3);
+      const heel = mech.elements.find((e) => e.id === `${side}.heelLiftElastic`);
+      if (heel?.type !== 'elastic') throw new Error('heel elastic expected');
+      const hang = dist3(nodePos(project, heel.nodeA), nodePos(project, heel.nodeB));
+      expect(heel.restLengthM).toBeCloseTo(0.72 * hang, 3);
+    }
+  });
+
+  it('populates a fully resolved BOM', () => {
+    const bom = computeBom(project);
+    expect(bom.unresolved.count).toBe(0);
+    expect(bom.weights.grandTotalKg).toBeGreaterThan(1);
+    expect(bom.weights.grandTotalKg).toBeLessThan(15);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // POST-INTEGRATION: behavioral acceptance through solve(). Assertion
 // calibration note: `converged` requires every constraint within 1e-4 m —
@@ -649,6 +738,48 @@ describe('post-integration — examples solve (enable with the 3D solver)', () =
     expect(Math.sign(pannedDown.positions['neck.head']!.z)).toBe(
       Math.sign(panned.positions['neck.head']!.z),
     );
+  });
+
+  it('splayed legs: the walk cycle traces a genuinely out-of-plane paw path', async () => {
+    const { solve } = await import('../solver');
+    const { bindingTargets, getClip, samplePose } = await import('../wearer');
+    const { DEFAULT_WEARER } = await import('../schema');
+    const mech = loadExample('example-splayed-legs')!.mechanism;
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    const femurDrawn = dist3(drawn.get('legL.hipSwing')!, drawn.get('legL.eKnee')!);
+    const walk = getClip('walk')!;
+    const stats = {
+      L: { minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY, sumAbsZ: 0 },
+      R: { minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY, sumAbsZ: 0 },
+    };
+    for (let i = 0; i < 12; i++) {
+      const pose = samplePose(walk, (i / 12) * walk.durationS);
+      const targets = bindingTargets(mech, DEFAULT_WEARER, pose);
+      const result = solve(mech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      for (const s of ['L', 'R'] as const) {
+        const p = result.positions;
+        // the femur stays a rigid pipe through the whole gait
+        const femur = dist3(p[`leg${s}.hipSwing`]!, p[`leg${s}.eKnee`]!);
+        expect(femur, `sample ${i} ${s}`).toBeCloseTo(femurDrawn, 2);
+        expect(dist3(p[`leg${s}.eToe`]!, p[`leg${s}.eToePad`]!)).toBeLessThan(0.155);
+        const pawZ = p[`leg${s}.eToe`]!.z;
+        stats[s].minZ = Math.min(stats[s].minZ, pawZ);
+        stats[s].maxZ = Math.max(stats[s].maxZ, pawZ);
+        stats[s].sumAbsZ += Math.abs(pawZ);
+      }
+    }
+    for (const s of ['L', 'R'] as const) {
+      // out-of-plane path: the paw's z moves over the cycle AND lives
+      // outside the wearer's sagittal band (mean |z| > hip half-width)
+      expect(stats[s].maxZ - stats[s].minZ, s).toBeGreaterThan(0.02);
+      expect(stats[s].sumAbsZ / 12, s).toBeGreaterThan(DEFAULT_WEARER.hipWidthM / 2);
+    }
+    // left lives wearer-left (+z), right wearer-right (−z), and the two
+    // excursions mirror each other across the (phase-shifted) cycle
+    expect(stats.L.minZ).toBeGreaterThan(0);
+    expect(stats.R.maxZ).toBeLessThan(0);
+    expect(stats.L.sumAbsZ / 12).toBeCloseTo(stats.R.sumAbsZ / 12, 1);
+    expect(stats.L.maxZ - stats.L.minZ).toBeCloseTo(stats.R.maxZ - stats.R.minZ, 1);
   });
 
   it('body frame: hangs on the bungees within centimetres of the drawn pose', async () => {

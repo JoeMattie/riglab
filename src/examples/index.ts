@@ -11,6 +11,7 @@ import jawBowdenJson from './jaw-bowden.json';
 import legExoskeletonJson from './leg-exoskeleton.json';
 import neckTrussJson from './neck-truss.json';
 import seesawSpineJson from './seesaw-spine.json';
+import splayedLegsJson from './splayed-legs.json';
 import steerMirrorJson from './steer-mirror.json';
 import tailJson from './tail.json';
 
@@ -22,6 +23,7 @@ export {
   buildLegExoProject,
   buildNeckTrussProject,
   buildSeesawSpineProject,
+  buildSplayedLegsProject,
   buildSteerMirrorProject,
   buildTailProject,
 } from './builders';
@@ -90,6 +92,13 @@ export const EXAMPLES: BundledExample[] = [
     description:
       'Closed rigid 3D box frame with a non-planar bent hoop, bungee/strap suspension to the wearer, and a nose-tuck cinch.',
     load: load(bodyFrameJson),
+  },
+  {
+    id: 'example-splayed-legs',
+    name: 'Splayed legs (3D gait)',
+    description:
+      'Mirrored gait-driven legs with off-panel hinge axes and a sprung hip-yaw joint — the paw wanders in 3D.',
+    load: load(splayedLegsJson),
   },
 ];
 

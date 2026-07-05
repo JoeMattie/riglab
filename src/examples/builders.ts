@@ -16,10 +16,12 @@ import { buildTailParts } from './tailBoom';
 export { buildBodyFrameProject } from './bodyFrame';
 export { buildFullCreatureProject } from './fullCreature';
 export { buildSeesawSpineProject } from './seesawSpine';
+export { buildSplayedLegsProject } from './splayedLegs';
 
 import { buildBodyFrameProject } from './bodyFrame';
 import { buildFullCreatureProject } from './fullCreature';
 import { buildSeesawSpineProject } from './seesawSpine';
+import { buildSplayedLegsProject } from './splayedLegs';
 
 export function buildNeckTrussProject(): Project {
   const parts = buildNeckTrussParts();
@@ -81,4 +83,5 @@ export const ARTIFACT_BUILDERS: Record<string, () => Project> = {
   'tail.json': buildTailProject,
   'full-creature.json': buildFullCreatureProject,
   'body-frame.json': buildBodyFrameProject,
+  'splayed-legs.json': buildSplayedLegsProject,
 };
