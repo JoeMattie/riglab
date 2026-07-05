@@ -87,13 +87,13 @@ describe('ToolPill', () => {
   it('drags by its grip handle', () => {
     render(<ToolPill />);
     const pill = screen.getByTestId('tool-pill');
-    const before = { left: pill.style.left, top: pill.style.top };
+    const before = { left: pill.style.left, bottom: pill.style.bottom };
     const handle = screen.getByTestId('tool-pill-handle');
     fireEvent.pointerDown(handle, { clientX: 50, clientY: 50, pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: 130, clientY: 90, pointerId: 1 });
     fireEvent.pointerUp(handle, { pointerId: 1 });
     expect(pill.style.left).not.toBe(before.left);
-    expect(pill.style.top).not.toBe(before.top);
+    expect(pill.style.bottom).not.toBe(before.bottom);
   });
 
   it('shortcuts are ignored while typing and for modifier chords', () => {

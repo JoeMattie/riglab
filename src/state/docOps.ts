@@ -1,10 +1,14 @@
 // Pure document transforms for sketch editing. All editing flows through
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
+import { defaultPlacement } from '../assembly/placement';
 import type { ProposedChange } from '../design/autoResolve';
 import { derivedMaturity } from '../design/resolution';
 import type {
   BowdenElement,
+  Control,
+  ControlAxis,
+  ControlClip,
   ElasticElement,
   InputChannel,
   JointRealization,
@@ -531,6 +535,49 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
   });
 }
 
+/** Duplicate a pipe element (link/bentLink/telescope) with fresh nodes offset
+ * slightly so the copy is visible and independently draggable (§5 keyboard
+ * shortcut). Returns the new element id, or null for element types whose copy
+ * isn't well-defined on its own (joints, ropes — they reference other parts). */
+export function duplicateElement(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+): { doc: Project; newElementId: string | null } {
+  const mech = doc.mechanisms.find((m) => m.id === mechId);
+  const el = mech?.elements.find((e) => e.id === elementId);
+  if (!mech || !el || (el.type !== 'link' && el.type !== 'bentLink' && el.type !== 'telescope')) {
+    return { doc, newElementId: null };
+  }
+  const off = (p: Vec2): Vec2 => ({ x: p.x + 0.1, y: p.y - 0.1 });
+  const nodeCopies = new Map<string, string>();
+  const oldIds = el.type === 'bentLink' ? el.nodeIds : [el.nodeA, el.nodeB];
+  for (const id of oldIds) if (!nodeCopies.has(id)) nodeCopies.set(id, uid());
+  const newNodes = oldIds.map((id) => {
+    const src = mech.nodes.find((n) => n.id === id)!;
+    // duplicated nodes are free (the copy floats, not grounded/driven)
+    return { id: nodeCopies.get(id)!, kind: 'free' as const, position: off(src.position) };
+  });
+  const newElementId = uid();
+  const copy: MechanismElement =
+    el.type === 'bentLink'
+      ? { ...el, id: newElementId, nodeIds: el.nodeIds.map((id) => nodeCopies.get(id)!) }
+      : {
+          ...el,
+          id: newElementId,
+          nodeA: nodeCopies.get(el.nodeA)!,
+          nodeB: nodeCopies.get(el.nodeB)!,
+        };
+  return {
+    doc: withMechanism(doc, mechId, (m) => ({
+      ...m,
+      nodes: [...m.nodes, ...newNodes],
+      elements: [...m.elements, copy],
+    })),
+    newElementId,
+  };
+}
+
 export function addSkeletonBinding(
   doc: Project,
   mechId: string,
@@ -735,22 +782,30 @@ export function applyAutoResolve(
   mechId: string,
   changes: readonly ProposedChange[],
 ): Project {
-  return changes.reduce((d, c) => {
+  let d = doc;
+  for (const c of changes) {
     switch (c.slot) {
       case 'pipeMaterial':
-        return assignPipeMaterial(d, mechId, [c.elementId], c.after);
+        d = assignPipeMaterial(d, mechId, [c.elementId], c.after);
+        break;
       case 'outerPipeMaterial':
-        return assignTelescopeMaterial(d, mechId, c.elementId, 'outer', c.after);
+        d = assignTelescopeMaterial(d, mechId, c.elementId, 'outer', c.after);
+        break;
       case 'innerPipeMaterial':
-        return assignTelescopeMaterial(d, mechId, c.elementId, 'inner', c.after);
+        d = assignTelescopeMaterial(d, mechId, c.elementId, 'inner', c.after);
+        break;
       case 'realization':
-        return assignRealization(d, mechId, [c.elementId], c.after as JointRealization);
+        d = assignRealization(d, mechId, [c.elementId], c.after as JointRealization);
+        break;
       case 'endRealizationA':
-        return assignEndRealization(d, mechId, c.elementId, 'A', c.after as JointRealization);
+        d = assignEndRealization(d, mechId, c.elementId, 'A', c.after as JointRealization);
+        break;
       case 'endRealizationB':
-        return assignEndRealization(d, mechId, c.elementId, 'B', c.after as JointRealization);
+        d = assignEndRealization(d, mechId, c.elementId, 'B', c.after as JointRealization);
+        break;
     }
-  }, doc);
+  }
+  return d;
 }
 
 /** Inline dimension edit (§8.2, §11): set a link/telescope length by keeping
@@ -972,6 +1027,34 @@ export function patchElement<K extends MechanismElement['type']>(
 
 // ── Assembly (3D) edits (§4.3/§8.3) ────────────────────────────────────────
 
+/** Place a mechanism into the 3D assembly at its view-orientation default
+ * plane (one-click Place on an unplaced ghost, PLANFILE-quad-workspace). The
+ * instance starts fixed-drive so the existing gizmo applies immediately. */
+export function addInstance(
+  doc: Project,
+  mechanismId: string,
+): { doc: Project; instanceId: string | null } {
+  const mech = doc.mechanisms.find((m) => m.id === mechanismId);
+  if (!mech) return { doc, instanceId: null };
+  const { position, quaternion } = defaultPlacement(mech.viewOrientation);
+  const instance: MechanismInstance = {
+    id: uid(),
+    name: mech.name,
+    mechanismId,
+    position,
+    quaternion,
+    mirror: false,
+    transformDrive: { kind: 'fixed' },
+  };
+  return {
+    doc: {
+      ...doc,
+      assembly: { ...doc.assembly, instances: [...doc.assembly.instances, instance] },
+    },
+    instanceId: instance.id,
+  };
+}
+
 /** Patch a mechanism instance's placement transform (gizmo drag, mirror
  * toggle). Pure Project→Project like every other edit, so undo/autosave see
  * one path. */
@@ -1001,4 +1084,107 @@ export function setPointMassKg(doc: Project, pointMassId: string, massKg: number
       ),
     },
   };
+}
+
+// ── Controls + control clips (§4.4) ────────────────────────────────────────
+
+/** Create a control of the given type with one default axis mapped to the
+ * first available channel name (or a placeholder). Returns the new id. */
+export function addControl(
+  doc: Project,
+  type: Control['type'],
+  channelName: string,
+): { doc: Project; controlId: string } {
+  const controlId = uid();
+  const control: Control = {
+    id: controlId,
+    name: `${type[0]!.toUpperCase()}${type.slice(1)} ${doc.controls.length + 1}`,
+    type,
+    axes: [
+      {
+        id: uid(),
+        name: 'axis 1',
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName,
+        outMin: 0,
+        outMax: 1,
+        invert: false,
+        locked: false,
+      },
+    ],
+  };
+  return { doc: { ...doc, controls: [...doc.controls, control] }, controlId };
+}
+
+export function removeControl(doc: Project, controlId: string): Project {
+  return { ...doc, controls: doc.controls.filter((c) => c.id !== controlId) };
+}
+
+function withControl(doc: Project, controlId: string, fn: (c: Control) => Control): Project {
+  return { ...doc, controls: doc.controls.map((c) => (c.id === controlId ? fn(c) : c)) };
+}
+
+export function renameControl(doc: Project, controlId: string, name: string): Project {
+  return withControl(doc, controlId, (c) => ({ ...c, name }));
+}
+
+export function setControlMount(doc: Project, controlId: string, mount: Control['mount']): Project {
+  return withControl(doc, controlId, (c) => ({ ...c, mount }));
+}
+
+export function addControlAxis(doc: Project, controlId: string, channelName: string): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: [
+      ...c.axes,
+      {
+        id: uid(),
+        name: `axis ${c.axes.length + 1}`,
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName,
+        outMin: 0,
+        outMax: 1,
+        invert: false,
+        locked: false,
+      },
+    ],
+  }));
+}
+
+export function removeControlAxis(doc: Project, controlId: string, axisId: string): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: c.axes.filter((a) => a.id !== axisId),
+  }));
+}
+
+export function patchControlAxis(
+  doc: Project,
+  controlId: string,
+  axisId: string,
+  patch: Partial<ControlAxis>,
+): Project {
+  return withControl(doc, controlId, (c) => ({
+    ...c,
+    axes: c.axes.map((a) => (a.id === axisId ? { ...a, ...patch } : a)),
+  }));
+}
+
+/** Add (or replace by name) a control clip. */
+export function upsertControlClip(doc: Project, clip: ControlClip): Project {
+  const exists = doc.controlClips.some((c) => c.name === clip.name);
+  return {
+    ...doc,
+    controlClips: exists
+      ? doc.controlClips.map((c) => (c.name === clip.name ? clip : c))
+      : [...doc.controlClips, clip],
+  };
+}
+
+export function deleteControlClip(doc: Project, name: string): Project {
+  return { ...doc, controlClips: doc.controlClips.filter((c) => c.name !== name) };
 }

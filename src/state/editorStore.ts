@@ -21,8 +21,13 @@ export type Tool =
 export type Face = 'sketch' | 'design';
 
 /** Top-level editor mode (§8): the 2D per-mechanism editor (with sketch/design
- * faces) vs. the global 3D Assembly viewport. Transient, never persisted. */
-export type Mode = '2d' | '3d';
+ * faces), the global 3D Assembly viewport, or the quad workspace
+ * (Top/Front/Side ortho panels + perspective, PLANFILE-quad-workspace).
+ * Transient, never persisted. */
+export type Mode = '2d' | '3d' | 'quad';
+
+/** Quad-workspace panels; `persp` is the 3D perspective preview. */
+export type QuadPanelId = 'top' | 'front' | 'side' | 'persp';
 
 /** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
  * alongside, materials (incl. nesting matrix) and BOM as siblings. */
@@ -100,11 +105,21 @@ export interface AutoProposalState {
 }
 
 export interface PlaybackState {
+  /** active movement clip (§7.2) */
   clipName: string | null;
+  /** active control clip (§4.4), driven on the same timeline as clipName */
+  controlClipName: string | null;
   playing: boolean;
   tS: number;
   speed: number;
   amplitude: number;
+}
+
+/** One captured frame of live control channel values during a recording pass
+ * (§4.4 "record by scrubbing"). */
+export interface RecordFrame {
+  tS: number;
+  values: Record<string, number>;
 }
 
 export interface EditorState {
@@ -121,6 +136,12 @@ export interface EditorState {
   playback: PlaybackState;
   tracing: boolean;
   tracePath: Vec2[];
+  /** control-clip recording pass (§4.4): frames captured while it runs */
+  recording: boolean;
+  recordBuffer: RecordFrame[];
+  /** channel names under an active control-widget drag — their live control
+   * value overrides a playing control clip (manual override, §4.4/§7) */
+  heldChannels: string[];
   pendingConnect: PendingConnect | null;
   openPopover: OpenPopover;
   lengthEdit: LengthEdit | null;
@@ -136,6 +157,13 @@ export interface EditorState {
   equilibrium: EquilibriumReadout;
   /** pending auto-resolve preview; null = none */
   autoProposal: AutoProposalState | null;
+  /** 3D viewport render: wireframe tubes vs the solved pipe-and-fittings
+   * model (PLANFILE-quad-workspace slice 3) */
+  assemblyRender: 'wire' | 'pipe';
+  /** quad workspace: the panel currently maximized (double-click header) */
+  quadMaximized: QuadPanelId | null;
+  /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
+  controlsOpen: boolean;
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
@@ -152,6 +180,10 @@ export interface EditorState {
   clearSelection(): void;
   setPosePositions(p: Record<string, Vec2> | null): void;
   setPlayback(p: Partial<PlaybackState>): void;
+  startRecording(): void;
+  recordFrame(frame: RecordFrame): void;
+  stopRecording(): RecordFrame[];
+  setHeldChannels(channels: string[]): void;
   setTracing(on: boolean): void;
   appendTrace(p: Vec2): void;
   clearTrace(): void;
@@ -163,9 +195,12 @@ export interface EditorState {
   setEquilibriumOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
   setAutoProposal(p: AutoProposalState | null): void;
+  setAssemblyRender(render: 'wire' | 'pipe'): void;
+  setQuadMaximized(panel: QuadPanelId | null): void;
+  setControlsOpen(open: boolean): void;
 }
 
-export const useEditorStore = create<EditorState>()((set) => ({
+export const useEditorStore = create<EditorState>()((set, get) => ({
   activeMechanismId: null,
   tool: 'select',
   mode: '2d',
@@ -174,9 +209,19 @@ export const useEditorStore = create<EditorState>()((set) => ({
   focusHint: null,
   selectedElementIds: [],
   posePositions: null,
-  playback: { clipName: null, playing: false, tS: 0, speed: 1, amplitude: 1 },
+  playback: {
+    clipName: null,
+    controlClipName: null,
+    playing: false,
+    tS: 0,
+    speed: 1,
+    amplitude: 1,
+  },
   tracing: false,
   tracePath: [],
+  recording: false,
+  recordBuffer: [],
+  heldChannels: [],
   pendingConnect: null,
   openPopover: null,
   lengthEdit: null,
@@ -186,6 +231,9 @@ export const useEditorStore = create<EditorState>()((set) => ({
   equilibriumOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
   autoProposal: null,
+  assemblyRender: 'wire',
+  quadMaximized: null,
+  controlsOpen: false,
 
   // face is deliberately kept on mechanism switch — it is a lens, not a
   // per-mechanism property (§8)
@@ -215,6 +263,21 @@ export const useEditorStore = create<EditorState>()((set) => ({
   clearSelection: () => set({ selectedElementIds: [] }),
   setPosePositions: (posePositions) => set({ posePositions }),
   setPlayback: (p) => set((s) => ({ playback: { ...s.playback, ...p } })),
+  // recording resets the timeline and starts the transport so live control
+  // scrubbing is captured against a movement clip on the same timeline (§4.4)
+  startRecording: () =>
+    set((s) => ({
+      recording: true,
+      recordBuffer: [],
+      playback: { ...s.playback, tS: 0, playing: true },
+    })),
+  recordFrame: (frame) => set((s) => ({ recordBuffer: [...s.recordBuffer, frame] })),
+  stopRecording: () => {
+    const frames = get().recordBuffer;
+    set((s) => ({ recording: false, playback: { ...s.playback, playing: false } }));
+    return frames;
+  },
+  setHeldChannels: (heldChannels) => set({ heldChannels }),
   setTracing: (tracing) => set({ tracing, tracePath: [] }),
   appendTrace: (p) => set((s) => ({ tracePath: [...s.tracePath, p] })),
   clearTrace: () => set({ tracePath: [] }),
@@ -238,4 +301,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
     }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
   setAutoProposal: (autoProposal) => set({ autoProposal }),
+  setAssemblyRender: (assemblyRender) => set({ assemblyRender }),
+  setQuadMaximized: (quadMaximized) => set({ quadMaximized }),
+  setControlsOpen: (controlsOpen) => set({ controlsOpen }),
 }));

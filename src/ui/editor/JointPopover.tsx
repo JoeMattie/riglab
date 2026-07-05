@@ -219,7 +219,7 @@ function ConnectMenu({ size }: { size: Size }) {
             <JointGlyph name={o as JointGlyphName} />
           </span>
           {CONNECT_LABELS[o]}
-          {i === 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#7ba4d6' }}>⏎</span>}
+          {i === 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: T.focus }}>⏎</span>}
         </button>
       ))}
     </div>

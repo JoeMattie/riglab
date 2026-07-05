@@ -11,6 +11,7 @@ import { Badge } from '../components/badge';
 import { Button } from '../components/button';
 import { formatLength, formatMass } from '../units';
 import { Row, Section } from './infopanel/fields';
+import { PrintableBom } from './PrintableBom';
 
 function downloadText(text: string, filename: string, mime: string): void {
   const blob = new Blob([text], { type: mime });
@@ -193,12 +194,12 @@ export function BomPanel() {
         </Section>
       )}
 
-      <div className="p-3">
+      <div className="flex gap-2 p-3">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="w-full"
+          className="flex-1"
           data-testid="export-bom-csv"
           onClick={() =>
             downloadText(
@@ -215,7 +216,20 @@ export function BomPanel() {
         >
           Export CSV
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          data-testid="print-bom"
+          onClick={() => window.print()}
+        >
+          Print
+        </Button>
       </div>
+
+      {/* body-portalled shop sheet, shown only under @media print */}
+      <PrintableBom doc={doc} />
     </div>
   );
 }

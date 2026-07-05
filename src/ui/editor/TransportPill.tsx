@@ -189,351 +189,358 @@ export function TransportPill() {
   };
 
   return (
+    // full-width bottom strip that stops short of the DOF pill (bottom-right),
+    // so the pill can grow as wide as the window allows without ever sliding
+    // under it; the pill centers itself within the strip
     <div
       style={{
         position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        left: EDGE,
+        right: 240,
         bottom: EDGE,
         zIndex: 40,
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none',
       }}
     >
-      {clipOpen && (
-        <div
-          data-testid="clip-menu"
-          style={{ ...menuStyle, position: 'absolute', left: 0, bottom: 46, width: 200 }}
-        >
-          <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Movement clip</div>
-          <button
-            type="button"
-            data-testid="clip-option-rest"
-            onClick={() => {
-              setPlayback({ clipName: null, tS: 0, playing: false });
-              setPosePositions(null);
-              setOpenPopover(null);
-            }}
-            style={rowStyle(playback.clipName === null)}
+      <div style={{ position: 'relative', maxWidth: '100%', pointerEvents: 'auto' }}>
+        {clipOpen && (
+          <div
+            data-testid="clip-menu"
+            style={{ ...menuStyle, position: 'absolute', left: 0, bottom: 46, width: 200 }}
           >
-            rest pose
-          </button>
-          {CLIPS.map((c) => (
+            <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Movement clip</div>
             <button
               type="button"
-              key={c.name}
-              data-testid={`clip-option-${c.name}`}
+              data-testid="clip-option-rest"
               onClick={() => {
-                setPlayback({ clipName: c.name, tS: 0, playing: false });
+                setPlayback({ clipName: null, tS: 0, playing: false });
+                setPosePositions(null);
                 setOpenPopover(null);
               }}
-              style={rowStyle(playback.clipName === c.name)}
+              style={rowStyle(playback.clipName === null)}
             >
-              {c.name}
+              rest pose
             </button>
-          ))}
-        </div>
-      )}
-
-      {inputsOpen && (
-        <div
-          data-testid="inputs-panel"
-          style={{ ...menuStyle, position: 'absolute', right: 0, bottom: 46, width: 320 }}
-        >
-          <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Input channels</div>
-          {mech.inputs.map((ch) => {
-            const required = equilibrium.requiredInputs[ch.name];
-            return (
-              <div
-                key={ch.id}
-                data-testid="input-channel"
-                style={{
-                  display: 'flex',
-                  gap: 6,
-                  alignItems: 'center',
-                  padding: '4px 8px',
-                  borderRadius: 8,
+            {CLIPS.map((c) => (
+              <button
+                type="button"
+                key={c.name}
+                data-testid={`clip-option-${c.name}`}
+                onClick={() => {
+                  setPlayback({ clipName: c.name, tS: 0, playing: false });
+                  setOpenPopover(null);
                 }}
+                style={rowStyle(playback.clipName === c.name)}
               >
-                <input
-                  data-testid="input-name"
-                  value={ch.name}
-                  onChange={(e) =>
-                    updateCurrent((cur) =>
-                      setInputChannel(cur, mech.id, ch.id, { name: e.target.value }),
-                    )
-                  }
-                  style={{
-                    width: 64,
-                    font: `400 12px ${T.sans}`,
-                    border: 'none',
-                    borderBottom: `1px solid ${T.border}`,
-                    background: 'transparent',
-                    outline: 'none',
-                    padding: 0,
-                  }}
-                />
-                <input
-                  type="range"
-                  data-testid="input-slider"
-                  min={ch.min}
-                  max={ch.max}
-                  step={(ch.max - ch.min) / 100 || 0.01}
-                  value={ch.value}
-                  disabled={ch.locked}
-                  onPointerDown={beginGesture}
-                  onPointerUp={endGesture}
-                  onChange={(e) =>
-                    updateCurrent((cur) =>
-                      setInputChannel(cur, mech.id, ch.id, { value: Number(e.target.value) }),
-                    )
-                  }
-                  style={{ width: 80 }}
-                />
-                <span
-                  style={{
-                    width: 34,
-                    textAlign: 'right',
-                    font: `500 11.5px ${T.mono}`,
-                    color: T.muted,
-                  }}
-                >
-                  {ch.value.toFixed(2)}
-                </span>
-                <button
-                  type="button"
-                  data-testid="input-lock"
-                  title={ch.locked ? 'unlock channel' : 'lock channel (freeze value)'}
-                  aria-pressed={ch.locked}
-                  onClick={() =>
-                    updateCurrent((cur) =>
-                      setInputChannel(cur, mech.id, ch.id, { locked: !ch.locked }),
-                    )
-                  }
-                  style={{
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    padding: 0,
-                  }}
-                >
-                  {ch.locked ? '🔒' : '🔓'}
-                </button>
-                {equilibriumOn && required !== undefined && (
-                  <span
-                    data-testid="required-input"
-                    style={{ color: '#036', whiteSpace: 'nowrap', fontSize: 11.5 }}
-                  >
-                    needs {formatRequiredInput(required, ch, units)}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  data-testid="input-remove"
-                  title="remove channel"
-                  onClick={() => updateCurrent((cur) => removeInputChannel(cur, mech.id, ch.id))}
-                  style={{
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    color: '#a55',
-                    marginLeft: 'auto',
-                    padding: 0,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-          <button
-            type="button"
-            data-testid="add-input"
-            title="add an input channel"
-            onClick={() => updateCurrent((cur) => addInputChannel(cur, mech.id).doc)}
-            style={{ ...rowStyle(false), color: T.accent }}
-          >
-            + input
-          </button>
-        </div>
-      )}
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
 
-      <div
-        data-testid="transport-pill"
-        style={{
-          ...panelStyle,
-          borderRadius: 14,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '9px 14px',
-          // keep clear of the DOF pill (bottom-right): on narrow windows the
-          // pill wraps to a second row instead of sliding under it, where its
-          // trailing controls would be unclickable
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          maxWidth: 'calc(100vw - 360px)',
-        }}
-      >
-        <button
-          type="button"
-          data-testid="clip-select"
-          onClick={() => setOpenPopover(clipOpen ? null : { kind: 'clip' })}
-          style={{ ...miniButtonStyle, fontWeight: 400 }}
-        >
-          {playback.clipName ?? 'rest pose'} ▾
-        </button>
-        <button
-          type="button"
-          data-testid="play-pause"
-          title={playback.playing ? 'pause' : 'play'}
-          disabled={!clip}
-          onClick={() => setPlayback({ playing: !playback.playing })}
+        {inputsOpen && (
+          <div
+            data-testid="inputs-panel"
+            style={{ ...menuStyle, position: 'absolute', right: 0, bottom: 46, width: 320 }}
+          >
+            <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Input channels</div>
+            {mech.inputs.map((ch) => {
+              const required = equilibrium.requiredInputs[ch.name];
+              return (
+                <div
+                  key={ch.id}
+                  data-testid="input-channel"
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    alignItems: 'center',
+                    padding: '4px 8px',
+                    borderRadius: 8,
+                  }}
+                >
+                  <input
+                    data-testid="input-name"
+                    value={ch.name}
+                    onChange={(e) =>
+                      updateCurrent((cur) =>
+                        setInputChannel(cur, mech.id, ch.id, { name: e.target.value }),
+                      )
+                    }
+                    style={{
+                      width: 64,
+                      font: `400 12px ${T.sans}`,
+                      border: 'none',
+                      borderBottom: `1px solid ${T.border}`,
+                      background: 'transparent',
+                      outline: 'none',
+                      padding: 0,
+                    }}
+                  />
+                  <input
+                    type="range"
+                    data-testid="input-slider"
+                    min={ch.min}
+                    max={ch.max}
+                    step={(ch.max - ch.min) / 100 || 0.01}
+                    value={ch.value}
+                    disabled={ch.locked}
+                    onPointerDown={beginGesture}
+                    onPointerUp={endGesture}
+                    onChange={(e) =>
+                      updateCurrent((cur) =>
+                        setInputChannel(cur, mech.id, ch.id, { value: Number(e.target.value) }),
+                      )
+                    }
+                    style={{ width: 80 }}
+                  />
+                  <span
+                    style={{
+                      width: 34,
+                      textAlign: 'right',
+                      font: `500 11.5px ${T.mono}`,
+                      color: T.muted,
+                    }}
+                  >
+                    {ch.value.toFixed(2)}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="input-lock"
+                    title={ch.locked ? 'unlock channel' : 'lock channel (freeze value)'}
+                    aria-pressed={ch.locked}
+                    onClick={() =>
+                      updateCurrent((cur) =>
+                        setInputChannel(cur, mech.id, ch.id, { locked: !ch.locked }),
+                      )
+                    }
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      padding: 0,
+                    }}
+                  >
+                    {ch.locked ? '🔒' : '🔓'}
+                  </button>
+                  {equilibriumOn && required !== undefined && (
+                    <span
+                      data-testid="required-input"
+                      style={{ color: T.tension, whiteSpace: 'nowrap', fontSize: 11.5 }}
+                    >
+                      needs {formatRequiredInput(required, ch, units)}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="input-remove"
+                    title="remove channel"
+                    onClick={() => updateCurrent((cur) => removeInputChannel(cur, mech.id, ch.id))}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      color: T.dangerText,
+                      marginLeft: 'auto',
+                      padding: 0,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              data-testid="add-input"
+              title="add an input channel"
+              onClick={() => updateCurrent((cur) => addInputChannel(cur, mech.id).doc)}
+              style={{ ...rowStyle(false), color: T.accent }}
+            >
+              + input
+            </button>
+          </div>
+        )}
+
+        <div
+          data-testid="transport-pill"
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: '50%',
-            background: T.text,
-            border: 'none',
-            cursor: clip ? 'pointer' : 'default',
-            display: 'grid',
-            placeItems: 'center',
-            opacity: clip ? 1 : 0.4,
-            padding: 0,
-            flex: 'none',
-          }}
-        >
-          {playback.playing ? (
-            <svg width={9} height={11} viewBox="0 0 9 11" aria-hidden="true">
-              <rect x={0.5} y={0.5} width={2.8} height={10} fill="#fff" />
-              <rect x={5.7} y={0.5} width={2.8} height={10} fill="#fff" />
-            </svg>
-          ) : (
-            <svg width={10} height={12} viewBox="0 0 10 12" aria-hidden="true">
-              <path d="M1 1 L9 6 L1 11 Z" fill="#fff" />
-            </svg>
-          )}
-        </button>
-        <span
-          ref={scrubberRef}
-          data-testid="clip-scrubber"
-          onPointerDown={(e) => {
-            if (!clip) return;
-            e.currentTarget.setPointerCapture?.(e.pointerId);
-            scrubTo(e.clientX);
-          }}
-          onPointerMove={(e) => {
-            if (e.buttons & 1) scrubTo(e.clientX);
-          }}
-          style={{
-            position: 'relative',
-            width: 210,
-            height: 18,
+            ...panelStyle,
+            borderRadius: 14,
             display: 'flex',
             alignItems: 'center',
-            cursor: clip ? 'pointer' : 'default',
-            opacity: clip ? 1 : 0.5,
+            gap: 12,
+            padding: '9px 14px',
+            // last-resort fallback: on very narrow windows the pill wraps to a
+            // second row instead of overflowing the strip
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            maxWidth: '100%',
           }}
         >
-          <span style={{ width: '100%', height: 4, borderRadius: 2, background: '#e9e9ee' }} />
-          <span
-            style={{
-              position: 'absolute',
-              left: 0,
-              width: `${progress * 100}%`,
-              height: 4,
-              borderRadius: 2,
-              background: T.accent,
-            }}
-          />
-          <span
-            style={{
-              position: 'absolute',
-              left: `calc(${progress * 100}% - 7px)`,
-              width: 14,
-              height: 14,
-              borderRadius: '50%',
-              background: '#fff',
-              border: `2px solid ${T.accent}`,
-              boxShadow: '0 1px 3px rgba(20,24,40,.2)',
-              boxSizing: 'border-box',
-            }}
-          />
-        </span>
-        <span style={{ font: `500 11.5px ${T.mono}`, color: T.muted, whiteSpace: 'nowrap' }}>
-          {fmtTime(playback.tS)} / {fmtTime(clip?.durationS ?? 0)}
-        </span>
-        <span style={{ ...dividerStyle, height: 20 }} />
-        <ScrubLabel
-          text={`${playback.speed.toFixed(1)}×`}
-          title="speed — drag to scrub"
-          value={playback.speed}
-          min={0.2}
-          max={3}
-          perPx={0.01}
-          onChange={(v) => setPlayback({ speed: v })}
-        />
-        <ScrubLabel
-          text={`amp ${Math.round(playback.amplitude * 100)}%`}
-          title="amplitude — drag to scrub"
-          value={playback.amplitude}
-          min={0}
-          max={1.5}
-          perPx={0.005}
-          onChange={(v) => setPlayback({ amplitude: v })}
-        />
-        <span style={{ ...dividerStyle, height: 20 }} />
-        <ToggleChip
-          testId="gravity-toggle"
-          label="gravity"
-          on={mech.gravityOn}
-          onClick={() => updateCurrent((cur) => setGravity(cur, mech.id, !mech.gravityOn))}
-        />
-        <ToggleChip
-          testId="equilibrium-toggle"
-          label="forces"
-          title="equilibrium force overlays"
-          on={equilibriumOn}
-          onClick={() => setEquilibriumOn(!equilibriumOn)}
-        />
-        <ToggleChip
-          testId="trace-toggle"
-          label="trace"
-          title="trace the dragged node's motion path"
-          on={tracing}
-          onClick={() => setTracing(!tracing)}
-        />
-        <span
-          data-testid="solver-status"
-          title="equilibrium solver status"
-          style={{
-            font: `500 11px ${T.mono}`,
-            color: T.muted,
-            whiteSpace: 'nowrap',
-            width: 108,
-            flex: 'none',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {equilibriumOn ? solverStatusLabel(equilibrium.status) : ''}
-        </span>
-        {equilibriumOn && compressionCount > 0 && (
-          <span
-            data-testid="compression-warning"
-            style={{ color: '#c00', fontSize: 11.5, whiteSpace: 'nowrap' }}
+          <button
+            type="button"
+            data-testid="clip-select"
+            onClick={() => setOpenPopover(clipOpen ? null : { kind: 'clip' })}
+            style={{ ...miniButtonStyle, fontWeight: 400 }}
           >
-            ⚠ {compressionCount} rope{compressionCount > 1 ? 's' : ''}{' '}
-            {compressionCount > 1 ? 'require' : 'requires'} compression
+            {playback.clipName ?? 'rest pose'} ▾
+          </button>
+          <button
+            type="button"
+            data-testid="play-pause"
+            title={playback.playing ? 'pause' : 'play'}
+            disabled={!clip}
+            onClick={() => setPlayback({ playing: !playback.playing })}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: '50%',
+              background: T.text,
+              border: 'none',
+              cursor: clip ? 'pointer' : 'default',
+              display: 'grid',
+              placeItems: 'center',
+              opacity: clip ? 1 : 0.4,
+              padding: 0,
+              flex: 'none',
+            }}
+          >
+            {playback.playing ? (
+              <svg width={9} height={11} viewBox="0 0 9 11" aria-hidden="true">
+                <rect x={0.5} y={0.5} width={2.8} height={10} fill={T.panel} />
+                <rect x={5.7} y={0.5} width={2.8} height={10} fill={T.panel} />
+              </svg>
+            ) : (
+              <svg width={10} height={12} viewBox="0 0 10 12" aria-hidden="true">
+                <path d="M1 1 L9 6 L1 11 Z" fill={T.panel} />
+              </svg>
+            )}
+          </button>
+          <span
+            ref={scrubberRef}
+            data-testid="clip-scrubber"
+            onPointerDown={(e) => {
+              if (!clip) return;
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              scrubTo(e.clientX);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons & 1) scrubTo(e.clientX);
+            }}
+            style={{
+              position: 'relative',
+              width: 210,
+              height: 18,
+              display: 'flex',
+              alignItems: 'center',
+              cursor: clip ? 'pointer' : 'default',
+              opacity: clip ? 1 : 0.5,
+            }}
+          >
+            <span style={{ width: '100%', height: 4, borderRadius: 2, background: T.track }} />
+            <span
+              style={{
+                position: 'absolute',
+                left: 0,
+                width: `${progress * 100}%`,
+                height: 4,
+                borderRadius: 2,
+                background: T.accent,
+              }}
+            />
+            <span
+              style={{
+                position: 'absolute',
+                left: `calc(${progress * 100}% - 7px)`,
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                background: '#fff',
+                border: `2px solid ${T.accent}`,
+                boxShadow: '0 1px 3px rgba(20,24,40,.2)',
+                boxSizing: 'border-box',
+              }}
+            />
           </span>
-        )}
-        <button
-          type="button"
-          data-testid="inputs-toggle"
-          onClick={() => setOpenPopover(inputsOpen ? null : { kind: 'inputs' })}
-          style={toggleChipStyle(inputsOpen)}
-        >
-          inputs ({mech.inputs.length}) ▾
-        </button>
+          <span style={{ font: `500 11.5px ${T.mono}`, color: T.muted, whiteSpace: 'nowrap' }}>
+            {fmtTime(playback.tS)} / {fmtTime(clip?.durationS ?? 0)}
+          </span>
+          <span style={{ ...dividerStyle, height: 20 }} />
+          <ScrubLabel
+            text={`${playback.speed.toFixed(1)}×`}
+            title="speed — drag to scrub"
+            value={playback.speed}
+            min={0.2}
+            max={3}
+            perPx={0.01}
+            onChange={(v) => setPlayback({ speed: v })}
+          />
+          <ScrubLabel
+            text={`amp ${Math.round(playback.amplitude * 100)}%`}
+            title="amplitude — drag to scrub"
+            value={playback.amplitude}
+            min={0}
+            max={1.5}
+            perPx={0.005}
+            onChange={(v) => setPlayback({ amplitude: v })}
+          />
+          <span style={{ ...dividerStyle, height: 20 }} />
+          <ToggleChip
+            testId="gravity-toggle"
+            label="gravity"
+            on={mech.gravityOn}
+            onClick={() => updateCurrent((cur) => setGravity(cur, mech.id, !mech.gravityOn))}
+          />
+          <ToggleChip
+            testId="equilibrium-toggle"
+            label="forces"
+            title="equilibrium force overlays"
+            on={equilibriumOn}
+            onClick={() => setEquilibriumOn(!equilibriumOn)}
+          />
+          <ToggleChip
+            testId="trace-toggle"
+            label="trace"
+            title="trace the dragged node's motion path"
+            on={tracing}
+            onClick={() => setTracing(!tracing)}
+          />
+          <span
+            data-testid="solver-status"
+            title="equilibrium solver status"
+            style={{
+              font: `500 11px ${T.mono}`,
+              color: T.muted,
+              whiteSpace: 'nowrap',
+              width: 108,
+              flex: 'none',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {equilibriumOn ? solverStatusLabel(equilibrium.status) : ''}
+          </span>
+          {equilibriumOn && compressionCount > 0 && (
+            <span
+              data-testid="compression-warning"
+              style={{ color: T.danger, fontSize: 11.5, whiteSpace: 'nowrap' }}
+            >
+              ⚠ {compressionCount} rope{compressionCount > 1 ? 's' : ''}{' '}
+              {compressionCount > 1 ? 'require' : 'requires'} compression
+            </span>
+          )}
+          <button
+            type="button"
+            data-testid="inputs-toggle"
+            onClick={() => setOpenPopover(inputsOpen ? null : { kind: 'inputs' })}
+            style={toggleChipStyle(inputsOpen)}
+          >
+            inputs ({mech.inputs.length}) ▾
+          </button>
+        </div>
       </div>
     </div>
   );

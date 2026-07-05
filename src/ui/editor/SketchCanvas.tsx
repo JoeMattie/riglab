@@ -1,6 +1,7 @@
 import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { projectControlChannels } from '../../controls';
 import { elementLinearDensities } from '../../design/densities';
 import { elementIdsInRect, normalizedRect } from '../../design/marquee';
 import type { Mechanism, PivotElement, SliderElement, Vec2 } from '../../schema';
@@ -19,6 +20,7 @@ import {
   setNodeKind,
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
+import { useThemeStore } from '../../state/themeStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
@@ -33,6 +35,7 @@ import { pinchStep, wheelGesture } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
 import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
+import { scenePalette, T } from './theme';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
@@ -130,12 +133,30 @@ interface EndpointDrag {
 export const lengthStepM = (units: 'imperial' | 'metric'): number =>
   units === 'imperial' ? 0.5 * M_PER_IN : 0.01;
 
-export function SketchCanvas() {
+/** World-context ghost overlay for the quad workspace (PLANFILE-quad-
+ * workspace slice 4): other mechanisms' geometry projected into the active
+ * mechanism's local frame, clickable to switch the active mechanism. */
+export interface PanelOverlayItem {
+  mechanismId: string;
+  name: string;
+  segments: [Vec2, Vec2][];
+}
+
+export interface PanelOverlay {
+  items: PanelOverlayItem[];
+  onPick(mechanismId: string): void;
+}
+
+export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}) {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
+  // Konva shapes take literal colors (no CSS variables), so the drawing
+  // palette re-renders off the night flag
+  const night = useThemeStore((s) => s.night);
+  const C = scenePalette(night);
   const tool = useEditorStore((s) => s.tool);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const select = useEditorStore((s) => s.select);
@@ -144,6 +165,7 @@ export function SketchCanvas() {
   const posePositions = useEditorStore((s) => s.posePositions);
   const setPosePositions = useEditorStore((s) => s.setPosePositions);
   const playback = useEditorStore((s) => s.playback);
+  const heldChannels = useEditorStore((s) => s.heldChannels);
   const tracing = useEditorStore((s) => s.tracing);
   const tracePath = useEditorStore((s) => s.tracePath);
   const appendTrace = useEditorStore((s) => s.appendTrace);
@@ -306,6 +328,23 @@ export function SketchCanvas() {
     return clip ? samplePose(clip, playback.tS, { amplitude: playback.amplitude }) : REST_POSE;
   }, [playback.clipName, playback.tS, playback.amplitude]);
 
+  // live control channel values (§4.4): controls + a playing control clip drive
+  // input channels by name, overlaid on each mechanism's authored input values
+  const controlChannels = useMemo(
+    () =>
+      doc
+        ? projectControlChannels({
+            controls: doc.controls,
+            controlClips: doc.controlClips,
+            controlClipName: playback.controlClipName,
+            tS: playback.tS,
+            speed: playback.speed,
+            heldChannels: new Set(heldChannels),
+          })
+        : {},
+    [doc, playback.controlClipName, playback.tS, playback.speed, heldChannels],
+  );
+
   const silhouette = useMemo(
     () => (doc && mech ? computeSilhouette(doc.wearer, pose, mech.viewOrientation) : null),
     [doc, mech, pose],
@@ -374,7 +413,10 @@ export function SketchCanvas() {
     (dragTargets: Record<string, Vec2>) => {
       if (!doc || !mech) return null;
       const targets = { ...bindingTargets(mech, doc.wearer, pose), ...dragTargets };
-      const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+      const channelValues = {
+        ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
+        ...controlChannels,
+      };
       const result = solve(mech, { channelValues, dragTargets: targets }, 'kinematic');
       setDiagnostics(
         { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
@@ -382,7 +424,7 @@ export function SketchCanvas() {
       );
       return result;
     },
-    [doc, mech, pose, setDiagnostics],
+    [doc, mech, pose, controlChannels, setDiagnostics],
   );
 
   // diagnostics on edit; pose-driven solve during playback/scrub
@@ -403,7 +445,10 @@ export function SketchCanvas() {
   // degrades to an `unavailable` status instead of throwing.
   useEffect(() => {
     if (!mech || !doc || !equilibriumOn || dragNode) return;
-    const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+    const channelValues = {
+      ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
+      ...controlChannels,
+    };
     const targets = bindingTargets(mech, doc.wearer, pose);
     // materials integration (§4.2): engineered pipes weigh what their material
     // weighs; sketch pipes fall back to the configurable generic density
@@ -420,7 +465,7 @@ export function SketchCanvas() {
       ),
     );
     setEquilibrium(readout);
-  }, [mech, doc, equilibriumOn, dragNode, pose, setEquilibrium]);
+  }, [mech, doc, equilibriumOn, dragNode, pose, controlChannels, setEquilibrium]);
 
   const stagePointer = (e: Konva.KonvaEventObject<MouseEvent>): Vec2 | null => {
     const stage = e.target.getStage();
@@ -924,7 +969,7 @@ export function SketchCanvas() {
     return (
       <div
         ref={containerRef}
-        style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#888' }}
+        style={{ flex: 1, display: 'grid', placeItems: 'center', color: T.muted }}
       >
         <p>Create a mechanism to start sketching.</p>
       </div>
@@ -983,7 +1028,7 @@ export function SketchCanvas() {
 
   const selectedSet = new Set(selectedElementIds);
   const strokeFor = (id: string): string =>
-    violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : '#324';
+    violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : C.ink;
   const pipeWidth = (id: string): number => (selectedSet.has(id) ? 5.5 : 5);
 
   // white endpoint handles on selected pipes (drag = length edit)
@@ -1044,7 +1089,7 @@ export function SketchCanvas() {
               // biome-ignore lint/suspicious/noArrayIndexKey: grid lines are positional, regenerated wholesale, and never reorder
               key={i}
               points={g.pts}
-              stroke={g.strong ? '#c8c8d4' : '#ededf2'}
+              stroke={g.strong ? C.gridStrong : C.gridWeak}
               strokeWidth={1}
             />
           ))}
@@ -1053,7 +1098,7 @@ export function SketchCanvas() {
               // biome-ignore lint/suspicious/noArrayIndexKey: silhouette outlines are a fixed projection, regenerated wholesale, never reordered
               key={`s${i}`}
               points={flat(poly)}
-              stroke="#b9c0cc"
+              stroke={C.silhouette}
               strokeWidth={2}
               lineJoin="round"
             />
@@ -1085,6 +1130,42 @@ export function SketchCanvas() {
               />
             ))}
         </Layer>
+
+        {/* quad-workspace ghost overlay: other mechanisms in this plane,
+            projected into the active mechanism's frame; click to activate */}
+        {overlay && overlay.items.length > 0 && (
+          <Layer>
+            {overlay.items.map((item, gi) => (
+              <Group
+                // biome-ignore lint/suspicious/noArrayIndexKey: a mechanism can ghost twice (mirrored instances); items regenerate wholesale
+                key={`${item.mechanismId}:${gi}`}
+                onClick={() => overlay.onPick(item.mechanismId)}
+                onTap={() => overlay.onPick(item.mechanismId)}
+                onMouseEnter={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = 'pointer';
+                }}
+                onMouseLeave={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = '';
+                }}
+              >
+                {item.segments.map((seg, i) => (
+                  <Line
+                    // biome-ignore lint/suspicious/noArrayIndexKey: ghost segments are positional, regenerated wholesale
+                    key={i}
+                    points={flat(seg)}
+                    stroke={C.silhouette}
+                    strokeWidth={3.5}
+                    opacity={0.55}
+                    lineCap="round"
+                    hitStrokeWidth={12}
+                  />
+                ))}
+              </Group>
+            ))}
+          </Layer>
+        )}
 
         <Layer>
           {mech.elements.map((el) => {
@@ -1124,7 +1205,7 @@ export function SketchCanvas() {
                 <Line
                   key={el.id}
                   points={flat(el.path.map(nodePos))}
-                  stroke={cordStroke(el.id, '#557')}
+                  stroke={cordStroke(el.id, C.rope)}
                   strokeWidth={2}
                   dash={[4, 4]}
                   lineCap="round"
@@ -1230,7 +1311,7 @@ export function SketchCanvas() {
           {endpointDrag && (
             <Line
               points={flat(endpointDrag.ghost)}
-              stroke="#ccc"
+              stroke={C.dim}
               strokeWidth={3}
               dash={[6, 5]}
               lineCap="round"
@@ -1318,8 +1399,8 @@ export function SketchCanvas() {
                   y={p.y - 6}
                   text={label}
                   fontSize={11}
-                  fill={compression ? '#c00' : '#036'}
-                  shadowColor="#fff"
+                  fill={compression ? '#c00' : C.tension}
+                  shadowColor={C.halo}
                   shadowBlur={2}
                   shadowOpacity={1}
                   listening={false}
@@ -1352,7 +1433,7 @@ export function SketchCanvas() {
                   offsetX={6.5}
                   offsetY={6.5}
                   rotation={45}
-                  fill="#222"
+                  fill={C.ink}
                 />
               );
             }
@@ -1363,7 +1444,7 @@ export function SketchCanvas() {
                   x={p.x}
                   y={p.y}
                   radius={7.5}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke="#2a2"
                   strokeWidth={3}
                 />
@@ -1389,7 +1470,7 @@ export function SketchCanvas() {
                   offsetY={8}
                   rotation={rotation}
                   cornerRadius={8}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke="#28d"
                   strokeWidth={3}
                 />
@@ -1409,7 +1490,7 @@ export function SketchCanvas() {
                   y={p.y - 7}
                   width={14}
                   height={14}
-                  fill={bindFrom === n.id ? '#d80' : '#324'}
+                  fill={bindFrom === n.id ? '#d80' : C.ink}
                 />
               );
             }
@@ -1420,7 +1501,7 @@ export function SketchCanvas() {
                   x={p.x}
                   y={p.y}
                   radius={7.5}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke={bindFrom === n.id ? '#d80' : '#28d'}
                   strokeWidth={3}
                 />
@@ -1446,7 +1527,7 @@ export function SketchCanvas() {
                 x={p.x}
                 y={p.y}
                 radius={9}
-                fill="#fff"
+                fill={C.nodeFill}
                 stroke="#d80"
                 strokeWidth={3}
                 opacity={locked ? 0.55 : 1}
@@ -1460,7 +1541,7 @@ export function SketchCanvas() {
               x={S(hoverSnap.pos).x}
               y={S(hoverSnap.pos).y}
               radius={8}
-              stroke={hoverSnap.kind === 'grid' ? '#bbb' : '#e33'}
+              stroke={hoverSnap.kind === 'grid' ? C.snap : '#e33'}
               strokeWidth={1.5}
               listening={false}
             />

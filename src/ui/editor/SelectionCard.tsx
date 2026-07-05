@@ -258,7 +258,7 @@ function PipeRows({
           alignItems: 'center',
           gap: 5,
           border: `1px solid ${T.border}`,
-          background: '#fff',
+          background: T.raised,
           borderRadius: 6,
           padding: '2px 8px',
           font: `400 12.5px ${T.sans}`,
@@ -280,7 +280,7 @@ function PipeRows({
             data-testid="card-length"
             style={{
               font: `500 12.5px ${T.mono}`,
-              background: locked ? T.accent : '#f4f4f5',
+              background: locked ? T.accent : T.chip,
               color: locked ? '#fff' : T.text,
               borderRadius: 6,
               padding: '2px 8px',

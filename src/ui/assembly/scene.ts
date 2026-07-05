@@ -3,11 +3,32 @@
 // mannequin) the r3f layer draws as <Line>s. Kept pure so the geometry is
 // unit-testable without a WebGL context.
 
-import type { ComposedInstance } from '../../assembly';
-import type { MechanismElement, Vec3 } from '../../schema';
+import { type ComposedInstance, GENERIC_PIPE_OD_M } from '../../assembly';
+import type { MechanismElement, PipeMaterial, Vec3 } from '../../schema';
 import type { SkeletonFrame } from '../../wearer/skeleton';
 
 export type Segment = [Vec3, Vec3];
+
+export { GENERIC_PIPE_OD_M };
+/** Mannequin capsule radius — thick enough to read against the light bg. */
+export const MANNEQUIN_RADIUS_M = 0.035;
+
+export interface TubePrim {
+  a: Vec3;
+  b: Vec3;
+  radiusM: number;
+  /** engineered = material OD known; sketch = generic-OD stand-in */
+  style: 'engineered' | 'sketch';
+}
+
+export interface CablePrim {
+  points: Vec3[];
+}
+
+export interface InstancePrimitives {
+  tubes: TubePrim[];
+  cables: CablePrim[];
+}
 
 /** Ordered node ids to stroke for an element, or null for elements that carry
  * no drawn geometry of their own (pivots/sliders live at a node; torsion
@@ -49,6 +70,85 @@ export function instanceSegments(
     }
   }
   return out;
+}
+
+/** Contiguous runs of ≥2 resolved points along an id polyline. A missing
+ * (unsolved) node splits the run rather than bridging across it. */
+function resolvedRuns(ids: string[], nodeWorld: ComposedInstance['nodeWorld']): Vec3[][] {
+  const runs: Vec3[][] = [];
+  let run: Vec3[] = [];
+  for (const id of ids) {
+    const p = nodeWorld[id];
+    if (p) {
+      run.push(p);
+    } else {
+      if (run.length >= 2) runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length >= 2) runs.push(run);
+  return runs;
+}
+
+/** World-space render primitives for one instance's mechanism: rigid members
+ * (link / bentLink / telescope) as tubes — true OD/2 when the element is
+ * engineered with a resolvable pipe material, generic OD otherwise — and
+ * tension members (rope / elastic / bowden) as cables. Pivots, sliders and
+ * torsion couplings carry no drawn geometry here (the pipe model renders
+ * joint realizations). */
+export function instancePrimitives(
+  elements: MechanismElement[],
+  nodeWorld: ComposedInstance['nodeWorld'],
+  pipes: PipeMaterial[],
+): InstancePrimitives {
+  const tubes: TubePrim[] = [];
+  const cables: CablePrim[] = [];
+  const pipe = (id: string | undefined) => pipes.find((p) => p.id === id);
+
+  const tubeRun = (ids: string[], mat: PipeMaterial | undefined, engineered: boolean) => {
+    const style = engineered && mat ? 'engineered' : 'sketch';
+    const radiusM = (engineered && mat ? mat.outerDiameterM : GENERIC_PIPE_OD_M) / 2;
+    for (const run of resolvedRuns(ids, nodeWorld)) {
+      for (let i = 1; i < run.length; i++) {
+        tubes.push({ a: run[i - 1]!, b: run[i]!, radiusM, style });
+      }
+    }
+  };
+
+  for (const el of elements) {
+    switch (el.type) {
+      case 'link':
+        tubeRun([el.nodeA, el.nodeB], pipe(el.pipeMaterialId), el.maturity === 'engineered');
+        break;
+      case 'bentLink':
+        tubeRun(el.nodeIds, pipe(el.pipeMaterialId), el.maturity === 'engineered');
+        break;
+      case 'telescope':
+        tubeRun([el.nodeA, el.nodeB], pipe(el.outerPipeMaterialId), el.maturity === 'engineered');
+        break;
+      case 'rope':
+      case 'elastic':
+      case 'bowden':
+        for (const poly of elementPolylines(el)) {
+          for (const run of resolvedRuns(poly, nodeWorld)) cables.push({ points: run });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return { tubes, cables };
+}
+
+/** Mannequin bones as capsule tubes (§8.3 visibility: the stick figure must
+ * read against the light background, so it gets volume, not 1-px lines). */
+export function mannequinTubes(frame: SkeletonFrame): TubePrim[] {
+  return mannequinBones(frame).map(([a, b]) => ({
+    a,
+    b,
+    radiusM: MANNEQUIN_RADIUS_M,
+    style: 'sketch' as const,
+  }));
 }
 
 /** Wearer mannequin bones in world space (§7 stick figure). */

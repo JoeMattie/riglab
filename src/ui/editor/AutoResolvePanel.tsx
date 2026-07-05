@@ -158,8 +158,12 @@ function AutoResolveLauncher({
       >
         {label}
       </Button>
-      <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
+      <label
+        htmlFor="auto-resolve-reassign"
+        className="flex items-center gap-1.5 text-muted-foreground text-xs"
+      >
         <Checkbox
+          id="auto-resolve-reassign"
           data-testid="auto-resolve-reassign"
           checked={resolveAssigned}
           onCheckedChange={(v) => setResolveAssigned(v === true)}

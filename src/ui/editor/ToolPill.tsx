@@ -95,7 +95,8 @@ export function ToolPill() {
         ...panelStyle,
         position: 'absolute',
         left: Math.max(0, EDGE + offset.x),
-        top: Math.max(0, 88 + offset.y),
+        // docked bottom-left, above the transport strip (~40px pill + EDGE)
+        bottom: Math.max(0, EDGE + 56 - offset.y),
         width: 158,
         padding: 8,
         display: 'flex',
@@ -124,7 +125,7 @@ export function ToolPill() {
           placeItems: 'center',
           padding: '1px 0 3px',
           cursor: 'grab',
-          color: '#d4d4d8',
+          color: T.ghost,
           touchAction: 'none',
         }}
       >
@@ -190,7 +191,7 @@ export function ToolPill() {
                   style={{
                     marginLeft: 'auto',
                     font: `500 10.5px ${T.mono}`,
-                    color: active ? '#7ba4d6' : '#c4c4cc',
+                    color: active ? T.focus : T.ghost,
                   }}
                 >
                   {t.kbd}
