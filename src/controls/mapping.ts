@@ -5,6 +5,30 @@
 // control clip, and a manual override all resolve through one path.
 import type { Control, ControlAxis, ControlClip } from '../schema';
 
+/** Resolve a project's live control channel values for a solve at the current
+ * transport time. Looks up the active control clip by name and composes it with
+ * the live controls (held-channel override). Convenience wrapper the 2D solve
+ * and the 3D composition both call so controls drive one code path. */
+export function projectControlChannels(opts: {
+  controls: Control[];
+  controlClips: ControlClip[];
+  controlClipName?: string | null;
+  tS?: number;
+  speed?: number;
+  heldChannels?: Set<string>;
+}): Record<string, number> {
+  const clip = opts.controlClipName
+    ? (opts.controlClips.find((c) => c.name === opts.controlClipName) ?? null)
+    : null;
+  return resolveChannelValues({
+    clip,
+    clipTimeS: opts.tS,
+    clipSpeed: opts.speed,
+    controls: opts.controls,
+    heldChannels: opts.heldChannels,
+  });
+}
+
 /** Clamp v to [a, b] regardless of order. */
 function clamp(v: number, a: number, b: number): number {
   const lo = Math.min(a, b);
@@ -78,11 +102,56 @@ export function sampleControlClip(
   return out;
 }
 
+export interface RecordFrame {
+  tS: number;
+  values: Record<string, number>;
+}
+
+/** Build a control clip from frames captured while scrubbing/recording (§4.4).
+ * Frames are sampled channel values over time; this collapses them to one
+ * keyframe track per channel over the shared, deduped, ascending time line.
+ * Returns null when there is nothing recordable (no channels, or zero span). */
+export function buildControlClip(
+  name: string,
+  frames: RecordFrame[],
+  loop = false,
+): ControlClip | null {
+  if (frames.length === 0) return null;
+  // dedupe by time (last write wins), sort ascending
+  const byTime = new Map<number, Record<string, number>>();
+  for (const f of frames) byTime.set(f.tS, { ...byTime.get(f.tS), ...f.values });
+  const times = [...byTime.keys()].sort((a, b) => a - b);
+  const durationS = times[times.length - 1]! - times[0]!;
+  if (durationS <= 0) return null;
+  // rebase to start at 0
+  const t0 = times[0]!;
+  const timesS = times.map((t) => t - t0);
+  const channels = new Set<string>();
+  for (const v of byTime.values()) for (const c of Object.keys(v)) channels.add(c);
+  if (channels.size === 0) return null;
+
+  const tracks: Record<string, { timesS: number[]; values: number[] }> = {};
+  for (const channel of channels) {
+    const values: number[] = [];
+    let last = 0;
+    for (const t of times) {
+      const v = byTime.get(t)?.[channel];
+      if (v !== undefined) last = v;
+      values.push(last);
+    }
+    // looping clips need equal first/last per track
+    if (loop) values[values.length - 1] = values[0]!;
+    tracks[channel] = { timesS, values };
+  }
+  return { name, durationS, loop, tracks };
+}
+
 /** Compose channel values for a solve: a playing control clip is the base
- * layer; live controls override the channels their axes command (manual input
- * beats the track while a widget is held, §4.4/§7). `heldChannels` restricts
- * the control override to channels actually being driven right now — pass the
- * full control set's channels for a static (non-playback) resolve. */
+ * layer; live controls drive their channels on top. Precedence per §4.4/§7:
+ * a channel the clip animates keeps the clip value UNLESS its control is held
+ * (manual input beats the track while a widget is held); a channel the clip
+ * does not animate always takes the live control value. With no clip, live
+ * controls apply everywhere. `heldChannels` = channels under an active drag. */
 export function resolveChannelValues(opts: {
   clip?: ControlClip | null;
   clipTimeS?: number;
@@ -97,7 +166,9 @@ export function resolveChannelValues(opts: {
   const out = { ...base };
   const held = opts.heldChannels;
   for (const [channel, value] of Object.entries(live)) {
-    if (!held || held.has(channel)) out[channel] = value;
+    const clipDrivesIt = channel in base;
+    // clip-driven channels yield to the clip unless held; others always apply
+    if (!clipDrivesIt || !held || held.has(channel)) out[channel] = value;
   }
   return out;
 }

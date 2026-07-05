@@ -8,10 +8,14 @@ import { useEffect } from 'react';
 import { buildPipeModel, composeProject, type PipeModelItem } from '../assembly';
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
+import { deleteElement, duplicateElement } from '../state/docOps';
 import { useEditorStore } from '../state/editorStore';
+import { useThemeStore } from '../state/themeStore';
 import { AssemblyView } from './assembly/AssemblyView';
+import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
 import { DofPill } from './editor/DofPill';
+import { EmptyState } from './editor/EmptyState';
 import { ProjectChip } from './editor/ProjectChip';
 import { RightDock } from './editor/RightDock';
 import { SketchCanvas } from './editor/SketchCanvas';
@@ -28,6 +32,8 @@ export function EditorShell() {
   const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
   const face = useEditorStore((s) => s.face);
   const mode = useEditorStore((s) => s.mode);
+  const controlsOpen = useEditorStore((s) => s.controlsOpen);
+  const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
 
   // keep an active mechanism selected whenever one exists
   useEffect(() => {
@@ -36,15 +42,69 @@ export function EditorShell() {
     if (!exists) setActiveMechanism(current.mechanisms[0]?.id ?? null);
   }, [current, activeMechanismId, setActiveMechanism]);
 
-  // undo/redo keyboard shortcuts
+  // keyboard shortcuts (§5): undo/redo, delete, duplicate, esc, space=play/pause
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
+      const typing =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      const ed = useEditorStore.getState();
+
+      if (mod && key === 'z') {
+        if (typing) return;
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (typing) return;
+
+      // space toggles the transport
+      if (key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        ed.setPlayback({ playing: !ed.playback.playing });
+        return;
+      }
+      // escape clears selection / closes floating UI
+      if (key === 'escape') {
+        ed.setOpenPopover(null);
+        ed.setPendingConnect(null);
+        ed.clearSelection();
+        return;
+      }
+      // delete / duplicate act on the 2D selection
+      if (ed.mode !== '2d' || ed.selectedElementIds.length === 0) return;
+      const mechId = ed.activeMechanismId;
+      if (!mechId) return;
+      if (key === 'delete' || key === 'backspace') {
+        e.preventDefault();
+        const ids = ed.selectedElementIds;
+        useAppStore.getState().updateCurrent((d) => {
+          let next = d;
+          for (const id of ids) next = deleteElement(next, mechId, id);
+          return next;
+        });
+        ed.clearSelection();
+      } else if (mod && key === 'd') {
+        e.preventDefault();
+        const ids = ed.selectedElementIds;
+        const newIds: string[] = [];
+        useAppStore.getState().updateCurrent((d) => {
+          let next = d;
+          for (const id of ids) {
+            const r = duplicateElement(next, mechId, id);
+            next = r.doc;
+            if (r.newElementId) newIds.push(r.newElementId);
+          }
+          return next;
+        });
+        if (newIds.length) useEditorStore.setState({ selectedElementIds: newIds });
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -69,6 +129,7 @@ export function EditorShell() {
         selectedElementIds: s.selectedElementIds,
         rightTab: s.rightTab,
         openPopover: s.openPopover,
+        night: useThemeStore.getState().night,
       };
     };
     // seam for exercising the equilibrium force-overlay plumbing while the
@@ -129,11 +190,39 @@ export function EditorShell() {
         {mode === '3d' ? <AssemblyView /> : mode === 'quad' ? <QuadView /> : <SketchCanvas />}
       </div>
 
+      {/* onboarding: a brand-new project has no mechanism to draw on yet */}
+      {mode === '2d' && current.mechanisms.length === 0 && <EmptyState />}
+
       <ProjectChip />
       <ActionsChip />
-      {mode !== '3d' && <ToolPill />}
+      {mode !== '3d' && current.mechanisms.length > 0 && <ToolPill />}
       <TransportPill />
       {mode !== '3d' && <DofPill />}
+
+      {/* controls dock (§4.4): a toggled bottom panel once a mechanism exists
+          (controls map onto input channels); in 2D it clears the left tool pill */}
+      {current.mechanisms.length === 0 ? null : controlsOpen ? (
+        <ControlsDock left={mode === '2d' ? 196 : EDGE} />
+      ) : (
+        <button
+          type="button"
+          data-testid="controls-toggle"
+          onClick={() => setControlsOpen(true)}
+          style={{
+            ...panelStyle,
+            position: 'absolute',
+            left: mode === '2d' ? 196 : EDGE,
+            bottom: 76,
+            padding: '7px 12px',
+            font: `500 12.5px ${T.sans}`,
+            color: T.text,
+            cursor: 'pointer',
+            zIndex: 45,
+          }}
+        >
+          Controls
+        </button>
+      )}
 
       {/* design face: the tabbed inspector/checklist/materials/BOM dock
           floats as a right-hand column (its feature scope is unchanged by

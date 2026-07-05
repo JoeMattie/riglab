@@ -35,7 +35,7 @@ export function DofPill() {
             right: 0,
             bottom: 46,
             width: 300,
-            border: '1px solid #f2c4c4',
+            border: `1px solid ${T.dangerBorder}`,
             zIndex: 45,
           }}
         >
@@ -117,9 +117,9 @@ export function DofPill() {
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          background: '#fff',
-          border: `1.5px solid ${healthy ? '#b5d6b9' : T.dangerBorder}`,
-          color: healthy ? '#2b7237' : T.dangerText,
+          background: T.panel,
+          border: `1.5px solid ${healthy ? T.okBorder : T.dangerBorder}`,
+          color: healthy ? T.okText : T.dangerText,
           borderRadius: 14,
           padding: '8px 14px',
           font: `500 12.5px ${T.sans}`,
@@ -132,14 +132,14 @@ export function DofPill() {
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: healthy ? T.success : '#d33',
+            background: healthy ? T.success : T.danger,
           }}
         />
         DOF {dof.dof} ·{' '}
         {healthy
           ? dof.classification
           : `${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}`}
-        {!healthy && <span style={{ color: '#d9a0a0' }}>{open ? '▾' : '▴'}</span>}
+        {!healthy && <span style={{ color: T.dangerBorder }}>{open ? '▾' : '▴'}</span>}
       </button>
     </div>
   );

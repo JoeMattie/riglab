@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
-import { type BalanceQuery, balanceReport, composeProject, defaultPlacement } from '../../assembly';
+import {
+  type BalanceQuery,
+  balanceReport,
+  composeProject,
+  defaultPlacement,
+  resolveAttach,
+} from '../../assembly';
+import { projectControlChannels } from '../../controls';
 import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
@@ -35,14 +42,27 @@ export function useAssemblyScene(pivot: BalanceQuery) {
   const project = useAppStore((s) => s.current);
   const tS = useEditorStore((s) => s.playback.tS);
   const clipName = useEditorStore((s) => s.playback.clipName);
+  const controlClipName = useEditorStore((s) => s.playback.controlClipName);
+  const speed = useEditorStore((s) => s.playback.speed);
   const amplitude = useEditorStore((s) => s.playback.amplitude);
+  const heldChannels = useEditorStore((s) => s.heldChannels);
 
   return useMemo(() => {
     if (!project) return null;
     const clip = clipName ? getClip(clipName) : null;
     const pose = clip ? samplePose(clip, tS, { amplitude }) : REST_POSE;
     const frame = computeSkeleton(project.wearer, pose);
-    const composition = composeProject(project, { pose });
+    // controls (§4.4) drive input channels; a playing control clip composes
+    // with them on the same timeline as the movement clip
+    const channelValues = projectControlChannels({
+      controls: project.controls,
+      controlClips: project.controlClips,
+      controlClipName,
+      tS,
+      speed,
+      heldChannels: new Set(heldChannels),
+    });
+    const composition = composeProject(project, { pose, channelValues });
     const mechById = new Map(project.mechanisms.map((m) => [m.id, m]));
 
     const instances: InstancePrims[] = project.assembly.instances.map((inst) => {
@@ -90,7 +110,7 @@ export function useAssemblyScene(pivot: BalanceQuery) {
                 foamPlates: [],
               },
             },
-            { pose, includePipeMass: false },
+            { pose, channelValues, includePipeMass: false },
           )
         : null;
     const ghosts: GhostPrims[] = unplaced.map((m) => {
@@ -105,12 +125,22 @@ export function useAssemblyScene(pivot: BalanceQuery) {
       };
     });
 
+    // mounted controls (§4.4) ride their attach point — a yoke on handR
+    // follows the hand through the walk clip
+    const controlMounts: { id: string; name: string; world: Vec3 }[] = [];
+    for (const control of project.controls) {
+      if (!control.mount) continue;
+      const world = resolveAttach(control.mount, composition.instances, frame);
+      if (world) controlMounts.push({ id: control.id, name: control.name, world });
+    }
+
     return {
       composition,
       mannequin,
       instances,
       ghosts,
+      controlMounts,
       report: balanceReport(composition.masses, pivot),
     };
-  }, [project, tS, clipName, amplitude, pivot]);
+  }, [project, tS, clipName, controlClipName, speed, amplitude, heldChannels, pivot]);
 }

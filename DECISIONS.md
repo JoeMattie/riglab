@@ -1599,3 +1599,103 @@ for interactive checks per "scripted, not driven"; the handler is one line
 over unit-tested projection math), and the full-creature e2e asserts joint
 bodies > 0 rather than fittings > 0 because the bundled examples realize
 joints as wraps/bolts, not commercial fittings. Called out per CLAUDE.md.
+## Phase 4.5 — controls & channel animation (§4.4)
+
+### DECISION: controls are a layer over channels, resolved through one path
+Per §4.4 controls are "a grouping-and-manipulation layer over the channel
+machinery, not a parallel input system." So `src/controls/mapping.ts` resolves a
+control's axes to channel-name→value (range map + invert + clamp), and
+`resolveChannelValues`/`projectControlChannels` compose a playing control clip
+(base layer) with live control values (override). Those values feed the SAME
+`channelValues` argument the 2D `solve()` and 3D `composeProject` already take —
+no new solver input. An axis drag, a control clip, and a manual override all
+flow through this one resolution.
+
+### DECISION: manual-override precedence via a held-channel set
+A channel a control clip animates keeps the clip value UNLESS the control is
+held (a widget under active drag), in which case the live value wins; a channel
+the clip does NOT animate always takes the live control value; with no clip,
+controls apply everywhere. Callers pass a defined `heldChannels` set during
+playback (empty = nothing held → clip wins) and omit it for static resolves
+(→ controls win). Pinned by unit tests + the full-creature control acceptance.
+
+### DECISION: control clips share the movement-clip transport + one timeline
+`controlClipName` lives on the same `playback` state as `clipName`, driven by the
+same `tS`. TransportPill owns `tS` when a movement clip plays; the ControlsDock
+raf advances `tS` for control-only playback and captures record frames.
+Recording is "scrub while it runs": frames of live control channel values are
+captured each tick, then `buildControlClip` (pure, tested) collapses them into
+one keyframe track per channel. This promotes the §4.4 animation-timeline slice
+without a full multi-track choreography editor (still out of v1).
+
+### DECISION: schema v5 + migration; example 7 completed
+`controls` + `controlClips` are project-level (channels are global), schema v5
+with a 4→5 migration adding empty arrays. The full-creature example now ships
+the §9-item-7 yoke (mounted to hand.R, tilt/twist/trigger → steer pitch / steer
+pan / jaw trigger) and the looping "head sweep + jaw snap" control clip, closing
+the last example-7 deferral from the Phase-5 examples-slice sequencing note.
+
+### [deviation] Widget composition + mount scope
+Per-type widgets (§4.4): 2D pad (yoke tilt/twist, slider2d), rotary dial
+(twistGrip), sliders (lever/trigger + spare axes) — all live during playback,
+bracketed as one undo gesture and marking their channels held. A 3-axis yoke
+puts tilt/twist on the pad and remaining axes (trigger) on sliders rather than a
+dedicated dial. Mounts offer wearer anchors (the §11 hand.R case) + none; the
+schema also allows instance-node mounts, not yet surfaced in the builder
+dropdown. Called out per CLAUDE.md; revisit in the Phase-5 polish pass.
+
+## Phase 5 — finishing slice (§11)
+
+### New from example + onboarding
+`appStore.createFromExample` seeds a fresh project from a bundled example (new
+id so the same example opens many times) and lands in the editor. ProjectList
+gained a "Start from an example" grid (all seven, with descriptions). A
+brand-new project has no mechanism, so the `EmptyState` onboarding card (§8.1)
+adds a side-view silhouette with the pipe tool active in one click, or opens an
+example — the dev-only `__riglab.loadExample` seam stays for scripted checks.
+
+### Keyboard shortcuts (§5)
+Handled in EditorShell's key listener, skipped while typing in inputs/selects:
+space = play/pause, esc = clear selection + close popovers/connect, delete/
+backspace = delete the 2D selection, ⌘/ctrl-D = duplicate. Duplicate is a pure
+`duplicateElement` docOp cloning links/bentLinks/telescopes with fresh offset
+free nodes (joints/ropes return null — they reference other parts). ⌘Z/⇧⌘Z
+undo/redo unchanged.
+
+### Printable BOM (§5)
+`PrintableBom` renders a shop sheet (title, weight, cut list, bend schedule,
+consumables, techniques) into a `document.body` portal, shown only under
+`@media print` (index.css `.print-bom`); the editor `#root` hides so it prints
+clean. A Print button sits beside Export CSV. Same `computeBom` output as the
+on-screen panel — no second source of truth.
+
+### Performance pass (§11 <16 ms)
+The full-creature assembly (eight mechanisms: solve each + compose to world) is
+the heaviest per-frame path and measures ~1.4 ms/frame; a single kinematic
+drag-solve ~0.3 ms. `perf.test.ts` guards the compose path at <16 ms with ~10×
+headroom, so the drag-solve / clip-playback frame budget holds on the examples
+with no optimization needed.
+
+### Visual polish
+The interface overhaul already applied the floating-glass design tokens across
+the editor chrome. This slice brought the last pre-overhaul surface — the
+ProjectList landing page — onto the same tokens (IBM Plex ramp, panel/accent
+colors, example-card grid), and the onboarding/controls panels use the shared
+`panelStyle`. The design language is now consistent from landing → sketch →
+design → 3D.
+### Night view: CSS-variable chrome tokens + literal scene palettes
+User-requested addition (outside the planfile UI spec; scope approved in
+session, 2026-07-04). The `T` chrome tokens in `src/ui/editor/theme.ts` now
+resolve to `--rl-*` CSS custom properties; `applyTheme('day'|'night')` writes
+the active palette onto the root element and toggles the shadcn `.dark` class,
+so every inline-styled panel/chip and all vendored shadcn components flip with
+zero component churn. Konva shapes and three.js materials cannot read CSS
+variables, so legibility-critical drawing colors (grid, default element ink,
+node fills, force labels, 3D mannequin/instances) come from a paired `SCENE`
+literal palette selected by the persisted `night` flag (`useThemeStore`,
+`rig-lab.night` in localStorage, applied before first paint in `main.tsx`).
+Bright semantic colors (selection orange, actuator purple, elastic green)
+stay literal — they read fine on both grounds. The toggle is a moon/sun icon
+button on the actions chip. Night-pref storage goes through a guarded
+accessor with an in-memory fallback because Node 22+'s experimental
+`localStorage` global shadows jsdom's in Vitest.

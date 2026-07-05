@@ -12,7 +12,8 @@ import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { addInstance, setInstanceTransform, setPointMassKg } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
-import { EDGE, panelStyle, T } from '../editor/theme';
+import { useThemeStore } from '../../state/themeStore';
+import { EDGE, panelStyle, scenePalette, T } from '../editor/theme';
 import { placeAxis } from './axis';
 import { PipeModelLayer } from './PipeModelLayer';
 import type { CablePrim, TubePrim } from './scene';
@@ -20,14 +21,8 @@ import { useAssemblyScene } from './useAssemblyScene';
 
 const tuple = (v: Vec3): [number, number, number] => [v.x, v.y, v.z];
 
-/** Scene palette: solid shaded tubes on the light canvas — the 1-px
- * lineSegments this replaces were invisible (WebGL ignores linewidth). */
-const C = {
-  pvc: '#e7e9ee', // engineered tube — PVC white, reads via shading
-  sketch: '#94a0b4', // generic-OD stand-in for sketch elements
-  cable: '#5f6a7d',
-  mannequin: '#565e6e',
-} as const;
+/** Literal tube colors per style (three.js can't resolve CSS variables). */
+type TubeStyleColors = { engineered: string; sketch: string };
 
 /** Pivot-axis presets for the seesaw report (§5.4). The hips carry the seesaw
  * spine; the shoulders are the other natural fulcrum. Axis is wearer-left (+z);
@@ -57,14 +52,14 @@ const PIVOTS: { key: string; label: string; query: BalanceQuery }[] = [
 
 /** One capsule per tube primitive; geometry is rebuilt when the pose changes
  * (tube count is small — tens per creature — so per-frame rebuild is fine). */
-function Tube({ t, color, opacity = 1 }: { t: TubePrim; color?: string; opacity?: number }) {
+function Tube({ t, color, opacity = 1 }: { t: TubePrim; color: string; opacity?: number }) {
   const placed = useMemo(() => placeAxis(t.a, t.b), [t]);
   if (!placed) return null;
   return (
     <mesh position={placed.mid} quaternion={placed.quat}>
       <capsuleGeometry args={[t.radiusM, placed.len, 3, 12]} />
       <meshStandardMaterial
-        color={color ?? (t.style === 'engineered' ? C.pvc : C.sketch)}
+        color={color}
         roughness={0.55}
         transparent={opacity < 1}
         opacity={opacity}
@@ -73,18 +68,35 @@ function Tube({ t, color, opacity = 1 }: { t: TubePrim; color?: string; opacity?
   );
 }
 
-function Tubes({ tubes, color, opacity }: { tubes: TubePrim[]; color?: string; opacity?: number }) {
+function Tubes({
+  tubes,
+  color,
+  styleColors,
+  opacity,
+}: {
+  tubes: TubePrim[];
+  /** override for every tube (selection accent, mannequin) */
+  color?: string;
+  /** per-maturity colors when no override is given */
+  styleColors?: TubeStyleColors;
+  opacity?: number;
+}) {
   return (
     <>
       {tubes.map((t, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
-        <Tube key={i} t={t} color={color} opacity={opacity} />
+        <Tube
+          // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
+          key={i}
+          t={t}
+          color={color ?? (styleColors ?? { engineered: '#e7e9ee', sketch: '#94a0b4' })[t.style]}
+          opacity={opacity}
+        />
       ))}
     </>
   );
 }
 
-function Cables({ cables, color }: { cables: CablePrim[]; color?: string }) {
+function Cables({ cables, color }: { cables: CablePrim[]; color: string }) {
   return (
     <>
       {cables.map((c, i) => (
@@ -92,7 +104,7 @@ function Cables({ cables, color }: { cables: CablePrim[]; color?: string }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
           key={i}
           points={c.points.map(tuple)}
-          color={color ?? C.cable}
+          color={color}
           lineWidth={2}
         />
       ))}
@@ -112,8 +124,11 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
   const materials = useAppStore((s) => s.current?.materials);
   const assemblyRender = useEditorStore((s) => s.assemblyRender);
   const gizmoRef = useRef<Group>(null);
+  // three.js materials take literal colors (no CSS variables), so the scene
+  // palette re-renders off the night flag
+  const C = scenePalette(useThemeStore((s) => s.night));
 
-  const { mannequin, instances, composition } = scene;
+  const { mannequin, instances, composition, controlMounts } = scene;
 
   // Solved pipe-and-fittings model, rebuilt as the pose changes so it stays
   // live during playback; ghosts included translucently.
@@ -157,7 +172,7 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
       <ambientLight intensity={0.85} />
       <directionalLight position={[2, 4, 3]} intensity={1.1} />
       <directionalLight position={[-3, 2, -2]} intensity={0.35} />
-      <gridHelper args={[6, 24, '#b6bcc7', '#dde1e7']} />
+      <gridHelper args={[6, 24, C.grid3dCenter, C.grid3d]} />
 
       {/* wearer mannequin (capsules, not 1-px lines — §8.3 visibility) */}
       <Tubes tubes={mannequin} color={C.mannequin} />
@@ -172,13 +187,22 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
             const sel = inst.id === selectedInstanceId;
             return (
               <group key={inst.id}>
-                <Tubes tubes={inst.prims.tubes} color={sel ? T.accent : undefined} />
+                <Tubes
+                  tubes={inst.prims.tubes}
+                  color={sel ? C.accent : undefined}
+                  styleColors={{ engineered: C.pvc, sketch: C.sketchTube }}
+                />
               </group>
             );
           })}
           {/* unplaced mechanisms ghosted at their default plane (synthesis) */}
           {scene.ghosts.map((g) => (
-            <Tubes key={g.mechanismId} tubes={g.prims.tubes} opacity={0.3} />
+            <Tubes
+              key={g.mechanismId}
+              tubes={g.prims.tubes}
+              styleColors={{ engineered: C.pvc, sketch: C.sketchTube }}
+              opacity={0.3}
+            />
           ))}
         </>
       )}
@@ -186,11 +210,19 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
         <Cables
           key={inst.id}
           cables={inst.prims.cables}
-          color={inst.id === selectedInstanceId ? T.accent : undefined}
+          color={inst.id === selectedInstanceId ? C.accent : C.rope}
         />
       ))}
       {scene.ghosts.map((g) => (
-        <Cables key={g.mechanismId} cables={g.prims.cables} color="#aab2bf" />
+        <Cables key={g.mechanismId} cables={g.prims.cables} color={C.silhouette} />
+      ))}
+
+      {/* mounted controls (§4.4) — ride their attach point (e.g. a yoke on handR) */}
+      {controlMounts.map((c) => (
+        <mesh key={c.id} position={tuple(c.world)}>
+          <boxGeometry args={[0.06, 0.06, 0.12]} />
+          <meshStandardMaterial color="#0ea5a0" />
+        </mesh>
       ))}
 
       {/* point-mass markers */}
@@ -206,11 +238,11 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
         <>
           <mesh position={tuple(cg)}>
             <sphereGeometry args={[0.05, 16, 16]} />
-            <meshStandardMaterial color={T.accent} />
+            <meshStandardMaterial color={C.accent} />
           </mesh>
           <Line
             points={[tuple(cg), [cg.x, 0, cg.z]]}
-            color={T.accent}
+            color={C.accent}
             lineWidth={1.5}
             dashed
             dashSize={0.03}
@@ -256,12 +288,13 @@ export function AssemblyView() {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#f6f7f9' }}>
+    <div style={{ position: 'absolute', inset: 0, background: T.viewport }}>
       <Canvas
         camera={{ position: [2.4, 1.6, 2.6], fov: 45 }}
         style={{ position: 'absolute', inset: 0 }}
       >
-        <color attach="background" args={['#eef0f4']} />
+        {/* transparent canvas: the container's T.viewport background shows
+            through, so day/night theming needs no three.js color */}
         {scene && <Scene3D selectedInstanceId={selectedInstanceId} scene={scene} />}
       </Canvas>
 
@@ -312,7 +345,7 @@ export function AssemblyView() {
                   borderRadius: 8,
                   padding: '5px 0',
                   cursor: 'pointer',
-                  background: pivotKey === p.key ? T.accentTint : '#f4f4f5',
+                  background: pivotKey === p.key ? T.accentTint : T.chip,
                   color: pivotKey === p.key ? T.accentText : T.muted,
                   fontSize: 12,
                 }}

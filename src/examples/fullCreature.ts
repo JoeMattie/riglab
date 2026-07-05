@@ -4,12 +4,19 @@
 // exoskeletons, tail, and the two arms, plus speaker/battery point masses on
 // the wearer. The global BOM and weight rollup populate from all mechanisms.
 //
-// DEFERRED until Phases 4/4.5 exist (see DECISIONS.md): 3D instance
-// placement/mirroring of these mechanisms on the wearer, the yoke control
-// (§4.4), and the bundled head-sweep + jaw-snap control clip — the schema
-// for controls and the assembly UI are not built yet. "Raptor" appears only
-// in this bundled data (project name), per the §9 creature-agnostic rule.
-import type { Assembly, Mechanism, MechanismElement, Project, Vec2 } from '../schema';
+// Complete as of Phases 4/4.5: 3D instance placement/mirroring of these
+// mechanisms on the wearer, the yoke control (§4.4) mounted to hand.R, and the
+// bundled head-sweep + jaw-snap control clip all ship here. "Raptor" appears
+// only in this bundled data (project name), per the §9 creature-agnostic rule.
+import type {
+  Assembly,
+  Control,
+  ControlClip,
+  Mechanism,
+  MechanismElement,
+  Project,
+  Vec2,
+} from '../schema';
 import { buildJawBowdenMechanism } from './jawBowden';
 import { buildLegExoMechanism } from './legExo';
 import { buildNeckTrussMechanism } from './neckTruss';
@@ -219,10 +226,71 @@ export function buildFullCreatureProject(): Project {
     foamPlates: [],
   };
 
+  // §4.4 yoke: the operator's right hand holds a yoke whose tilt pitches the
+  // head, twist pans it, and trigger works the jaw — three axes onto the three
+  // input channels, riding hand.R through the walk clip.
+  const yoke: Control = {
+    id: 'ctrl-yoke',
+    name: 'Head yoke',
+    type: 'yoke',
+    mount: { kind: 'wearerAnchor', anchor: 'handR' },
+    axes: [
+      {
+        id: 'yoke-tilt',
+        name: 'tilt',
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName: 'steer pitch',
+        outMin: -0.03,
+        outMax: 0.015,
+        invert: false,
+        locked: false,
+      },
+      {
+        id: 'yoke-twist',
+        name: 'twist',
+        min: -1,
+        max: 1,
+        value: 0,
+        channelName: 'steer pan',
+        outMin: -0.5,
+        outMax: 0.5,
+        invert: false,
+        locked: false,
+      },
+      {
+        id: 'yoke-trigger',
+        name: 'trigger',
+        min: 0,
+        max: 1,
+        value: 0,
+        channelName: 'jaw trigger',
+        outMin: 0,
+        outMax: 0.038,
+        invert: false,
+        locked: false,
+      },
+    ],
+  };
+
+  // §9 item 7 head-sweep + jaw-snap: a looping control clip that pans the head
+  // side to side and snaps the jaw, composable with the walk movement clip.
+  const headSweep: ControlClip = {
+    name: 'head sweep + jaw snap',
+    durationS: 4,
+    loop: true,
+    tracks: {
+      'steer pan': { timesS: [0, 1, 2, 3, 4], values: [0, 0.5, 0, -0.5, 0] },
+      'jaw trigger': { timesS: [0, 1, 2, 3, 4], values: [0, 0.038, 0, 0.038, 0] },
+    },
+  };
+
   return exampleProject(
     'example-full-creature',
     'Example — Raptor (full creature)',
     mechanisms,
     assembly,
+    { controls: [yoke], controlClips: [headSweep] },
   );
 }

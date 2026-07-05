@@ -12,11 +12,12 @@ import { type BalanceQuery, defaultPlacement } from '../../assembly';
 import type { Quaternion, Vec2, Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { type QuadPanelId, useEditorStore } from '../../state/editorStore';
+import { useThemeStore } from '../../state/themeStore';
 import { RenderTogglePill, Scene3D } from '../assembly/AssemblyView';
 import type { InstancePrimitives } from '../assembly/scene';
 import { useAssemblyScene } from '../assembly/useAssemblyScene';
 import { type PanelOverlayItem, SketchCanvas } from '../editor/SketchCanvas';
-import { T } from '../editor/theme';
+import { scenePalette, T } from '../editor/theme';
 import { initialView, panBy, toScreen, type ViewTransform, zoomAt } from '../editor/viewTransform';
 import {
   type OrthoPanelId,
@@ -77,6 +78,9 @@ function GhostPanelCanvas({
   onPick(mechanismId: string): void;
 }) {
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
+  // Konva shapes take literal colors (no CSS variables), so the drawing
+  // palette re-renders off the night flag
+  const C = scenePalette(useThemeStore((s) => s.night));
   const containerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<ViewTransform | null>(null);
   const pan = useRef<{ x: number; y: number; moved: number } | null>(null);
@@ -153,7 +157,7 @@ function GhostPanelCanvas({
                   // biome-ignore lint/suspicious/noArrayIndexKey: bones are positional per pose
                   key={i}
                   points={[a.x, a.y, b.x, b.y]}
-                  stroke="#c6ccd6"
+                  stroke={C.silhouette}
                   strokeWidth={3}
                   lineCap="round"
                 />
@@ -188,7 +192,7 @@ function GhostPanelCanvas({
                         // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional per pose
                         key={i}
                         points={[a.x, a.y, b.x, b.y]}
-                        stroke={active ? T.selected : g.unplaced ? '#aab2bf' : '#5b6472'}
+                        stroke={active ? '#d80' : g.unplaced ? C.dim : C.instance}
                         strokeWidth={active ? 3.5 : 3}
                         opacity={g.unplaced ? 0.6 : 1}
                         lineCap="round"
@@ -245,12 +249,13 @@ function OrthoPanel({ panelId, scene }: { panelId: OrthoPanelId; scene: SceneDat
 
 function PerspectivePanel({ scene }: { scene: SceneData }) {
   return (
-    <div style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, background: T.viewport }}
+    >
       <Canvas
         camera={{ position: [2.4, 1.6, 2.6], fov: 45 }}
         style={{ position: 'absolute', inset: 0 }}
       >
-        <color attach="background" args={['#eef0f4']} />
         <Scene3D selectedInstanceId={null} scene={scene} />
       </Canvas>
       <RenderTogglePill style={{ top: 8, left: 8 }} />
@@ -292,7 +297,7 @@ export function QuadView() {
           style={{
             position: 'relative',
             overflow: 'hidden',
-            background: '#fcfcfd',
+            background: T.bg,
             display: 'flex',
             flexDirection: 'column',
           }}

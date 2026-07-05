@@ -157,7 +157,7 @@ function PipeChip({
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            background: '#fff',
+            background: T.panel,
             color: T.selectedText,
             border: `1.5px solid ${T.selected}`,
             borderRadius: 14,
@@ -178,7 +178,7 @@ function PipeChip({
   if (!pipe.selected && !pipe.locked) {
     return (
       <div style={{ ...base, pointerEvents: 'none' }} data-testid="length-hover-tag">
-        <span style={{ font: `500 12px ${T.mono}`, color: '#999' }}>
+        <span style={{ font: `500 12px ${T.mono}`, color: T.faint }}>
           {fmt(pipe.lengthM, units)} {unit}
         </span>
       </div>
@@ -288,7 +288,7 @@ function PipeChip({
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            background: '#fff',
+            background: T.panel,
             border: `2px solid ${T.selected}`,
             borderRadius: 14,
             padding: '3px 10px',
@@ -330,7 +330,7 @@ function PipeChip({
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            background: '#fff',
+            background: T.panel,
             color: T.selectedText,
             border: `1.5px solid ${T.selected}`,
             borderRadius: 14,
@@ -353,7 +353,7 @@ function PipeChip({
           width: 26,
           height: 26,
           borderRadius: '50%',
-          background: '#fff',
+          background: T.panel,
           border: `1.5px solid ${T.border}`,
           cursor: 'pointer',
           display: 'grid',

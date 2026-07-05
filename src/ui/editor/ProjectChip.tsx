@@ -155,7 +155,7 @@ export function ProjectChip() {
                   style={{
                     marginLeft: 'auto',
                     fontSize: 12,
-                    color: isActive ? '#6b93c4' : T.faint,
+                    color: isActive ? T.focus : T.faint,
                   }}
                 >
                   {m.viewOrientation}

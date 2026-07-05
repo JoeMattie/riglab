@@ -211,6 +211,20 @@ describe('example 7 — full creature (§9 item 7)', () => {
     ]);
   });
 
+  it('ships the §4.4 yoke control + head-sweep control clip mapped to its channels', () => {
+    const yoke = project.controls.find((c) => c.type === 'yoke');
+    expect(yoke).toBeDefined();
+    expect(yoke!.mount).toEqual({ kind: 'wearerAnchor', anchor: 'handR' });
+    expect(yoke!.axes.map((a) => a.channelName).sort()).toEqual([
+      'jaw trigger',
+      'steer pan',
+      'steer pitch',
+    ]);
+    const clip = project.controlClips.find((c) => c.name === 'head sweep + jaw snap');
+    expect(clip).toBeDefined();
+    expect(Object.keys(clip!.tracks).sort()).toEqual(['jaw trigger', 'steer pan']);
+  });
+
   it('has working sliders: every input channel drives a driven node', () => {
     const channels = project.mechanisms.flatMap((m) => m.inputs.map((c) => c.name));
     expect(channels.sort()).toEqual(['jaw trigger', 'steer pan', 'steer pitch']);

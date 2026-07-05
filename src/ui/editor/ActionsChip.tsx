@@ -5,6 +5,8 @@ import { setUnitsPref } from '../../persistence/prefs';
 import type { UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { type Face, type Mode, useEditorStore } from '../../state/editorStore';
+import { useThemeStore } from '../../state/themeStore';
+import { ThemeIcon } from './icons';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
 
 export function ActionsChip() {
@@ -16,6 +18,8 @@ export function ActionsChip() {
   const setFace = useEditorStore((s) => s.setFace);
   const mode = useEditorStore((s) => s.mode);
   const setMode = useEditorStore((s) => s.setMode);
+  const night = useThemeStore((s) => s.night);
+  const toggleNight = useThemeStore((s) => s.toggleNight);
 
   if (!doc) return null;
 
@@ -37,7 +41,7 @@ export function ActionsChip() {
 
   const segStyle = (active: boolean): React.CSSProperties => ({
     border: 'none',
-    background: active ? '#fff' : 'none',
+    background: active ? T.raised : 'none',
     borderRadius: 6,
     padding: '3px 12px',
     font: `${active ? 500 : 400} 12.5px ${T.sans}`,
@@ -102,7 +106,7 @@ export function ActionsChip() {
       <span style={dividerStyle} />
       <span
         data-testid="mode-toggle"
-        style={{ display: 'inline-flex', background: '#f4f4f5', borderRadius: 8, padding: 2 }}
+        style={{ display: 'inline-flex', background: T.chip, borderRadius: 8, padding: 2 }}
       >
         {modeSegment('2d', '2D')}
         {modeSegment('3d', '3D')}
@@ -111,7 +115,7 @@ export function ActionsChip() {
       {mode === '2d' && (
         <span
           data-testid="face-toggle"
-          style={{ display: 'inline-flex', background: '#f4f4f5', borderRadius: 8, padding: 2 }}
+          style={{ display: 'inline-flex', background: T.chip, borderRadius: 8, padding: 2 }}
         >
           {segment('sketch', 'Sketch')}
           {segment('design', 'Design')}
@@ -140,11 +144,21 @@ export function ActionsChip() {
       </button>
       <button
         type="button"
+        data-testid="night-toggle"
+        title={night ? 'switch to day view' : 'switch to night view'}
+        aria-pressed={night}
+        onClick={toggleNight}
+        style={{ ...iconButton, display: 'grid', placeItems: 'center' }}
+      >
+        <ThemeIcon night={night} />
+      </button>
+      <button
+        type="button"
         data-testid="export-project"
         onClick={onExport}
         style={{
           border: `1px solid ${T.border}`,
-          background: '#fff',
+          background: T.raised,
           borderRadius: 8,
           padding: '3px 12px',
           font: `500 12.5px ${T.sans}`,

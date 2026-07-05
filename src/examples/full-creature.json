@@ -2666,8 +2666,72 @@
     ],
     "foamPlates": []
   },
-  "controls": [],
-  "controlClips": [],
+  "controls": [
+    {
+      "id": "ctrl-yoke",
+      "name": "Head yoke",
+      "type": "yoke",
+      "mount": {
+        "kind": "wearerAnchor",
+        "anchor": "handR"
+      },
+      "axes": [
+        {
+          "id": "yoke-tilt",
+          "name": "tilt",
+          "min": -1,
+          "max": 1,
+          "value": 0,
+          "channelName": "steer pitch",
+          "outMin": -0.03,
+          "outMax": 0.015,
+          "invert": false,
+          "locked": false
+        },
+        {
+          "id": "yoke-twist",
+          "name": "twist",
+          "min": -1,
+          "max": 1,
+          "value": 0,
+          "channelName": "steer pan",
+          "outMin": -0.5,
+          "outMax": 0.5,
+          "invert": false,
+          "locked": false
+        },
+        {
+          "id": "yoke-trigger",
+          "name": "trigger",
+          "min": 0,
+          "max": 1,
+          "value": 0,
+          "channelName": "jaw trigger",
+          "outMin": 0,
+          "outMax": 0.038,
+          "invert": false,
+          "locked": false
+        }
+      ]
+    }
+  ],
+  "controlClips": [
+    {
+      "name": "head sweep + jaw snap",
+      "durationS": 4,
+      "loop": true,
+      "tracks": {
+        "steer pan": {
+          "timesS": [0, 1, 2, 3, 4],
+          "values": [0, 0.5, 0, -0.5, 0]
+        },
+        "jaw trigger": {
+          "timesS": [0, 1, 2, 3, 4],
+          "values": [0, 0.038, 0, 0.038, 0]
+        }
+      }
+    }
+  ],
   "wearer": {
     "heightM": 1.75,
     "shoulderWidthM": 0.46,
