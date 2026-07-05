@@ -1171,17 +1171,20 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : C.ink;
   const pipeWidth = (id: string): number => (selectedSet.has(id) ? 5.5 : 5);
 
-  // white endpoint handles on selected pipes (drag = length edit)
-  const selectedEndpointNodes: Array<{ nodeId: string; locked: boolean }> = [];
+  // white endpoint handles on selected pipes (drag = length edit); adjacent
+  // selected pipes share joint nodes, so dedupe by node (locked if any
+  // selected pipe at the node is length-locked)
+  const endpointByNode = new Map<string, { nodeId: string; locked: boolean }>();
   for (const el of mech.elements) {
     if (!selectedSet.has(el.id)) continue;
     if (el.type === 'link' || el.type === 'telescope') {
-      selectedEndpointNodes.push(
-        { nodeId: el.nodeA, locked: el.lengthLocked === true },
-        { nodeId: el.nodeB, locked: el.lengthLocked === true },
-      );
+      for (const nodeId of [el.nodeA, el.nodeB]) {
+        const locked = el.lengthLocked === true || endpointByNode.get(nodeId)?.locked === true;
+        endpointByNode.set(nodeId, { nodeId, locked });
+      }
     }
   }
+  const selectedEndpointNodes = [...endpointByNode.values()];
 
   const hoverElement = (id: string) => tool === 'select' && setHoveredElementId(id);
   const unhoverElement = (id: string) => setHoveredElementId((cur) => (cur === id ? null : cur));
@@ -1251,8 +1254,21 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               key={`s${i}`}
               points={flat(poly)}
               stroke={C.silhouette}
+              strokeWidth={2.5}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ))}
+          {/* sketch-figure shapes: egg head, joint rings, fists, foot ovals */}
+          {silhouette?.loops.map((poly, i) => (
+            <Line
+              // biome-ignore lint/suspicious/noArrayIndexKey: silhouette loops are a fixed projection, regenerated wholesale, never reordered
+              key={`sl${i}`}
+              points={flat(poly)}
+              stroke={C.silhouette}
               strokeWidth={2}
               lineJoin="round"
+              closed
             />
           ))}
           {/* skeleton binding points and structural anchors are always shown

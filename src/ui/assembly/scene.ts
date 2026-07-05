@@ -4,14 +4,16 @@
 // geometry is unit-testable without a WebGL context.
 
 import type { MechanismElement, PipeMaterial, Vec3 } from '../../schema';
+import { FIGURE } from '../../wearer/projection';
 import type { SkeletonFrame } from '../../wearer/skeleton';
 import { GENERIC_PIPE_OD_M, type NodeWorld } from './pipeModel';
 
 export type Segment = [Vec3, Vec3];
 
 export { GENERIC_PIPE_OD_M };
-/** Mannequin capsule radius — thick enough to read against the light bg. */
-export const MANNEQUIN_RADIUS_M = 0.035;
+/** Mannequin bone capsule radius — thick enough to read against the light
+ * bg (§8.3), slim enough that the joint balls read as joints. */
+export const MANNEQUIN_RADIUS_M = 0.022;
 
 export interface TubePrim {
   a: Vec3;
@@ -160,6 +162,30 @@ export function mannequinTubes(frame: SkeletonFrame): TubePrim[] {
     radiusM: MANNEQUIN_RADIUS_M,
     style: 'sketch' as const,
   }));
+}
+
+export interface BallPrim {
+  center: Vec3;
+  radiusM: number;
+}
+
+/** Mannequin joint spheres (sketch-figure look, proportions shared with the
+ * 2D silhouette via FIGURE): head ball, ring joints at shoulders / elbows /
+ * hips / knees, blob fists, foot balls at the shoes. */
+export function mannequinBalls(frame: SkeletonFrame, headRadiusM: number): BallPrim[] {
+  const P = frame.points;
+  const rJoint = FIGURE.jointR * headRadiusM;
+  const rFist = FIGURE.fistR * headRadiusM;
+  return [
+    { center: P.head, radiusM: FIGURE.headBallR * headRadiusM },
+    ...[P.shoulderL, P.shoulderR, P.elbowL, P.elbowR, P.hipL, P.hipR, P.kneeL, P.kneeR].map(
+      (center) => ({ center, radiusM: rJoint }),
+    ),
+    { center: P.handL, radiusM: rFist },
+    { center: P.handR, radiusM: rFist },
+    { center: P.shoeL, radiusM: FIGURE.footHalfWid * headRadiusM },
+    { center: P.shoeR, radiusM: FIGURE.footHalfWid * headRadiusM },
+  ];
 }
 
 /** Wearer mannequin bones in world space (§7 stick figure). */

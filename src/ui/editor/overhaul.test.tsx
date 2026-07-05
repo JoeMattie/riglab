@@ -15,9 +15,11 @@ import { createEmptyProject } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { PANEL_FRAME, projectPositions } from '../quad/panelProject';
+import { ActionsChip } from './ActionsChip';
 import { DimensionChips } from './DimensionChips';
 import { DofPill } from './DofPill';
 import { JointPopover } from './JointPopover';
+import { ProjectChip } from './ProjectChip';
 import { SelectionCard } from './SelectionCard';
 import { ToolPill } from './ToolPill';
 import { TransportPill } from './TransportPill';
@@ -119,6 +121,46 @@ describe('ToolPill', () => {
     expect(useEditorStore.getState().tool).toBe('select');
     fireEvent.keyDown(window, { key: 'p', metaKey: true });
     expect(useEditorStore.getState().tool).toBe('select');
+  });
+});
+
+describe('floating chrome drag-to-move (every pill has a grip handle)', () => {
+  const dragBy = (handle: HTMLElement, dx: number, dy: number) => {
+    fireEvent.pointerDown(handle, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 200 + dx, clientY: 200 + dy, pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+  };
+
+  it('actions chip moves by its grip', () => {
+    render(<ActionsChip />);
+    const chip = screen.getByTestId('actions-chip');
+    expect(chip.style.transform).toBe('translate(0px, 0px)');
+    dragBy(screen.getByTestId('actions-chip-handle'), -60, 25);
+    expect(chip.style.transform).toBe('translate(-60px, 25px)');
+  });
+
+  it('DOF pill moves by its grip (conflicts card anchored to it rides along)', () => {
+    render(<DofPill />);
+    const handle = screen.getByTestId('dof-pill-handle');
+    const container = handle.parentElement!;
+    dragBy(handle, -40, -30);
+    expect(container.style.transform).toBe('translate(-40px, -30px)');
+  });
+
+  it('transport pill moves by its grip', () => {
+    render(<TransportPill />);
+    const handle = screen.getByTestId('transport-pill-handle');
+    const wrapper = screen.getByTestId('transport-pill').parentElement!;
+    dragBy(handle, 80, -12);
+    expect(wrapper.style.transform).toBe('translate(80px, -12px)');
+  });
+
+  it('project chip moves by its grip', () => {
+    render(<ProjectChip />);
+    const handle = screen.getByTestId('project-chip-handle');
+    const container = handle.closest('div')!.parentElement!;
+    dragBy(handle, 15, 40);
+    expect(container.style.transform).toBe('translate(15px, 40px)');
   });
 });
 

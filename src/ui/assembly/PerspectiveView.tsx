@@ -16,6 +16,7 @@ import { moveNodes, setPointMassKg } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import { anchorTargets, bindingTargets, getClip, REST_POSE, samplePose } from '../../wearer';
+import { GripHandle, usePillDrag } from '../editor/pillDrag';
 import { panelStyle, scenePalette, T } from '../editor/theme';
 import { placeAxis } from './axis';
 import { PipeModelLayer } from './PipeModelLayer';
@@ -308,6 +309,14 @@ export function Scene3D({ scene }: { scene: CompoundScene }) {
 
       {/* wearer mannequin (capsules, not 1-px lines — §8.3 visibility) */}
       <Tubes tubes={scene.mannequin} color={C.mannequin} />
+      {/* sketch-figure joints: head ball, ring joints, fists, feet */}
+      {scene.mannequinJoints.map((b, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
+        <mesh key={i} position={tuple(b.center)}>
+          <sphereGeometry args={[b.radiusM, 16, 16]} />
+          <meshStandardMaterial color={C.mannequin} roughness={0.55} />
+        </mesh>
+      ))}
 
       {/* mechanism structure: wireframe tubes, or the solved pipe model.
           Cables (ropes/elastics/bowden) are physical in both renders. */}
@@ -382,6 +391,7 @@ export function PerspectiveView() {
   const scene = useCompoundScene(pivot);
   const project = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const drag = usePillDrag();
 
   if (!scene) return null;
 
@@ -401,8 +411,20 @@ export function PerspectiveView() {
 
       <RenderTogglePill style={{ top: 8, left: 8 }} />
 
-      {/* analysis sidebar (src/analysis): mass, CG, seesaw balance */}
-      <div style={{ position: 'absolute', top: 8, right: 8, bottom: 8, zIndex: 30 }}>
+      {/* analysis sidebar (src/analysis): mass, CG, seesaw balance. Docked
+          below the floating actions chip (which overlays this quadrant's
+          top-right corner at z 40) so its header is never buried; drag by
+          the grip to move it anywhere. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 44,
+          right: 8,
+          bottom: 8,
+          zIndex: 30,
+          transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
+        }}
+      >
         {analysisOpen ? (
           <div
             data-testid="analysis-sidebar"
@@ -417,7 +439,8 @@ export function PerspectiveView() {
               gap: 12,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GripHandle testid="analysis-sidebar-handle" drag={drag} vertical />
               <span
                 style={{
                   fontSize: 11,
@@ -547,6 +570,7 @@ export function PerspectiveView() {
 export function RenderTogglePill({ style }: { style?: React.CSSProperties } = {}) {
   const assemblyRender = useEditorStore((s) => s.assemblyRender);
   const setAssemblyRender = useEditorStore((s) => s.setAssemblyRender);
+  const drag = usePillDrag();
   const options = [
     { key: 'wire' as const, label: 'Wireframe' },
     { key: 'pipe' as const, label: 'Pipe model' },
@@ -558,11 +582,14 @@ export function RenderTogglePill({ style }: { style?: React.CSSProperties } = {}
         position: 'absolute',
         zIndex: 30,
         display: 'flex',
+        alignItems: 'center',
         gap: 2,
         padding: 3,
         ...style,
+        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
       }}
     >
+      <GripHandle testid="render-toggle-handle" drag={drag} vertical />
       {options.map((o) => (
         <button
           type="button"

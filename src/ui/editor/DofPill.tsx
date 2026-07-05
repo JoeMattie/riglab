@@ -4,6 +4,7 @@
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { deriveConflicts } from './conflicts';
+import { GripHandle, usePillDrag } from './pillDrag';
 import { captionStyle, EDGE, menuStyle, T } from './theme';
 
 export function DofPill() {
@@ -15,6 +16,7 @@ export function DofPill() {
   const openPopover = useEditorStore((s) => s.openPopover);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const setFocusElement = useEditorStore((s) => s.setFocusElement);
+  const drag = usePillDrag();
 
   const mech = doc?.mechanism ?? null;
   if (!mech || !dof) return null;
@@ -24,7 +26,19 @@ export function DofPill() {
   const open = openPopover?.kind === 'dof';
 
   return (
-    <div style={{ position: 'absolute', right: EDGE, bottom: EDGE, zIndex: 40 }}>
+    <div
+      style={{
+        position: 'absolute',
+        right: EDGE,
+        bottom: EDGE,
+        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        zIndex: 40,
+      }}
+    >
+      <GripHandle testid="dof-pill-handle" drag={drag} vertical />
       {open && !healthy && (
         <div
           data-testid="dof-conflicts"

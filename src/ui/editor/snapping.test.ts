@@ -122,7 +122,7 @@ describe('findSnap skeleton binding points', () => {
     Vec2
   >;
   const anchors = { beltR: at(0.5, 2) } as Record<WearerAnchor, Vec2>;
-  const silhouette: Silhouette = { outlines: [], points, anchors };
+  const silhouette: Silhouette = { outlines: [], loops: [], points, anchors };
   const m = mech([], [node('n1', 0, 0)]);
   const positions = { n1: { x: 0, y: 0 } };
 

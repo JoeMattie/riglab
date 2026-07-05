@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PipeMaterial, Vec3 } from '../../schema';
-import { computeSkeleton, REST_POSE } from '../../wearer';
+import { computeSkeleton, FIGURE, headRadiusM, REST_POSE } from '../../wearer';
 import {
   elementPolylines,
   GENERIC_PIPE_OD_M,
   MANNEQUIN_RADIUS_M,
+  mannequinBalls,
   mannequinBones,
   mannequinTubes,
   mechanismPrimitives,
@@ -78,6 +79,22 @@ describe('mechanismSegments + mannequinBones', () => {
     const tubes = mannequinTubes(frame);
     expect(tubes).toHaveLength(mannequinBones(frame).length);
     for (const t of tubes) expect(t.radiusM).toBe(MANNEQUIN_RADIUS_M);
+  });
+
+  it('adds sketch-figure balls: head + 8 joints + 2 fists + 2 feet', () => {
+    const wearer = { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 };
+    const frame = computeSkeleton(wearer, REST_POSE);
+    const hr = headRadiusM(wearer);
+    const balls = mannequinBalls(frame, hr);
+    expect(balls).toHaveLength(13);
+    expect(balls[0]).toEqual({ center: frame.points.head, radiusM: FIGURE.headBallR * hr });
+    const at = (p: Vec3) =>
+      balls.find((b) => b.center.x === p.x && b.center.y === p.y && b.center.z === p.z);
+    expect(at(frame.points.kneeR)?.radiusM).toBeCloseTo(FIGURE.jointR * hr, 12);
+    expect(at(frame.points.handL)?.radiusM).toBeCloseTo(FIGURE.fistR * hr, 12);
+    expect(at(frame.points.shoeL)?.radiusM).toBeCloseTo(FIGURE.footHalfWid * hr, 12);
+    // joint balls are fatter than the bone capsules, so they read as joints
+    for (const b of balls) expect(b.radiusM).toBeGreaterThan(MANNEQUIN_RADIUS_M);
   });
 });
 

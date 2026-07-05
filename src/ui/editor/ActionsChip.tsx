@@ -11,6 +11,7 @@ import { type Face, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import { copySelection, pasteClipboard } from './clipboardActions';
 import { ThemeIcon } from './icons';
+import { GripHandle, usePillDrag } from './pillDrag';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
 
 export function ActionsChip() {
@@ -24,6 +25,7 @@ export function ActionsChip() {
   const hasClipboard = useEditorStore((s) => s.clipboard !== null);
   const night = useThemeStore((s) => s.night);
   const toggleNight = useThemeStore((s) => s.toggleNight);
+  const drag = usePillDrag();
 
   if (!doc) return null;
 
@@ -77,11 +79,13 @@ export function ActionsChip() {
 
   return (
     <div
+      data-testid="actions-chip"
       style={{
         ...panelStyle,
         position: 'absolute',
         right: EDGE,
         top: EDGE,
+        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
         display: 'flex',
         alignItems: 'center',
         gap: 10,
@@ -89,6 +93,7 @@ export function ActionsChip() {
         zIndex: 40,
       }}
     >
+      <GripHandle testid="actions-chip-handle" drag={drag} vertical />
       <button type="button" data-testid="undo" title="undo ⌘Z" onClick={undo} style={iconButton}>
         ↶
       </button>

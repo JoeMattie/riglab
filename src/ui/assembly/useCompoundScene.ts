@@ -8,9 +8,9 @@ import { type BalanceQuery, balanceReport, massInventory } from '../../analysis'
 import type { Vec3, WearerAnchor } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
-import { computeSkeleton, getClip, REST_POSE, samplePose } from '../../wearer';
+import { computeSkeleton, getClip, headRadiusM, REST_POSE, samplePose } from '../../wearer';
 import { pickRenderPositions } from '../editor/forces';
-import { mannequinTubes, mechanismPrimitives } from './scene';
+import { mannequinBalls, mannequinTubes, mechanismPrimitives } from './scene';
 
 export function useCompoundScene(pivot: BalanceQuery) {
   const project = useAppStore((s) => s.current);
@@ -40,6 +40,7 @@ export function useCompoundScene(pivot: BalanceQuery) {
 
     const prims = mechanismPrimitives(mech.elements, positions, project.materials.pipes);
     const mannequin = mannequinTubes(frame);
+    const mannequinJoints = mannequinBalls(frame, headRadiusM(project.wearer));
 
     // mounted controls (§4.4) ride their attach point — a yoke on handR
     // follows the hand through the walk clip
@@ -61,6 +62,7 @@ export function useCompoundScene(pivot: BalanceQuery) {
       positions,
       frame,
       mannequin,
+      mannequinJoints,
       prims,
       controlMounts,
       masses: inventory.masses,

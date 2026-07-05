@@ -2069,3 +2069,57 @@ current app behavior plus this file as the source of truth, with new feature
 work getting a planfile under `docs/planfiles/` before it starts; README
 links were updated to the archived paths and the GitHub repo
 description/homepage now point at the Cloudflare Pages deployment.
+### DECISION: console-cleanliness e2e sweep runs against the dev server (2026-07-05)
+A duplicate-React-key regression (selected adjacent pipes pushed shared
+joint nodes twice into the endpoint-handle list, SketchCanvas) flooded the
+console on every marquee selection, and no suite could catch it: React
+strips render diagnostics (duplicate keys, invalid props,
+setState-in-render) from production builds, and the whole Playwright suite
+runs against `vite preview` of the built app. New spec
+`e2e/console-clean.spec.ts` loads every bundled example and sweeps the
+surfaces a user touches (marquee multi-select, both faces, all four
+design-dock tabs, clip playback), asserting zero console errors — and it
+runs in its own Playwright project (`dev-console`) against `vite dev` on
+port 4199, because only the dev build emits those warnings. The built-app
+specs stay the definition-of-done gate; this project only guards "nothing
+renders dirty". Port 4199 (not 4174) because `reuseExistingServer` will
+happily adopt any stale server squatting the port — a leftover
+`vite preview` of a days-old build did exactly that on the first run.
+Verified the guard both ways: fails on the un-fixed SketchCanvas, passes
+with the dedupe fix.
+
+### DECISION: all floating chrome is drag-to-move (2026-07-05)
+Joe hit the actions chip burying the perspective panel's analysis-sidebar
+header (same top-right corner: chip z 40 over sidebar z 30 — the ✕ close
+button sat exactly under Export and was unclickable) and asked for every
+pill to be draggable rather than a reposition-only fix. The tool pill's
+grip-handle drag is now a shared primitive (`src/ui/editor/pillDrag.tsx`:
+`usePillDrag` + `GripHandle`) applied to the project chip, actions chip,
+transport pill, DOF pill, render toggle, and analysis sidebar; popovers
+anchored to a pill (clip menu, input channels, conflicts card) ride along
+because the offset is applied to their shared container. Offsets stay
+session-transient (pills snap back to their docks on reload) — same
+semantics the tool pill and selection card already had, and no schema or
+persistence surface. The analysis sidebar's default dock also moved down
+(top 8 → 44 in the panel) so nothing overlaps out of the box. Grip is a
+dedicated handle, not whole-pill dragging, so buttons/inputs inside pills
+keep normal click semantics. Covered in overhaul.test.tsx (a drag case per
+chrome piece) plus a scripted built-app check (drag chip, collapse sidebar).
+
+### DECISION: CI deploys to Cloudflare Pages (2026-07-05)
+Hosting is Cloudflare Pages free tier (project `riglab`, production URL
+https://riglab.pages.dev) — static assets only, no backend, which is the
+only deployment shape the planfile permits anyway. Deployment is a `deploy`
+job appended to the existing CI workflow: it runs only on pushes to `main`,
+only after the full `ci` job (typecheck + lint + test + build + e2e)
+passes, and it deploys the exact `dist/` artifact CI built and tested
+(uploaded/downloaded via actions artifacts) rather than rebuilding, so the
+deployed bytes are the verified bytes. Wrangler is pinned (`wrangler@4.107.0`)
+per the exact-versions rule. Auth is a dedicated API token scoped to
+Pages Write on this account only (named `riglab-ci-pages-deploy`), stored
+as GitHub Actions secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`.
+Chose direct-upload via wrangler over Cloudflare's Git integration so CI
+remains the single gate — the Git integration builds on Cloudflare's side
+and would deploy even when our test suite fails. PR preview deployments
+deliberately not added (scope).
+

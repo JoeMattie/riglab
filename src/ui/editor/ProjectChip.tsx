@@ -2,6 +2,7 @@
 // indicator. The v6 mechanism switcher is gone — one compound mechanism per
 // project (PLANFILE-3d-conversion.md).
 import { useAppStore } from '../../state/appStore';
+import { GripHandle, usePillDrag } from './pillDrag';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
 
 export function ProjectChip() {
@@ -9,13 +10,22 @@ export function ProjectChip() {
   const saveState = useAppStore((s) => s.saveState);
   const closeProject = useAppStore((s) => s.closeProject);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const drag = usePillDrag();
 
   if (!doc) return null;
 
   const saved = saveState === 'saved';
 
   return (
-    <div style={{ position: 'absolute', left: EDGE, top: EDGE, zIndex: 40 }}>
+    <div
+      style={{
+        position: 'absolute',
+        left: EDGE,
+        top: EDGE,
+        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
+        zIndex: 40,
+      }}
+    >
       <div
         style={{
           ...panelStyle,
@@ -25,6 +35,7 @@ export function ProjectChip() {
           padding: '8px 12px',
         }}
       >
+        <GripHandle testid="project-chip-handle" drag={drag} vertical />
         <button
           type="button"
           data-testid="back-to-projects"

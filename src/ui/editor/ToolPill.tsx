@@ -1,9 +1,10 @@
 // The floating tool pill (design handoff §2): labeled rows in captioned
 // groups with single-key shortcuts, draggable by its grip handle (wireframe
 // 1c's "drag to move" pill). Replaces Toolbar.tsx.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { type Tool, useEditorStore } from '../../state/editorStore';
 import { ToolIcon, type ToolIconName } from './icons';
+import { GripHandle, usePillDrag } from './pillDrag';
 import { captionStyle, EDGE, panelStyle, T } from './theme';
 
 interface ToolDef {
@@ -61,10 +62,8 @@ export function ToolPill() {
   const tool = useEditorStore((s) => s.tool);
   const setTool = useEditorStore((s) => s.setTool);
   // drag-to-move offset from the default dock (transient, like the card's)
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; base: { x: number; y: number } } | null>(
-    null,
-  );
+  const drag = usePillDrag();
+  const { offset } = drag;
 
   // single-key shortcuts (V P L F R E B T N); Esc returns to Select.
   // Skipped while typing and for modifier chords (⌘Z etc.).
@@ -105,39 +104,7 @@ export function ToolPill() {
         zIndex: 40,
       }}
     >
-      <div
-        data-testid="tool-pill-handle"
-        title="drag to move"
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture?.(e.pointerId);
-          dragRef.current = { startX: e.clientX, startY: e.clientY, base: offset };
-        }}
-        onPointerMove={(e) => {
-          const d = dragRef.current;
-          if (!d) return;
-          setOffset({ x: d.base.x + e.clientX - d.startX, y: d.base.y + e.clientY - d.startY });
-        }}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
-        style={{
-          display: 'grid',
-          placeItems: 'center',
-          padding: '1px 0 3px',
-          cursor: 'grab',
-          color: T.ghost,
-          touchAction: 'none',
-        }}
-      >
-        <svg width={20} height={5} viewBox="0 0 20 5" aria-hidden="true">
-          {[1, 7, 13, 19].map((x) => (
-            <circle key={x} cx={x} cy={1.5} r={1.2} fill="currentColor" />
-          ))}
-          {[4, 10, 16].map((x) => (
-            <circle key={x} cx={x} cy={4} r={1.2} fill="currentColor" />
-          ))}
-        </svg>
-      </div>
+      <GripHandle testid="tool-pill-handle" drag={drag} />
       {GROUPS.map((g) => (
         <div key={g.caption ?? 'main'} style={{ display: 'contents' }}>
           {g.caption && (

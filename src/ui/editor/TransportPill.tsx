@@ -11,6 +11,7 @@ import { addInputChannel, removeInputChannel, setInputChannel } from '../../stat
 import { useEditorStore } from '../../state/editorStore';
 import { CLIPS, getClip } from '../../wearer';
 import { formatForce, solverStatusLabel } from './forces';
+import { GripHandle, usePillDrag } from './pillDrag';
 import {
   captionStyle,
   dividerStyle,
@@ -150,6 +151,7 @@ export function TransportPill() {
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const rafRef = useRef(0);
   const scrubberRef = useRef<HTMLSpanElement>(null);
+  const drag = usePillDrag();
 
   const clip = playback.clipName ? getClip(playback.clipName) : undefined;
 
@@ -200,7 +202,14 @@ export function TransportPill() {
         pointerEvents: 'none',
       }}
     >
-      <div style={{ position: 'relative', maxWidth: '100%', pointerEvents: 'auto' }}>
+      <div
+        style={{
+          position: 'relative',
+          maxWidth: '100%',
+          pointerEvents: 'auto',
+          transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
+        }}
+      >
         {clipOpen && (
           <div
             data-testid="clip-menu"
@@ -372,6 +381,7 @@ export function TransportPill() {
             maxWidth: '100%',
           }}
         >
+          <GripHandle testid="transport-pill-handle" drag={drag} vertical />
           <button
             type="button"
             data-testid="clip-select"

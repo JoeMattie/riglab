@@ -4,7 +4,7 @@ import { DEFAULT_WEARER, type Mechanism } from '../schema';
 import { anchorTargets, bindingTargets } from './bindings';
 import { CLIPS, getClip } from './clips';
 import { samplePose } from './playback';
-import { computeSilhouette, projectPoint, projectSilhouette } from './projection';
+import { computeSilhouette, FIGURE, projectPoint, projectSilhouette } from './projection';
 import { computeSkeleton, headRadiusM, REST_POSE } from './skeleton';
 
 describe('parametric skeleton', () => {
@@ -80,6 +80,68 @@ describe('panel projections', () => {
     expect(projectSilhouette(frame, headRadiusM(DEFAULT_WEARER), basis)).toEqual(
       computeSilhouette(DEFAULT_WEARER, REST_POSE, basis),
     );
+  });
+
+  it('draws the sketch figure: egg head, 8 joint rings, 2 fists, 2 foot ovals', () => {
+    const hr = headRadiusM(DEFAULT_WEARER);
+    const s = computeSilhouette(DEFAULT_WEARER, REST_POSE, orientationFrame('front'));
+    expect(s.loops).toHaveLength(13);
+
+    // head loop is centered on the head point and narrower than tall
+    const head = s.loops[0]!;
+    const xs = head.map((p) => p.x);
+    const ys = head.map((p) => p.y);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const height = Math.max(...ys) - Math.min(...ys);
+    expect(height).toBeCloseTo(2 * hr, 6);
+    expect(width).toBeCloseTo(2 * FIGURE.headRx * hr, 6);
+    expect((Math.max(...xs) + Math.min(...xs)) / 2).toBeCloseTo(s.points.head.x, 6);
+
+    // some loop rings each articulated joint (front view: none degenerate)
+    for (const joint of ['shoulderL', 'elbowR', 'hipL', 'kneeR', 'handL', 'shoeR'] as const) {
+      const c = s.points[joint];
+      const ringed = s.loops.some((loop) =>
+        loop.every((p) => {
+          const d = Math.hypot(p.x - c.x, p.y - c.y);
+          return d > 0.05 * hr && d < 1.1 * hr;
+        }),
+      );
+      expect(ringed, `${joint} has a ring/blob`).toBe(true);
+    }
+  });
+
+  it('bone strokes stop at the joint rings instead of running through them', () => {
+    const hr = headRadiusM(DEFAULT_WEARER);
+    const s = computeSilhouette(DEFAULT_WEARER, REST_POSE, orientationFrame('front'));
+    const rJoint = FIGURE.jointR * hr;
+    // the upper-arm stroke exists with both endpoints pulled back by the
+    // joint radius along the shoulder→elbow line
+    const a = s.points.shoulderL;
+    const b = s.points.elbowL;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+    const upperArm = s.outlines.find(
+      (o) =>
+        o.length === 2 &&
+        Math.abs(o[0]!.x - (a.x + u.x * rJoint)) < 1e-9 &&
+        Math.abs(o[0]!.y - (a.y + u.y * rJoint)) < 1e-9 &&
+        Math.abs(o[1]!.x - (b.x - u.x * rJoint)) < 1e-9 &&
+        Math.abs(o[1]!.y - (b.y - u.y * rJoint)) < 1e-9,
+    );
+    expect(upperArm).toBeDefined();
+    // no outline endpoint sits at a ringed joint center anymore
+    for (const o of s.outlines)
+      for (const p of [o[0]!, o[o.length - 1]!])
+        expect(Math.hypot(p.x - b.x, p.y - b.y)).toBeGreaterThan(0.9 * rJoint);
+  });
+
+  it('drops bones that are edge-on in the panel (shoulder bar in side view)', () => {
+    const front = computeSilhouette(DEFAULT_WEARER, REST_POSE, orientationFrame('front'));
+    const side = computeSilhouette(DEFAULT_WEARER, REST_POSE, orientationFrame('side-left'));
+    // side view: the shoulder/hip bars project to a point shorter than their
+    // trims, so the side panel carries fewer strokes than the front panel
+    expect(side.outlines.length).toBeLessThan(front.outlines.length);
+    expect(side.loops.length).toBe(13);
   });
 });
 
