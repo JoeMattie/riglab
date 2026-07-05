@@ -33,6 +33,8 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
   await page.goto('/');
   await page.getByTestId('new-project-name').fill('Forces Smoke');
   await page.getByTestId('create-project').click();
+  // the mechanism switcher lives in the project chip's menu (overhaul chrome)
+  await page.getByTestId('mechanism-menu-button').click();
   await page.getByTestId('add-mechanism').click();
   await page.getByTestId('view-side-left').click();
 
@@ -70,13 +72,13 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
   mech = await activeMech(page);
   expect(mech.elements.some((e) => e.type === 'elastic')).toBe(true);
 
-  // equilibrium toggle → solver status appears. In this worktree the solver's
-  // equilibrium mode is unavailable, so it degrades gracefully rather than
-  // throwing.
-  await page.getByTestId('equilibrium-toggle').check();
+  // equilibrium ("forces") chip → solver status appears in the transport pill
+  await page.getByTestId('equilibrium-toggle').click();
   await expect(page.getByTestId('solver-status')).toBeVisible();
 
-  // add an input channel and lock it — the slider freezes
+  // input channels live in the transport pill's inputs popover (overhaul):
+  // add a channel and lock it — the slider freezes
+  await page.getByTestId('inputs-toggle').click();
   await page.getByTestId('add-input').click();
   await expect(page.getByTestId('input-channel')).toHaveCount(1);
   await page.getByTestId('input-lock').click();

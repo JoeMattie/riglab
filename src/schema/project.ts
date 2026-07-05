@@ -5,7 +5,7 @@ import { materialsDbSchema } from './materials';
 import { mechanismSchema } from './mechanism';
 import { seedMaterialsDb } from './seedMaterials';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** Parametric mannequin dimensions (§7); segment lengths derive from height
  * via standard anthropometry in src/wearer/. */
@@ -43,7 +43,8 @@ export const DEFAULT_BOM_SETTINGS: BomSettings = {
 /** The project document — the single source of truth for the file format.
  * Every schema change bumps SCHEMA_VERSION and adds a migration (§3).
  * v2: mechanisms gained skeletonBindings; project gained wearer params.
- * v3: project gained bomSettings; materials DB seeded on creation (§6.1). */
+ * v3: project gained bomSettings; materials DB seeded on creation (§6.1).
+ * v4: link/telescope gained optional lengthLocked (interface overhaul). */
 export const projectSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   id: idSchema,

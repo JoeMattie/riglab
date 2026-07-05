@@ -39,10 +39,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MaterialsPanel', () => {
-  it('renders a row per pipe with the approximate badge on seed rows', () => {
+  it('renders a row per pipe, with no approximate badge (removed by decision)', () => {
     render(<MaterialsPanel />);
     expect(screen.getAllByTestId('pipe-row')).toHaveLength(5);
-    expect(screen.getAllByTestId('material-approx-badge').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('material-approx-badge')).toBeNull();
   });
 
   it('numeric edit writes through and clears the approximate flag', () => {

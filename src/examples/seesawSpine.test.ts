@@ -10,7 +10,7 @@ describe('bundled seesaw-spine example', () => {
   it('the JSON artifact validates and matches the builder (no drift)', () => {
     const loaded = loadSeesawSpine();
     expect(loaded).toEqual(buildSeesawSpineProject());
-    expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.schemaVersion).toBe(4);
   });
 
   it('is a dimensionally plausible elevation truss with tagged pipes and masses', () => {

@@ -702,6 +702,172 @@ export function setLinkLength(
   });
 }
 
+// ── interface-overhaul ops (dimension chips + joint popover) ────────────────
+
+/** Pin/unpin a link/telescope length (the dimension-chip lock). Locked
+ * lengths refuse direct geometry edits (endpoint drag / scrub / typed value);
+ * the kinematic solver already holds every pipe length rigid while posing. */
+export function setLengthLocked(
+  doc: Project,
+  mechId: string,
+  elementId: string,
+  locked: boolean,
+): Project {
+  return mapElements(doc, mechId, (el) =>
+    el.id === elementId && (el.type === 'link' || el.type === 'telescope')
+      ? { ...el, lengthLocked: locked || undefined }
+      : el,
+  );
+}
+
+/** Re-realize the joint at a node (joint popover):
+ * - 'pivot' — members rotate freely: node un-anchored; any pivot element at
+ *   the node keeps its members/realization but loses its welds.
+ * - 'weld' — all members rigid: node un-anchored; a pivot element is created
+ *   (or updated) with every member pair welded.
+ * - 'anchor' — the node is grounded (double-click parity).
+ * No-op when a joint kind needs ≥2 members and the node has fewer. */
+export function setNodeJoint(
+  doc: Project,
+  mechId: string,
+  nodeId: string,
+  kind: 'pivot' | 'weld' | 'anchor',
+): Project {
+  return withMechanism(doc, mechId, (m) => {
+    const node = m.nodes.find((n) => n.id === nodeId);
+    if (!node) return m;
+    if (kind === 'anchor') {
+      return { ...m, nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor' } : n)) };
+    }
+    const members = elementsAtNode(m, nodeId);
+    const existing = m.elements.find(
+      (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
+    );
+    let elements = m.elements;
+    if (kind === 'pivot') {
+      if (existing) {
+        elements = elements.map((e) => (e.id === existing.id ? { ...existing, welds: [] } : e));
+      }
+      // no explicit pivot element = an implicit free pin already
+    } else {
+      if (members.length < 2) return m;
+      const first = members[0]!;
+      const welds = members.slice(1).map((id) => [first, id] as [string, string]);
+      elements = existing
+        ? elements.map((e) =>
+            e.id === existing.id ? { ...existing, memberIds: members, welds } : e,
+          )
+        : [
+            ...elements,
+            {
+              id: uid(),
+              type: 'pivot',
+              maturity: 'sketch',
+              nodeId,
+              memberIds: members,
+              welds,
+            } satisfies PivotElement,
+          ];
+    }
+    return {
+      ...m,
+      nodes: m.nodes.map((n) =>
+        n.id === nodeId && n.kind === 'anchor' ? { ...n, kind: 'free' } : n,
+      ),
+      elements,
+    };
+  });
+}
+
+/** Disconnect a junction: every incident element beyond the first gets its
+ * own copy of the node (same position), and joint elements (pivot/slider) at
+ * the node are removed. Skeleton bindings stay on the original node. */
+export function detachNode(doc: Project, mechId: string, nodeId: string): Project {
+  return withMechanism(doc, mechId, (m) => {
+    const node = m.nodes.find((n) => n.id === nodeId);
+    if (!node) return m;
+    const newNodes: Mechanism['nodes'] = [];
+    let first = true;
+    const replaceRef = (): string => {
+      if (first) {
+        first = false;
+        return nodeId;
+      }
+      const id = uid();
+      newNodes.push({ ...node, id });
+      return id;
+    };
+    const elements = m.elements
+      .filter((e) => !((e.type === 'pivot' || e.type === 'slider') && e.nodeId === nodeId))
+      .map((e): MechanismElement => {
+        switch (e.type) {
+          case 'link':
+          case 'telescope':
+          case 'elastic':
+            if (e.nodeA !== nodeId && e.nodeB !== nodeId) return e;
+            return {
+              ...e,
+              nodeA: e.nodeA === nodeId ? replaceRef() : e.nodeA,
+              nodeB: e.nodeB === nodeId ? replaceRef() : e.nodeB,
+            };
+          case 'bentLink':
+            if (!e.nodeIds.includes(nodeId)) return e;
+            return { ...e, nodeIds: e.nodeIds.map((id) => (id === nodeId ? replaceRef() : id)) };
+          case 'rope':
+            if (!e.path.includes(nodeId)) return e;
+            return { ...e, path: e.path.map((id) => (id === nodeId ? replaceRef() : id)) };
+          case 'bowden': {
+            if (![e.a1, e.a2, e.b1, e.b2].includes(nodeId)) return e;
+            const r = (id: string) => (id === nodeId ? replaceRef() : id);
+            return { ...e, a1: r(e.a1), a2: r(e.a2), b1: r(e.b1), b2: r(e.b2) };
+          }
+          default:
+            return e;
+        }
+      });
+    return { ...m, elements, nodes: [...m.nodes, ...newNodes] };
+  });
+}
+
+/** Swap a link/telescope's A and B ends (selection-card "Reverse"). Length
+ * edits and end realizations are A-anchored, so reversing chooses which end
+ * stays put. */
+export function reverseLink(doc: Project, mechId: string, elementId: string): Project {
+  return mapElements(doc, mechId, (el) => {
+    if (el.id !== elementId) return el;
+    if (el.type === 'link') {
+      return {
+        ...el,
+        nodeA: el.nodeB,
+        nodeB: el.nodeA,
+        endRealizationA: el.endRealizationB,
+        endRealizationB: el.endRealizationA,
+      };
+    }
+    if (el.type === 'telescope') return { ...el, nodeA: el.nodeB, nodeB: el.nodeA };
+    if (el.type === 'bentLink') {
+      return {
+        ...el,
+        nodeIds: [...el.nodeIds].reverse(),
+        filletRadiiM: [...el.filletRadiiM].reverse(),
+        endRealizationA: el.endRealizationB,
+        endRealizationB: el.endRealizationA,
+      };
+    }
+    return el;
+  });
+}
+
+/** Split a straight link at its midpoint (selection-card "Split"); the two
+ * halves stay welded at the new node, matching the drawn-onto-pipe behavior. */
+export function splitLinkAtMidpoint(doc: Project, mechId: string, elementId: string): Project {
+  return withMechanism(doc, mechId, (m) => {
+    const el = m.elements.find((e) => e.id === elementId);
+    if (el?.type !== 'link') return m;
+    return splitLink(m, elementId, 0.5).mechanism;
+  });
+}
+
 /** Patch behavior parameters of one element (rope L₀, elastic k/rest/
  * pretension, telescope range/sliding, bowden rests, torsion ratio/backlash,
  * pivot limits/spring — §8.2a). The expected `type` guards against stale

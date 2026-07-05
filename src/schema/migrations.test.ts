@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixtureProject, fixtureProjectV1, fixtureProjectV2 } from './fixtures';
+import { fixtureProject, fixtureProjectV1, fixtureProjectV2, fixtureProjectV3 } from './fixtures';
 import {
   applyMigrations,
   type Migration,
@@ -54,6 +54,13 @@ describe('v2 → v3 migration', () => {
       fixtureProject().mechanisms[0]!.skeletonBindings,
     );
     expect(migrated.wearer).toEqual(fixtureProject().wearer);
+  });
+});
+
+describe('v3 → v4 migration', () => {
+  it('re-stamps a v3 document unchanged (lengthLocked is optional)', () => {
+    const migrated = migrateToLatest(fixtureProjectV3());
+    expect(migrated).toEqual(fixtureProject());
   });
 });
 

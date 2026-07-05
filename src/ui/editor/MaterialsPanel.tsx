@@ -1,8 +1,9 @@
 // Editable materials DB (§6.1) + the derived nesting-compatibility matrix.
 // Every edit is one updateCurrent call (one undo entry, commit-on-blur).
-// Rows still carrying seed values show the "approximate — edit me" badge
-// (§12); editing a number clears it (materialsOps rule). The matrix is
-// recomputed live from OD/ID, never stored.
+// Seed rows carry `approximate: true` as internal bookkeeping only (no
+// badge — seed values are published catalog figures); editing a number
+// clears it (materialsOps rule). The matrix is recomputed live from OD/ID,
+// never stored.
 import type { NestingClass } from '../../bom';
 import { nestingMatrix } from '../../bom';
 import type { FittingType, PipeSizingSystem } from '../../schema';
@@ -17,7 +18,6 @@ import {
   updateBomSettings,
   updateMaterialRow,
 } from '../../state/materialsOps';
-import { Badge } from '../components/badge';
 import { Button } from '../components/button';
 import { Input } from '../components/input';
 import {
@@ -83,6 +83,7 @@ function EnumSelect<T extends string>({
 
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: children is always the wrapped input/select — the association is by nesting, invisible to static analysis
     <label className="flex min-w-0 flex-col gap-0.5 text-muted-foreground text-xs">
       {label}
       {children}
@@ -91,13 +92,11 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
 }
 
 function RowChrome({
-  approximate,
   references,
   onDelete,
   children,
   testId,
 }: {
-  approximate: boolean;
   references: number;
   onDelete: () => void;
   children: React.ReactNode;
@@ -108,16 +107,6 @@ function RowChrome({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">{children}</div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {approximate && (
-            <Badge
-              variant="outline"
-              className="text-amber-700"
-              title="seed value — verify against purchased stock and enter the measured number"
-              data-testid="material-approx-badge"
-            >
-              approx — edit me
-            </Badge>
-          )}
           <Button
             type="button"
             variant="ghost"
@@ -178,7 +167,6 @@ export function MaterialsPanel() {
           <RowChrome
             key={p.id}
             testId="pipe-row"
-            approximate={p.approximate}
             references={materialReferenceCount(doc, p.id)}
             onDelete={() => remove('pipes', p.id)}
           >
@@ -293,7 +281,6 @@ export function MaterialsPanel() {
           <RowChrome
             key={f.id}
             testId="fitting-row"
-            approximate={f.approximate}
             references={0}
             onDelete={() => remove('fittings', f.id)}
           >
@@ -352,7 +339,6 @@ export function MaterialsPanel() {
           <RowChrome
             key={c.id}
             testId="cordage-row"
-            approximate={c.approximate}
             references={materialReferenceCount(doc, c.id)}
             onDelete={() => remove('cordage', c.id)}
           >
@@ -400,7 +386,6 @@ export function MaterialsPanel() {
           <RowChrome
             key={s.id}
             testId="sheet-row"
-            approximate={s.approximate}
             references={0}
             onDelete={() => remove('sheets', s.id)}
           >
@@ -432,7 +417,6 @@ export function MaterialsPanel() {
           <RowChrome
             key={h.id}
             testId="hardware-row"
-            approximate={h.approximate}
             references={0}
             onDelete={() => remove('hardware', h.id)}
           >

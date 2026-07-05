@@ -66,8 +66,38 @@ describe('view projections', () => {
 });
 
 describe('movement clips', () => {
-  it('bundles walk, arm swing, and lean, all schema-valid', () => {
-    expect(CLIPS.map((c) => c.name).sort()).toEqual(['arm swing', 'lean', 'walk']);
+  it('bundles the full §7.2 clip library, all schema-valid', () => {
+    expect(CLIPS.map((c) => c.name).sort()).toEqual([
+      'arm swing',
+      'crouch',
+      'dance',
+      'idle sway',
+      'lean',
+      'sit down / stand up',
+      'walk',
+    ]);
+  });
+
+  it('sit and crouch lower the pelvis at mid-clip and return to rest', () => {
+    for (const name of ['sit down / stand up', 'crouch']) {
+      const clip = getClip(name)!;
+      const mid = samplePose(clip, clip.durationS / 2);
+      expect(mid.pelvisRise).toBeLessThan(-0.3);
+      expect(mid.kneeL).toBeGreaterThan(1);
+      expect(mid.kneeL).toBeCloseTo(mid.kneeR, 10); // symmetric pose
+      expect(samplePose(clip, 0)).toEqual(samplePose(clip, clip.durationS)); // seamless
+    }
+  });
+
+  it('idle sway stays subtle (never leaves the near-rest envelope)', () => {
+    const sway = getClip('idle sway')!;
+    for (let t = 0; t <= sway.durationS; t += 0.25) {
+      const p = samplePose(sway, t);
+      for (const key of ['hipL', 'hipR', 'kneeL', 'kneeR', 'lean'] as const) {
+        expect(Math.abs(p[key])).toBeLessThan(0.15);
+      }
+      expect(Math.abs(p.pelvisRise)).toBeLessThan(0.02);
+    }
   });
 
   it('walk loops seamlessly and the legs run half a phase apart', () => {

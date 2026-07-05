@@ -1,7 +1,9 @@
-// The right-side dock. Sketch face: just the info panel (§8.1 keeps
-// engineering hidden). Design face: inspector + resolution checklist docked
-// alongside (§8.2), with the materials panel (incl. nesting matrix, §6.1)
-// and the BOM view (§6.2) as sibling tabs.
+// The design-face dock: inspector + resolution checklist docked alongside
+// (§8.2), with the materials panel (incl. nesting matrix, §6.1) and the BOM
+// view (§6.2) as sibling tabs. The sketch face has no dock since the
+// interface overhaul — selection properties live on the canvas (selection
+// card + dimension chips); the shell renders this only in the design face,
+// wrapped in a floating panel.
 import { type RightTab, useEditorStore } from '../../state/editorStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/tabs';
 import { BomPanel } from './BomPanel';
@@ -17,17 +19,11 @@ const TABS: Array<{ id: RightTab; label: string }> = [
 ];
 
 export function RightDock() {
-  const face = useEditorStore((s) => s.face);
   const rightTab = useEditorStore((s) => s.rightTab);
   const setRightTab = useEditorStore((s) => s.setRightTab);
 
-  if (face === 'sketch') return <InfoPanel />;
-
   return (
-    <div
-      className="flex w-96 shrink-0 flex-col border-l bg-background text-sm"
-      data-testid="right-dock"
-    >
+    <div className="flex min-h-0 w-full flex-col bg-background text-sm" data-testid="right-dock">
       <Tabs
         value={rightTab}
         onValueChange={(v) => setRightTab(v as RightTab)}
@@ -45,7 +41,7 @@ export function RightDock() {
           ))}
         </TabsList>
         <TabsContent value="inspector" className="min-h-0 flex-1 overflow-y-auto">
-          <InfoPanel embedded />
+          <InfoPanel />
         </TabsContent>
         <TabsContent value="checklist" className="min-h-0 flex-1 overflow-y-auto">
           <ChecklistPanel />

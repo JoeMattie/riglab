@@ -1119,3 +1119,216 @@ tables — the dock is 384 px and OD/ID/density/socket fields would not fit
 legible table columns. The nesting matrix is a real table (outer rows ×
 inner columns, §6.1) with per-cell classification badges and mm-clearance
 tooltips, horizontally scrollable past ~6 pipes.
+
+### Seed pipe values re-sourced to published catalog/standard figures
+
+Joe asked for the default library (kept to US-inch PVC and CPVC, which is
+what it already contained) to carry actual vendor values, pointing first at
+mcmaster.com. McMaster-Carr login-walls unauthenticated browsing, so at his
+direction the values come from published standard tables instead: PVC Sch 40
+OD/ID/lb-ft per the ASTM D1785 table (engineeringtoolbox.com d_795), Class
+200 dimensions per the ASTM D2241 SDR-21 column with lb/ft from the Cresline
+CNWPVC-21 catalog sheet, and CPVC CTS per the ASTM D2846 SDR-11 table
+(engineeringtoolbox.com d_1664). Net effect: Sch 40 1"/1-1/4"/1-1/2" got
+~5% heavier; Class 200 and CTS CPVC got 7–25% lighter. Dimensions were
+already the standard values and are unchanged, so the nesting matrix and the
+seeded slip-fit pair (CTS 3/4" in Class 200 3/4", 1.40 mm clearance) are
+unaffected. Rows stay `approximate: true` — extrusion tolerance still makes
+calipered overrides the real source of truth (§12). Fitting masses remain
+estimates; no per-fitting mass data was reachable without a McMaster login.
+
+## Phase 5 (examples slice, started 2026-07-04)
+
+### Phase 5 examples started before Phases 4/4.5, at Joe's direction
+
+Joe asked for the examples part of Phase 5 while the interface-overhaul pass
+runs, with UI polish deferred. Phases 4 (3D assembly) and 4.5 (controls) are
+not built, so §9 examples 2–6 ship complete but example 7 ships in **2D
+scope**: all eight mechanisms (spine, neck, steer, jaw, both legs, tail,
+arms) in one project with speaker/battery masses and a fully resolved global
+BOM. Its yoke control (§4.4), the head-sweep + jaw-snap control clip, and 3D
+instance placement are deferred until their schema exists; the same applies
+to the control-tracks section of docs/movement-clips.md. Per Joe's request
+the full-creature project doubles as the Project Raptor recreation — named
+"Raptor" in its data file only, which §9 explicitly permits.
+
+### Example JSON artifacts are generated, builders are authoritative
+
+Each example has a typed builder (src/examples/*.ts) and a committed JSON
+artifact; `node scripts/generate-examples.mjs` bundles the builders with
+rolldown (vite's bundler — the repo has no esbuild/tsx) and rewrites the
+JSONs; sync tests fail on drift. Rope/elastic rest lengths derive from drawn
+node positions (rounded to 0.1 mm) so geometry edits can't desync them.
+
+### Example modeling decisions forced by solver semantics
+
+- **Driven displacement nodes ride sliding telescopes** (steer grip, jaw
+  trigger): a rigid rail link contradicts the prescribed position and blows
+  up the solve. Bonus: the examples now demonstrate the telescope element.
+  Both use the seeded CTS-in-Class-200 slip-fit pair.
+- **Rope-coupled behaviors are channel-driven, not drag-driven**: kinematic
+  mode leaves rope/elastic/bowden inert by design, and equilibrium mode
+  ignores dragTargets, so the steer mirror gets a "steer pan" angle channel
+  and the neck a "steer pitch" displacement channel. Open UX question for
+  Joe: dragging the steer tip in sketch mode will NOT mirror the head until
+  equilibrium overlay runs — if drag-time rope coupling matters, kinematic
+  mode needs rope max-length constraints (a solver-semantics change I did
+  not make unilaterally).
+- **Neck pitch uses the original build's up/down rope pair** (chin eyelet +
+  over-mast return): a single rope leaves the boom resting on its lashing
+  angle limit, which XPBD reports as violated; the taut pair pins the
+  attitude in the limit interior and converges cleanly.
+- **Channel ranges are sized to stop short of hard limits** (jaw closes at
+  0.038 of a geometric 0.0447; neck pitch min −0.03) so slider extremes
+  never drive an inextensible cable into an angle stop.
+- **The toe pivot has a mechanical stop behind the travel-limit rope**: the
+  rope engages first (~0.29 rad) whenever forces are simulated, preserving
+  the §9 rope-as-limit demonstration, while the stop keeps the toe sane
+  during kinematic clip playback where ropes are inert.
+- The full-creature solve test excludes seesaw-spine: its settle residual
+  under gravity predates this slice and is covered by its own Phase 3 suite.
+
+### Movement clip library completed
+
+`dance`, `sit down / stand up`, `crouch`, `idle sway` join walk/arm swing/
+lean. All loop seamlessly; sit and crouch hold their low pose mid-cycle so a
+paused scrub reads correctly. The "New from example" menu itself is UI and
+lands in the Phase 5 **finishing slice** (menu, onboarding, shortcuts,
+printable BOM, perf, visual polish) after the interface-overhaul pass — Joe
+confirmed this sequencing 2026-07-04; the planfile §11 Phase 5 entry records
+the two-slice split. The EXAMPLES registry in src/examples/index.ts is ready
+for the menu.
+
+## Interface overhaul — "floating glass" editor (2026-07-04, user directive)
+
+Implemented from the design handoff `design_handoff_editor_overhaul` (dropped
+into the repo as "Riglab interface overhaul.zip"), ahead of the planfile's
+"design handoff drives Phase 5 polish" schedule — user directive ("implement
+all of those changes before continuing with any of the other phases");
+planfile §3 amended in the same change. The hi-fi file is the visual spec;
+wireframes 1e/1f are the normative interaction storyboards.
+
+### What replaced what
+
+Full-bleed canvas; all chrome floats above it at the handoff's 16 px margins:
+`EditorShell` (rewritten) hosts `ProjectChip` (← header + MechanismTabs),
+`ActionsChip` (← header right half), `ToolPill` (← Toolbar), `TransportPill`
+(← TransportBar + ForcesPanel), `DofPill` (← DOF badge). On-canvas overlays
+inside SketchCanvas: `DimensionChips` (length chips per storyboard 1e),
+`JointPopover` (← ConnectMenu, doubling as the snap-connect menu per 1f), and
+`SelectionCard` (← the sketch face's docked InfoPanel). The design-face
+RightDock (inspector/checklist/materials/BOM) keeps its full feature scope,
+floating as a right-hand column — the overhaul spec is chrome + interaction,
+not design-face features. Old components deleted; IBM Plex Sans/Mono
+self-hosted via @fontsource (pinned exact; no runtime network). Design tokens
+live in `src/ui/editor/theme.ts`.
+
+### DECISION: canvas-anchored popovers/chips are bespoke divs, not Radix
+
+The handoff suggests shadcn Popover/DropdownMenu. Canvas-anchored surfaces
+(joint popover at a node, dimension chips, DOF card, transport menus) are
+positioned from the view transform and must be pixel-faithful to the handoff;
+Radix anchoring wants a DOM trigger, and portal/pointer-capture friction makes
+jsdom component tests flaky (same reasoning as the earlier "Radix Select not
+driven in jsdom" note). They are plain positioned divs styled from theme.ts;
+shadcn primitives remain in the design dock and forms. One popover at a time
+via `editorStore.openPopover`; canvas mousedown or Esc dismisses.
+
+### DECISION: lengthLocked is a document property (schema v4) that guards
+### geometry edits; posing already preserves lengths
+
+`link`/`telescope` gain optional `lengthLocked` (SCHEMA_VERSION 3→4,
+stamp-only migration — the field is optional). Locks undo/redo and persist,
+per the handoff. Semantics: the kinematic solver has always held every pipe
+length rigid while posing ("pipe lengths always win over the pointer"), so
+the lock's operational meaning is to refuse *direct geometry edits* — the
+endpoint-handle drag, chip scrub, and typed values — and to render the solid
+blue chip. It does not add a solver constraint (none is needed for posing).
+
+### DECISION: endpoint-handle drag is a direct geometry edit
+
+Dragging a selected, unlocked pipe's white endpoint handle moves that ONE
+node directly (document write per frame, one undo entry via the gesture
+bracket), with node/skeleton/anchor snaps first, then length ticks at ½ in
+(imperial) / 1 cm (metric), else the raw pointer — storyboard 1e·2, with
+dashed ghost + live readout chip. Connected geometry is not propagated; the
+next kinematic solve reconciles (same convention as setLinkLength). Two
+oscillation bugs found and fixed during verification (one reported live by
+Joe as "endpoints jump all over"): (a) `findSnap` could snap the dragged
+endpoint onto its own pipe's span — a target that moves with the pointer —
+fixed with `SnapContext.excludeElements` (every element incident to the
+dragged node); (b) the HTML chip/card overlays sit above the Konva stage and
+swallowed mid-drag pointer events — fixed by making chips click-through
+(`pointer-events:none`) during any drag and unmounting the selection card
+while dragging. Regression-covered in snapping.test.ts and by the scripted
+browser check (node must track the pointer ≤20 px at every waypoint).
+
+### DECISION: joint popover actions map to new pure docOps
+
+`setNodeJoint(pivot|weld|anchor)` (weld = pivot element with every member
+pair welded; pivot = clear welds; anchor = ground the node, un-anchoring on
+pivot/weld), `detachNode` (each incident element beyond the first gets its
+own node copy; joint elements at the node removed), `setLengthLocked`,
+`reverseLink`, `splitLinkAtMidpoint` (reuses splitLink's weld-at-split
+convention). Simplifications, deliberately: the Slider row is shown but only
+as the *current* state (converting an existing junction to a slider needs an
+along-pipe host and is out of the handoff's scope — sliders are still created
+by drawing onto a pipe); a detached rope eyelet keeps its own node. In the
+**design face** (user follow-up during the pass), clicking a node that owns a
+pivot/slider element opens the same popover listing **realizations** (via
+`assignRealization`, maturity auto-flips) instead of joint types — the
+engineering question at that point; joint-less nodes still get the type menu.
+
+### DECISION: conflicts pill derives from existing diagnostics only
+
+`deriveConflicts` (pure, tested) folds what the store already has — violated
+element ids, `ropesRequiringCompression`, the DOF classification — into rows
+with honest wording; no second solve. One-click fixes are wired only where a
+concrete docOp exists today: "unlock length" on a violated locked pipe and
+"unlock a length" on over-constrained-with-a-locked-pipe. Other rows (angle
+limit, taut limit, requires compression) are click-to-zoom only — the
+handoff's richer fix set (merge pivots, set rest length, reroute eyelet)
+needs ops that don't exist yet and was not invented speculatively. Zoom is a
+one-shot `focusElementId` request the canvas consumes.
+
+### Smaller notes / deviations
+
+- **Esc + single-key tool shortcuts** (V P L F R E B T N) land now (they are
+  the handoff's §Interactions), overlapping the Phase 5 "keyboard shortcuts"
+  line; space=play/pause and duplicate remain Phase 5.
+- The old toolbar's **trace-motion-path** checkbox survives as a `trace`
+  chip on the transport pill (the handoff omits it; dropping a working
+  feature wasn't warranted).
+- **Units toggle** is now a single mono chip cycling in/lb ↔ m/kg (the
+  handoff shows a static "in/lb" label; the old two-segment control's
+  function is kept, its form is the handoff's).
+- **Export** is a direct button (single action today) rather than the
+  handoff's "Export ▾" menu; the caret returns when a second export exists.
+- The **tool pill** gained a grip drag-handle (user follow-up; wireframe
+  1c's pill is annotated "drag to move") — transient offset, like the card.
+- The **selection card** natively implements the handoff's pipe rows
+  (length+lock, End A/B joint chips, Split/Reverse/Delete) and embeds the
+  existing ElementInspector/MultiInspector for every other element type and
+  multi-select, so no §8.2a capability was lost with the docked sketch-face
+  panel. It is draggable by its header (the handoff marks the card
+  "draggable/pinnable"); pinning across selections is not kept.
+- InfoPanel's standalone collapse rail was removed (it now only lives inside
+  the design dock); its component tests were updated accordingly.
+- e2e specs updated for the new chrome (mechanism menu, inputs popover);
+  suite stays at 3 smoke specs, all green against the production build.
+- Incidental: a pre-existing `lint/a11y/noLabelWithoutControl` error on
+  MaterialsPanel's `Labeled` helper (unmodified since stage 2b) failed the
+  lint gate at HEAD; suppressed with an inline reason (the input association
+  is by nesting through `children`, invisible to static analysis).
+
+### "approximate — edit me" badge removed (planfile deviation, user-directed)
+
+With seed pipe values re-sourced to published catalog/standard figures, Joe
+asked to drop the badge — flagging real D1785/D2241/D2846 numbers as "edit
+me" was noise. The §12 badge mandate is updated in the planfile in the same
+change. The `approximate` field STAYS in the schema and keeps its semantics
+(seeded/added rows true, cleared by any numeric edit): it costs nothing,
+avoids a schemaVersion bump + migration, and preserves the "which rows has
+the user actually measured" signal should a future consumer (e.g. the
+resolution checklist) want it. Only the MaterialsPanel badge rendering and
+its test assertion were removed.

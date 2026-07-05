@@ -34,6 +34,8 @@ test('sketch a four-bar, anchor it, drag it — DOF 1 and lengths hold', async (
   await page.goto('/');
   await page.getByTestId('new-project-name').fill('Sketch Smoke');
   await page.getByTestId('create-project').click();
+  // the mechanism switcher lives in the project chip's menu (overhaul chrome)
+  await page.getByTestId('mechanism-menu-button').click();
   await page.getByTestId('add-mechanism').click();
   await page.getByTestId('view-side-left').click();
   await expect(page.getByTestId('dof-badge')).toBeVisible();

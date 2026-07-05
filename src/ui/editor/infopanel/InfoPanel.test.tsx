@@ -216,14 +216,8 @@ describe('units preference (§3: conversion at the display boundary only)', () =
 });
 
 describe('panel chrome', () => {
-  it('collapses to a rail and expands back', () => {
-    render(<InfoPanel />);
-    fireEvent.click(screen.getByTestId('info-panel-collapse'));
-    expect(screen.queryByTestId('info-panel')).toBeNull();
-    fireEvent.click(screen.getByTestId('info-panel-expand'));
-    expect(screen.getByTestId('info-panel')).toBeTruthy();
-  });
-
+  // the standalone collapse rail was removed by the interface overhaul — the
+  // panel now always lives embedded in the design-face dock
   it('ignores stale selection ids of deleted elements', () => {
     useEditorStore.setState({ selectedElementIds: ['gone'] });
     render(<InfoPanel />);

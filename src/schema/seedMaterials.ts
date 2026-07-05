@@ -1,9 +1,13 @@
-// Seed materials database (§6.1). Approximate US values; EVERY row carries
-// `approximate: true` so the UI shows an "approximate — edit me" badge and the
-// user overwrites with calipered stock measurements (§12). Dimensions come
-// from published inch / lb-ft catalogue figures, converted to SI here — SI
-// (metres, kg/m) is the only stored form (§3). Human-readable names are
-// creature-agnostic and hardware-store-recognizable (§6.1).
+// Seed materials database (§6.1). EVERY row carries `approximate: true` —
+// internal "not yet measured by the user" bookkeeping, cleared when a numeric
+// field is edited (no UI badge; removed by decision, see DECISIONS.md). Pipe
+// dimensions are actual published standard values (ASTM D1785 Sch 40, D2241
+// SDR-21, D2846 CTS; weights from the same published tables / Cresline
+// CNWPVC-21 catalog), though extruded stock still varies within tolerance,
+// so calipered overrides remain worthwhile. Inch / lb-ft figures are
+// converted to SI here — SI (metres, kg/m) is the only stored form (§3).
+// Human-readable names are creature-agnostic and hardware-store-recognizable
+// (§6.1). Pipe stock is deliberately limited to US-inch PVC and CPVC.
 //
 // createEmptyProject() seeds this on creation, which is how "user overrides
 // persist in the project" is realized: each project owns its complete DB.
@@ -43,29 +47,33 @@ function pipe(
 }
 
 // ── pipe stock ─────────────────────────────────────────────────────────────
-// PVC Schedule 40, NPS (iron-pipe) sizing: OD is standardized per size; ID =
-// OD − 2·wall. Linear densities are typical catalogue lb/ft.
+// PVC Schedule 40 (ASTM D1785), NPS (iron-pipe) sizing: OD is standardized
+// per size; ID = OD − 2·min-wall. OD/ID/lb-ft from the published D1785 table.
 const NPS_SCH40: PipeMaterial[] = [
   pipe('pipe-nps-sch40-050', 'PVC Sch 40 1/2" (NPS)', 'NPS', '1/2', 0.84, 0.622, 0.16),
   pipe('pipe-nps-sch40-075', 'PVC Sch 40 3/4" (NPS)', 'NPS', '3/4', 1.05, 0.824, 0.21),
-  pipe('pipe-nps-sch40-100', 'PVC Sch 40 1" (NPS)', 'NPS', '1', 1.315, 1.049, 0.3),
-  pipe('pipe-nps-sch40-125', 'PVC Sch 40 1-1/4" (NPS)', 'NPS', '1-1/4', 1.66, 1.38, 0.4),
-  pipe('pipe-nps-sch40-150', 'PVC Sch 40 1-1/2" (NPS)', 'NPS', '1-1/2', 1.9, 1.61, 0.48),
+  pipe('pipe-nps-sch40-100', 'PVC Sch 40 1" (NPS)', 'NPS', '1', 1.315, 1.049, 0.32),
+  pipe('pipe-nps-sch40-125', 'PVC Sch 40 1-1/4" (NPS)', 'NPS', '1-1/4', 1.66, 1.38, 0.43),
+  pipe('pipe-nps-sch40-150', 'PVC Sch 40 1-1/2" (NPS)', 'NPS', '1-1/2', 1.9, 1.61, 0.51),
 ];
 
-// PVC Class 200 (SDR 21), thin-wall lighter alternates — same NPS OD, thinner
-// wall (larger bore), lighter per foot.
+// PVC Class 200 (SDR 21, ASTM D2241), thin-wall lighter alternates — same NPS
+// OD, thinner wall (larger bore), lighter per foot. Dimensions from the D2241
+// SDR-21 column; lb/ft from the Cresline CNWPVC-21 catalog (12.11 and 16.17
+// lb per 100 ft).
 const NPS_CLASS200: PipeMaterial[] = [
-  pipe('pipe-nps-cls200-075', 'PVC Class 200 3/4" (NPS)', 'NPS', '3/4', 1.05, 0.93, 0.13),
-  pipe('pipe-nps-cls200-100', 'PVC Class 200 1" (NPS)', 'NPS', '1', 1.315, 1.189, 0.17),
+  pipe('pipe-nps-cls200-075', 'PVC Class 200 3/4" (NPS)', 'NPS', '3/4', 1.05, 0.93, 0.121),
+  pipe('pipe-nps-cls200-100', 'PVC Class 200 1" (NPS)', 'NPS', '1', 1.315, 1.189, 0.162),
 ];
 
-// CPVC, CTS (copper-tube) sizing — a different schedule than NPS, which is what
-// makes some PVC↔CPVC nesting combinations possible in the US (§6.1).
+// CPVC, CTS (copper-tube) sizing, SDR-11 (ASTM D2846) — a different schedule
+// than NPS, which is what makes some PVC↔CPVC nesting combinations possible
+// in the US (§6.1). ID = OD − 2·min-wall; lb/ft from the published D2846
+// table.
 const CTS_CPVC: PipeMaterial[] = [
-  pipe('pipe-cts-cpvc-050', 'CPVC CTS 1/2"', 'CTS', '1/2', 0.625, 0.489, 0.11),
-  pipe('pipe-cts-cpvc-075', 'CPVC CTS 3/4"', 'CTS', '3/4', 0.875, 0.715, 0.17),
-  pipe('pipe-cts-cpvc-100', 'CPVC CTS 1"', 'CTS', '1', 1.125, 0.921, 0.28),
+  pipe('pipe-cts-cpvc-050', 'CPVC CTS 1/2"', 'CTS', '1/2', 0.625, 0.489, 0.085),
+  pipe('pipe-cts-cpvc-075', 'CPVC CTS 3/4"', 'CTS', '3/4', 0.875, 0.715, 0.14),
+  pipe('pipe-cts-cpvc-100', 'CPVC CTS 1"', 'CTS', '1', 1.125, 0.921, 0.218),
 ];
 
 // ── fittings ─────────────────────────────────────────────────────────────

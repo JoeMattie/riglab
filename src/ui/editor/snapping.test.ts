@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { dedupConsecutive, isCoincidentFinish } from './snapping';
+import { mech, node } from '../../bom/testHelpers';
+import type { LinkElement } from '../../schema';
+import { dedupConsecutive, findSnap, isCoincidentFinish } from './snapping';
 
 // Guards for Konva's time-based dblclick (fires for any two clicks within its
 // window, regardless of position). Regression coverage for the premature-finish
@@ -70,5 +72,40 @@ describe('dedupConsecutive', () => {
 
   it('handles empty input', () => {
     expect(dedupConsecutive([])).toEqual([]);
+  });
+});
+
+// Regression for the endpoint-drag oscillation: while dragging a pipe's
+// endpoint, the pipe's own span (and every other element incident to the
+// dragged node) moves with the pointer, so snapping onto it chases a moving
+// target. `excludeElements` must suppress those onPipe candidates.
+describe('findSnap excludeElements', () => {
+  const L1: LinkElement = {
+    id: 'L1',
+    type: 'link',
+    maturity: 'sketch',
+    nodeA: 'n1',
+    nodeB: 'n2',
+    pointMasses: [],
+  };
+  const m = mech([L1], [node('n1', 0, 0), node('n2', 1, 0)]);
+  const positions = { n1: { x: 0, y: 0 }, n2: { x: 1, y: 0 } };
+  const near = { x: 0.5, y: 0.005 }; // just off the pipe's midpoint
+
+  it('normally snaps onto the pipe span', () => {
+    const snap = findSnap(near, { mechanism: m, positions, silhouette: null, tolM: 0.02 });
+    expect(snap.kind).toBe('onPipe');
+  });
+
+  it('with the element excluded, falls through to the grid', () => {
+    const snap = findSnap(near, {
+      mechanism: m,
+      positions,
+      silhouette: null,
+      tolM: 0.02,
+      exclude: new Set(['n2']),
+      excludeElements: new Set(['L1']),
+    });
+    expect(snap.kind).toBe('grid');
   });
 });

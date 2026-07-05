@@ -6,6 +6,13 @@ data — JSON files validated against `movementClipSchema`
 changes: drop a `.json` file in `src/wearer/clips/` and register it in
 `src/wearer/clips/index.ts`.
 
+## Bundled clips
+
+`walk`, `arm swing`, `lean`, `dance`, `sit down / stand up`, `crouch`,
+`idle sway` — the full §7.2 library. All loop seamlessly (first and last
+keyframe values equal per track); `sit down / stand up` and `crouch` hold
+their low pose mid-cycle so a paused scrub shows the seated/crouched shape.
+
 ## Shape
 
 ```json
@@ -52,3 +59,11 @@ All angles are radians in the sagittal plane; `pelvisRise` is meters.
 `speed` multiplies time; `amplitude` scales every track value (0 = rest
 pose). The per-clip amplitude/speed sliders in the transport map directly to
 these options.
+
+## Control tracks
+
+Control clips (§4.4 — keyframe tracks over *control axes* rather than pose
+channels, playable alongside a movement clip on one timeline) are part of the
+Phase 4.5 control layer, which is not built yet. Their track shape will reuse
+the `timesS`/`values` keyframe format above; this document gains a
+"control tracks" section when that layer lands.

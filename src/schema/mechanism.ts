@@ -52,6 +52,9 @@ export const linkElementSchema = z.object({
   type: z.literal('link'),
   nodeA: idSchema,
   nodeB: idSchema,
+  /** v4 (§8 overhaul): pinned length — the dimension chip locks and direct
+   * geometry edits (endpoint drag / scrub / typed value) are refused */
+  lengthLocked: z.boolean().optional(),
   pipeMaterialId: idSchema.optional(),
   endRealizationA: jointRealizationSchema.optional(),
   endRealizationB: jointRealizationSchema.optional(),
@@ -83,6 +86,8 @@ export const telescopeElementSchema = z.object({
   minLengthM: z.number().positive(),
   maxLengthM: z.number().positive(),
   lengthM: z.number().positive(),
+  /** v4 (§8 overhaul): pinned design length (see linkElementSchema) */
+  lengthLocked: z.boolean().optional(),
   sliding: z.boolean(),
   outerPipeMaterialId: idSchema.optional(),
   innerPipeMaterialId: idSchema.optional(),

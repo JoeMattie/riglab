@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "id": "example-seesaw-spine",
   "name": "Example — seesaw spine",
   "unitsPreference": "imperial",
@@ -32,7 +32,7 @@
         "nominalSize": "1",
         "outerDiameterM": 0.033401,
         "innerDiameterM": 0.026644599999999997,
-        "linearDensityKgPerM": 0.44644917,
+        "linearDensityKgPerM": 0.476212448,
         "approximate": true
       },
       {
@@ -42,7 +42,7 @@
         "nominalSize": "1-1/4",
         "outerDiameterM": 0.04216399999999999,
         "innerDiameterM": 0.03505199999999999,
-        "linearDensityKgPerM": 0.59526556,
+        "linearDensityKgPerM": 0.639910477,
         "approximate": true
       },
       {
@@ -52,7 +52,7 @@
         "nominalSize": "1-1/2",
         "outerDiameterM": 0.04826,
         "innerDiameterM": 0.040894,
-        "linearDensityKgPerM": 0.714318672,
+        "linearDensityKgPerM": 0.758963589,
         "approximate": true
       },
       {
@@ -62,7 +62,7 @@
         "nominalSize": "3/4",
         "outerDiameterM": 0.02667,
         "innerDiameterM": 0.023622,
-        "linearDensityKgPerM": 0.193461307,
+        "linearDensityKgPerM": 0.1800678319,
         "approximate": true
       },
       {
@@ -72,7 +72,7 @@
         "nominalSize": "1",
         "outerDiameterM": 0.033401,
         "innerDiameterM": 0.0302006,
-        "linearDensityKgPerM": 0.25298786300000004,
+        "linearDensityKgPerM": 0.24108255180000002,
         "approximate": true
       },
       {
@@ -82,7 +82,7 @@
         "nominalSize": "1/2",
         "outerDiameterM": 0.015875,
         "innerDiameterM": 0.012420599999999999,
-        "linearDensityKgPerM": 0.163698029,
+        "linearDensityKgPerM": 0.12649393150000002,
         "approximate": true
       },
       {
@@ -92,7 +92,7 @@
         "nominalSize": "3/4",
         "outerDiameterM": 0.022224999999999998,
         "innerDiameterM": 0.018161,
-        "linearDensityKgPerM": 0.25298786300000004,
+        "linearDensityKgPerM": 0.20834294600000003,
         "approximate": true
       },
       {
@@ -102,7 +102,7 @@
         "nominalSize": "1",
         "outerDiameterM": 0.028575,
         "innerDiameterM": 0.0233934,
-        "linearDensityKgPerM": 0.41668589200000006,
+        "linearDensityKgPerM": 0.3244197302,
         "approximate": true
       }
     ],

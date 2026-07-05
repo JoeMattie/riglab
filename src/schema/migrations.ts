@@ -24,6 +24,9 @@ export const migrations: Record<number, Migration> = {
     ...doc,
     bomSettings: { heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 },
   }),
+  // v3 → v4: link/telescope gained OPTIONAL lengthLocked (absent = unlocked),
+  // so v3 documents are already valid v4 documents — stamp only.
+  3: (doc) => doc,
 };
 
 export class MigrationError extends Error {}

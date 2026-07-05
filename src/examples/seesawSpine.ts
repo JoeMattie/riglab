@@ -8,7 +8,7 @@
 // This builder is the authoritative constructor; src/examples/seesaw-spine.json
 // is generated from it and is the bundled data artifact (a sync test guards
 // that they agree). "raptor" appears in no identifier or string here.
-import { DEFAULT_BOM_SETTINGS, DEFAULT_WEARER } from '../schema';
+import { DEFAULT_BOM_SETTINGS, DEFAULT_WEARER, SCHEMA_VERSION } from '../schema';
 import { emptyAssembly } from '../schema/assembly';
 import type { JointRealization } from '../schema/common';
 import type { Mechanism, MechanismElement } from '../schema/mechanism';
@@ -201,7 +201,7 @@ export function buildSeesawSpineProject(): Project {
   };
 
   return {
-    schemaVersion: 3,
+    schemaVersion: SCHEMA_VERSION,
     id: 'example-seesaw-spine',
     name: 'Example — seesaw spine',
     unitsPreference: 'imperial',

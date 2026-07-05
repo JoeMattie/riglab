@@ -1,0 +1,136 @@
+// Actions chip (design handoff §4): undo/redo · Sketch/Design segmented
+// control · units · Export. Replaces the old header strip's right half.
+import { exportProjectJson, suggestedFileName } from '../../persistence/exportImport';
+import { setUnitsPref } from '../../persistence/prefs';
+import type { UnitsPreference } from '../../schema';
+import { useAppStore } from '../../state/appStore';
+import { type Face, useEditorStore } from '../../state/editorStore';
+import { dividerStyle, EDGE, panelStyle, T } from './theme';
+
+export function ActionsChip() {
+  const doc = useAppStore((s) => s.current);
+  const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const undo = useAppStore((s) => s.undo);
+  const redo = useAppStore((s) => s.redo);
+  const face = useEditorStore((s) => s.face);
+  const setFace = useEditorStore((s) => s.setFace);
+
+  if (!doc) return null;
+
+  const onExport = () => {
+    const blob = new Blob([exportProjectJson(doc)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedFileName(doc);
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleUnits = () => {
+    const units: UnitsPreference = doc.unitsPreference === 'imperial' ? 'metric' : 'imperial';
+    updateCurrent((d) => ({ ...d, unitsPreference: units }));
+    setUnitsPref(units);
+  };
+
+  const segment = (value: Face, label: string) => {
+    const active = face === value;
+    return (
+      <button
+        type="button"
+        data-testid={`face-${value}`}
+        aria-pressed={active}
+        onClick={() => setFace(value)}
+        style={{
+          border: 'none',
+          background: active ? '#fff' : 'none',
+          borderRadius: 6,
+          padding: '3px 12px',
+          font: `${active ? 500 : 400} 12.5px ${T.sans}`,
+          color: active ? T.text : T.muted,
+          cursor: 'pointer',
+          boxShadow: active ? '0 1px 3px rgba(20,24,40,.12)' : 'none',
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const iconButton: React.CSSProperties = {
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    fontSize: 14,
+    color: T.icon,
+    padding: '0 2px',
+  };
+
+  return (
+    <div
+      style={{
+        ...panelStyle,
+        position: 'absolute',
+        right: EDGE,
+        top: EDGE,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 12px',
+        zIndex: 40,
+      }}
+    >
+      <button type="button" data-testid="undo" title="undo ⌘Z" onClick={undo} style={iconButton}>
+        ↶
+      </button>
+      <button type="button" data-testid="redo" title="redo ⇧⌘Z" onClick={redo} style={iconButton}>
+        ↷
+      </button>
+      <span style={dividerStyle} />
+      <span
+        data-testid="face-toggle"
+        style={{ display: 'inline-flex', background: '#f4f4f5', borderRadius: 8, padding: 2 }}
+      >
+        {segment('sketch', 'Sketch')}
+        {segment('design', 'Design')}
+      </span>
+      <span style={dividerStyle} />
+      <button
+        type="button"
+        data-testid="units-toggle"
+        title={
+          doc.unitsPreference === 'imperial'
+            ? 'units: inches / pounds — click for metric'
+            : 'units: metres / kilograms — click for imperial'
+        }
+        onClick={toggleUnits}
+        style={{
+          border: 'none',
+          background: 'none',
+          cursor: 'pointer',
+          font: `500 12px ${T.mono}`,
+          color: T.muted,
+          padding: 0,
+        }}
+      >
+        {doc.unitsPreference === 'imperial' ? 'in/lb' : 'm/kg'}
+      </button>
+      <button
+        type="button"
+        data-testid="export-project"
+        onClick={onExport}
+        style={{
+          border: `1px solid ${T.border}`,
+          background: '#fff',
+          borderRadius: 8,
+          padding: '3px 12px',
+          font: `500 12.5px ${T.sans}`,
+          cursor: 'pointer',
+          color: T.text,
+        }}
+      >
+        Export
+      </button>
+    </div>
+  );
+}

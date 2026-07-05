@@ -2,7 +2,7 @@ import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import { elementLinearDensities } from '../../design/densities';
-import type { Mechanism, Vec2 } from '../../schema';
+import type { Mechanism, PivotElement, SliderElement, Vec2 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
 import type { EndSpec } from '../../state/docOps';
@@ -19,8 +19,12 @@ import {
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
+import { M_PER_IN } from '../units';
+import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
 import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
 import { pinchStep, wheelGesture } from './gesture';
+import { JointPopover } from './JointPopover';
+import { SelectionCard } from './SelectionCard';
 import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
@@ -101,6 +105,24 @@ interface Draft {
   cursor: Vec2;
 }
 
+/** Direct geometry edit: dragging a selected pipe's endpoint handle moves
+ * that one node (changing the pipe's length), with node/grid snaps plus
+ * length snapping at ½ in (imperial) / 1 cm (metric) increments. */
+interface EndpointDrag {
+  nodeId: string;
+  elementId: string;
+  /** original endpoint positions for the dashed ghost of the prior pose */
+  ghost: [Vec2, Vec2];
+  /** every element incident to the dragged node — their spans move with the
+   * pointer, so onPipe-snapping to them would chase a moving target */
+  incidentElementIds: ReadonlySet<string>;
+  readout: EndpointDragReadout;
+}
+
+/** Length-snap increment in metres for the endpoint drag / scrub. */
+export const lengthStepM = (units: 'imperial' | 'metric'): number =>
+  units === 'imperial' ? 0.5 * M_PER_IN : 0.01;
+
 export function SketchCanvas() {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
@@ -124,6 +146,9 @@ export function SketchCanvas() {
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
   const equilibrium = useEditorStore((s) => s.equilibrium);
   const setEquilibrium = useEditorStore((s) => s.setEquilibrium);
+  const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
+  const focusElementId = useEditorStore((s) => s.focusElementId);
+  const setFocusElement = useEditorStore((s) => s.setFocusElement);
 
   const mech: Mechanism | null = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
 
@@ -133,6 +158,8 @@ export function SketchCanvas() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [hoverSnap, setHoverSnap] = useState<Snap | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
+  const [endpointDrag, setEndpointDrag] = useState<EndpointDrag | null>(null);
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [bindFrom, setBindFrom] = useState<string | null>(null);
   // force-tool drafting (§8.1: ropes/elastics/bowden/torsion drawn with their
   // own tools). Rope routes through clicked waypoints; elastic/bowden are
@@ -170,6 +197,20 @@ export function SketchCanvas() {
     setBowdenA(null);
     setTorsionA(null);
   }, []);
+
+  // a stationary click on a node: select the joint element living there (if
+  // any) and open the joint popover at the node (design handoff §6)
+  const openJointPopover = useCallback(
+    (nodeId: string, evt: MouseEvent) => {
+      if (!mech) return;
+      const joint = mech.elements.find(
+        (el) => (el.type === 'pivot' || el.type === 'slider') && el.nodeId === nodeId,
+      );
+      if (joint) clickSelect(joint.id, evt);
+      setOpenPopover({ kind: 'joint', nodeId });
+    },
+    [mech, clickSelect, setOpenPopover],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -262,6 +303,44 @@ export function SketchCanvas() {
   }, [mech?.nodes]);
   const renderPositions = posePositions ?? docPositions;
 
+  // DOF-pill click-to-zoom: consume the one-shot focus request by centering
+  // the element's bounding box (padded) and selecting it
+  useEffect(() => {
+    if (!focusElementId || !mech) return;
+    setFocusElement(null);
+    const el = mech.elements.find((x) => x.id === focusElementId);
+    if (!el) return;
+    const ids = new Set<string>();
+    if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
+      ids.add(el.nodeA);
+      ids.add(el.nodeB);
+    } else if (el.type === 'bentLink') for (const id of el.nodeIds) ids.add(id);
+    else if (el.type === 'rope') for (const id of el.path) ids.add(id);
+    else if (el.type === 'bowden') for (const id of [el.a1, el.a2, el.b1, el.b2]) ids.add(id);
+    else if (el.type === 'pivot' || el.type === 'slider') ids.add(el.nodeId);
+    else if (el.type === 'torsionCable') {
+      for (const pid of [el.pivotA, el.pivotB]) {
+        const p = mech.elements.find((x) => x.id === pid);
+        if (p?.type === 'pivot') ids.add(p.nodeId);
+      }
+    }
+    const pts = [...ids].map((id) => renderPositions[id]).filter((p): p is Vec2 => !!p);
+    if (pts.length === 0) return;
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    const spanX = Math.max(maxX - minX, 0.2);
+    const spanY = Math.max(maxY - minY, 0.2);
+    setView((v) => ({
+      ...v,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2,
+      scale: Math.min(3000, Math.max(40, Math.min(v.w / (spanX * 2.5), v.h / (spanY * 2.5)))),
+    }));
+    useEditorStore.getState().select(focusElementId);
+  }, [focusElementId, mech, renderPositions, setFocusElement]);
+
   const runSolve = useCallback(
     (dragTargets: Record<string, Vec2>) => {
       if (!doc || !mech) return null;
@@ -321,7 +400,7 @@ export function SketchCanvas() {
   };
 
   const snapAt = useCallback(
-    (screen: Vec2, exclude?: ReadonlySet<string>): Snap => {
+    (screen: Vec2, exclude?: ReadonlySet<string>, excludeElements?: ReadonlySet<string>): Snap => {
       const world = toWorld(view, screen);
       if (!mech) return { kind: 'grid', pos: world };
       return findSnap(world, {
@@ -331,6 +410,7 @@ export function SketchCanvas() {
         tolM: SNAP_TOL_PX / view.scale,
         gridM: GRID_M,
         exclude,
+        excludeElements,
       });
     },
     [view, mech, renderPositions, silhouette],
@@ -380,10 +460,49 @@ export function SketchCanvas() {
     const screen = stagePointer(e);
     if (!screen || !mech) return;
     mouseDownScreenRef.current = screen;
+    // canvas mousedown dismisses floating popovers and inline edits
+    const editor = useEditorStore.getState();
+    if (editor.openPopover) editor.setOpenPopover(null);
+    if (editor.lengthEdit) editor.setLengthEdit(null);
     const snap = snapAt(screen);
 
     if (tool === 'select') {
       if (snap.kind === 'node') {
+        // an endpoint of a selected, unlocked pipe drags as a LENGTH edit
+        // (direct geometry move); any other node drags as a pose
+        const owner = mech.elements.find(
+          (el) =>
+            (el.type === 'link' || el.type === 'telescope') &&
+            selectedElementIds.includes(el.id) &&
+            !el.lengthLocked &&
+            (el.nodeA === snap.nodeId || el.nodeB === snap.nodeId),
+        );
+        if (owner && (owner.type === 'link' || owner.type === 'telescope')) {
+          const a = renderPositions[owner.nodeA];
+          const b = renderPositions[owner.nodeB];
+          if (a && b) {
+            const nodeId = snap.nodeId;
+            const incident = new Set<string>();
+            for (const el of mech.elements) {
+              if (
+                (el.type === 'link' || el.type === 'telescope') &&
+                (el.nodeA === nodeId || el.nodeB === nodeId)
+              )
+                incident.add(el.id);
+              else if (el.type === 'bentLink' && el.nodeIds.includes(nodeId)) incident.add(el.id);
+            }
+            beginGesture();
+            setHoverSnap(null);
+            setEndpointDrag({
+              nodeId,
+              elementId: owner.id,
+              ghost: [a, b],
+              incidentElementIds: incident,
+              readout: { lengthM: Math.hypot(b.x - a.x, b.y - a.y), snapped: false },
+            });
+            return;
+          }
+        }
         beginGesture();
         setDragNode(snap.nodeId);
         useEditorStore.getState().clearTrace();
@@ -447,6 +566,41 @@ export function SketchCanvas() {
       return;
     }
 
+    if (tool === 'select' && endpointDrag) {
+      // direct geometry edit: move ONE node; node/skeleton/anchor snaps win,
+      // then length ticks (½ in / 1 cm), else the raw pointer position
+      const world = toWorld(view, screen);
+      const liveDoc = useAppStore.getState().current;
+      const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
+      const el = liveMech?.elements.find((x) => x.id === endpointDrag.elementId);
+      if (!liveMech || !el || (el.type !== 'link' && el.type !== 'telescope')) return;
+      const otherId = el.nodeA === endpointDrag.nodeId ? el.nodeB : el.nodeA;
+      const other = liveMech.nodes.find((n) => n.id === otherId)?.position;
+      if (!other) return;
+      const snap = snapAt(screen, new Set([endpointDrag.nodeId]), endpointDrag.incidentElementIds);
+      let pos = snap.pos;
+      let snapped = snap.kind !== 'grid';
+      if (snap.kind === 'grid') {
+        const raw = Math.hypot(world.x - other.x, world.y - other.y);
+        const step = lengthStepM(doc?.unitsPreference ?? 'imperial');
+        const tick = Math.round(raw / step) * step;
+        if (raw > 1e-9 && Math.abs(tick - raw) < (SNAP_TOL_PX * 0.5) / view.scale && tick > 0) {
+          const dir = { x: (world.x - other.x) / raw, y: (world.y - other.y) / raw };
+          pos = { x: other.x + dir.x * tick, y: other.y + dir.y * tick };
+          snapped = true;
+        } else {
+          pos = world;
+          snapped = false;
+        }
+      }
+      updateCurrent((cur) => moveNodes(cur, mech.id, { [endpointDrag.nodeId]: pos }));
+      setEndpointDrag({
+        ...endpointDrag,
+        readout: { lengthM: Math.hypot(pos.x - other.x, pos.y - other.y), snapped },
+      });
+      return;
+    }
+
     if (tool === 'select' && dragNode) {
       // solve from the LIVE document, not this render's closure — fast event
       // bursts can outrun React renders, and a stale mechanism here would
@@ -504,20 +658,27 @@ export function SketchCanvas() {
     panRef.current = null;
     if (!screen || !mech) return;
 
+    if (tool === 'select' && endpointDrag) {
+      const start = mouseDownScreenRef.current;
+      const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
+      const nodeId = endpointDrag.nodeId;
+      setEndpointDrag(null);
+      endGesture();
+      // a stationary click on an endpoint handle opens the joint popover
+      if (movedPx < 4) openJointPopover(nodeId, e.evt);
+      return;
+    }
+
     if (tool === 'select' && dragNode) {
       const start = mouseDownScreenRef.current;
       const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
       const nodeId = dragNode;
       setDragNode(null);
       endGesture();
-      // a stationary click on a node selects the joint element living there —
-      // pivots/sliders have no stroke of their own to click on the canvas
-      if (movedPx < 4) {
-        const joint = mech.elements.find(
-          (el) => (el.type === 'pivot' || el.type === 'slider') && el.nodeId === nodeId,
-        );
-        if (joint) clickSelect(joint.id, e.evt);
-      }
+      // a stationary click on a node selects the joint element living there
+      // (pivots/sliders have no stroke of their own to click on the canvas)
+      // and opens the joint popover for one-click type changes
+      if (movedPx < 4) openJointPopover(nodeId, e.evt);
       return;
     }
     if ((tool === 'elastic' || tool === 'bowden') && dragCord) {
@@ -636,6 +797,7 @@ export function SketchCanvas() {
         setBindFrom(null);
         setPendingConnect(null);
         resetForceDrafts();
+        setEndpointDrag(null);
       }
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
@@ -712,12 +874,37 @@ export function SketchCanvas() {
     } else if (el.type === 'bentLink') el.nodeIds.forEach(bump);
   }
 
+  // joint glyph language (design handoff §1): pivot = ring, weld = filled
+  // square, slider = rounded slot, anchor = diamond, bound = green ring
+  const pivotByNode = new Map<string, PivotElement>();
+  const sliderByNode = new Map<string, SliderElement>();
+  for (const el of mech.elements) {
+    if (el.type === 'pivot') pivotByNode.set(el.nodeId, el);
+    else if (el.type === 'slider') sliderByNode.set(el.nodeId, el);
+  }
+
   const boundNodes = new Set(mech.skeletonBindings.map((b) => b.nodeId));
   const showSilhouettePoints = tool !== 'select' || bindFrom !== null;
 
   const selectedSet = new Set(selectedElementIds);
   const strokeFor = (id: string): string =>
     violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : '#324';
+  const pipeWidth = (id: string): number => (selectedSet.has(id) ? 5.5 : 5);
+
+  // white endpoint handles on selected pipes (drag = length edit)
+  const selectedEndpointNodes: Array<{ nodeId: string; locked: boolean }> = [];
+  for (const el of mech.elements) {
+    if (!selectedSet.has(el.id)) continue;
+    if (el.type === 'link' || el.type === 'telescope') {
+      selectedEndpointNodes.push(
+        { nodeId: el.nodeA, locked: el.lengthLocked === true },
+        { nodeId: el.nodeB, locked: el.lengthLocked === true },
+      );
+    }
+  }
+
+  const hoverElement = (id: string) => tool === 'select' && setHoveredElementId(id);
+  const unhoverElement = (id: string) => setHoveredElementId((cur) => (cur === id ? null : cur));
 
   const compressionRopes = new Set(equilibrium.ropesRequiringCompression);
   const cordStroke = (id: string, base: string): string =>
@@ -811,9 +998,11 @@ export function SketchCanvas() {
                   key={el.id}
                   points={flat([nodePos(el.nodeA), nodePos(el.nodeB)])}
                   stroke={strokeFor(el.id)}
-                  strokeWidth={el.type === 'telescope' ? 5 : 3.5}
+                  strokeWidth={el.type === 'telescope' ? pipeWidth(el.id) + 1 : pipeWidth(el.id)}
                   lineCap="round"
                   onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
+                  onMouseEnter={() => hoverElement(el.id)}
+                  onMouseLeave={() => unhoverElement(el.id)}
                   hitStrokeWidth={12}
                 />
               );
@@ -824,10 +1013,12 @@ export function SketchCanvas() {
                   key={el.id}
                   points={flat(el.nodeIds.map(nodePos))}
                   stroke={strokeFor(el.id)}
-                  strokeWidth={3.5}
+                  strokeWidth={pipeWidth(el.id)}
                   lineCap="round"
                   lineJoin="round"
                   onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
+                  onMouseEnter={() => hoverElement(el.id)}
+                  onMouseLeave={() => unhoverElement(el.id)}
                   hitStrokeWidth={12}
                 />
               );
@@ -838,8 +1029,8 @@ export function SketchCanvas() {
                   key={el.id}
                   points={flat(el.path.map(nodePos))}
                   stroke={cordStroke(el.id, '#557')}
-                  strokeWidth={1.5}
-                  dash={[3, 3]}
+                  strokeWidth={2}
+                  dash={[4, 4]}
                   lineCap="round"
                   lineJoin="round"
                   onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
@@ -853,9 +1044,9 @@ export function SketchCanvas() {
               return (
                 <Line
                   key={el.id}
-                  points={zigzag(a, b)}
+                  points={zigzag(a, b, 9, 6)}
                   stroke={cordStroke(el.id, '#2a8a4a')}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   lineJoin="round"
                   onClick={(e) => tool === 'select' && clickSelect(el.id, e.evt)}
                   hitStrokeWidth={12}
@@ -932,12 +1123,24 @@ export function SketchCanvas() {
                   key={b.id}
                   points={flat([from, to])}
                   stroke="#4a4"
-                  strokeWidth={1}
-                  dash={[3, 4]}
+                  strokeWidth={1.5}
+                  dash={[3, 5]}
                   listening={false}
                 />
               );
             })}
+
+          {/* dashed ghost of the pre-drag pose during an endpoint length edit */}
+          {endpointDrag && (
+            <Line
+              points={flat(endpointDrag.ghost)}
+              stroke="#ccc"
+              strokeWidth={3}
+              dash={[6, 5]}
+              lineCap="round"
+              listening={false}
+            />
+          )}
 
           {tracePath.length > 1 && (
             <Line points={flat(tracePath)} stroke="#e80" strokeWidth={1.5} listening={false} />
@@ -1028,26 +1231,135 @@ export function SketchCanvas() {
               );
             })}
 
+          {/* soft halo behind the hovered node hotspot (select tool) */}
+          {tool === 'select' && hoverSnap?.kind === 'node' && (
+            <Circle
+              x={S(hoverSnap.pos).x}
+              y={S(hoverSnap.pos).y}
+              radius={13}
+              fill="rgba(34,136,221,.15)"
+              listening={false}
+            />
+          )}
+
           {mech.nodes.map((n) => {
             const p = S(nodePos(n.id));
+            // glyph priority: anchor > bound > slider > weld/pivot > end dot
             if (n.kind === 'anchor') {
-              return <Rect key={n.id} x={p.x - 5} y={p.y - 5} width={10} height={10} fill="#222" />;
+              return (
+                <Rect
+                  key={n.id}
+                  x={p.x}
+                  y={p.y}
+                  width={13}
+                  height={13}
+                  offsetX={6.5}
+                  offsetY={6.5}
+                  rotation={45}
+                  fill="#222"
+                />
+              );
             }
-            const isPivot = (memberCount.get(n.id) ?? 0) >= 2;
+            if (boundNodes.has(n.id)) {
+              return (
+                <Circle
+                  key={n.id}
+                  x={p.x}
+                  y={p.y}
+                  radius={7.5}
+                  fill="#fff"
+                  stroke="#2a2"
+                  strokeWidth={3}
+                />
+              );
+            }
+            const slider = sliderByNode.get(n.id);
+            if (slider) {
+              const along = mech.elements.find((e) => e.id === slider.alongElementId);
+              let rotation = 0;
+              if (along && (along.type === 'link' || along.type === 'telescope')) {
+                const a = S(nodePos(along.nodeA));
+                const b = S(nodePos(along.nodeB));
+                rotation = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+              }
+              return (
+                <Rect
+                  key={n.id}
+                  x={p.x}
+                  y={p.y}
+                  width={30}
+                  height={16}
+                  offsetX={15}
+                  offsetY={8}
+                  rotation={rotation}
+                  cornerRadius={8}
+                  fill="#fff"
+                  stroke="#28d"
+                  strokeWidth={3}
+                />
+              );
+            }
+            const pivot = pivotByNode.get(n.id);
+            const members = memberCount.get(n.id) ?? 0;
+            const fullyWelded =
+              pivot !== undefined &&
+              pivot.welds.length >= pivot.memberIds.length - 1 &&
+              pivot.welds.length > 0;
+            if (fullyWelded) {
+              return (
+                <Rect
+                  key={n.id}
+                  x={p.x - 7}
+                  y={p.y - 7}
+                  width={14}
+                  height={14}
+                  fill={bindFrom === n.id ? '#d80' : '#324'}
+                />
+              );
+            }
+            if (pivot !== undefined || members >= 2) {
+              return (
+                <Circle
+                  key={n.id}
+                  x={p.x}
+                  y={p.y}
+                  radius={7.5}
+                  fill="#fff"
+                  stroke={bindFrom === n.id ? '#d80' : '#28d'}
+                  strokeWidth={3}
+                />
+              );
+            }
             return (
               <Circle
                 key={n.id}
                 x={p.x}
                 y={p.y}
-                radius={isPivot ? 6 : 5}
-                fill={boundNodes.has(n.id) ? '#2a2' : bindFrom === n.id ? '#d80' : '#28d'}
-                stroke={isPivot ? '#fff' : undefined}
-                strokeWidth={isPivot ? 2 : 0}
+                radius={5.5}
+                fill={bindFrom === n.id ? '#d80' : '#28d'}
               />
             );
           })}
 
-          {hoverSnap && (
+          {/* white endpoint handles on the selected pipe (drag = length edit) */}
+          {selectedEndpointNodes.map(({ nodeId, locked }) => {
+            const p = S(nodePos(nodeId));
+            return (
+              <Circle
+                key={`h-${nodeId}`}
+                x={p.x}
+                y={p.y}
+                radius={9}
+                fill="#fff"
+                stroke="#d80"
+                strokeWidth={3}
+                opacity={locked ? 0.55 : 1}
+                listening={false}
+              />
+            );
+          })}
+
+          {hoverSnap && (tool !== 'select' || hoverSnap.kind !== 'node') && (
             <Circle
               x={S(hoverSnap.pos).x}
               y={S(hoverSnap.pos).y}
@@ -1059,6 +1371,24 @@ export function SketchCanvas() {
           )}
         </Layer>
       </Stage>
+
+      {/* HTML overlays above the stage: dimension chips, joint popover, and
+          the selection card — all positioned through the same view transform */}
+      <DimensionChips
+        doc={doc}
+        mech={mech}
+        view={view}
+        positions={renderPositions}
+        hoveredElementId={hoveredElementId}
+        endpointDrag={
+          endpointDrag ? { elementId: endpointDrag.elementId, ...endpointDrag.readout } : null
+        }
+        dragging={endpointDrag !== null || dragNode !== null}
+      />
+      <JointPopover mech={mech} view={view} positions={renderPositions} size={size} />
+      {tool === 'select' && !endpointDrag && !dragNode && (
+        <SelectionCard doc={doc} mech={mech} view={view} positions={renderPositions} size={size} />
+      )}
     </div>
   );
 }

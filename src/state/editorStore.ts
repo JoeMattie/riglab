@@ -60,6 +60,25 @@ export interface PendingConnect {
   cancel(): void;
 }
 
+/** One floating popover/menu at a time (interface overhaul): joint popover at
+ * a node, mechanism switcher, DOF conflict card, input-channel card, clip
+ * picker, export menu. The snap-connect case keeps its data in
+ * `pendingConnect`; opening any popover closes the others. */
+export type OpenPopover =
+  | { kind: 'joint'; nodeId: string }
+  | { kind: 'mech' }
+  | { kind: 'dof' }
+  | { kind: 'inputs' }
+  | { kind: 'clip' }
+  | { kind: 'export' }
+  | null;
+
+/** Inline length-chip edit on the canvas: which pipe, and the field draft. */
+export interface LengthEdit {
+  elementId: string;
+  draft: string;
+}
+
 export interface PlaybackState {
   clipName: string | null;
   playing: boolean;
@@ -82,6 +101,11 @@ export interface EditorState {
   tracing: boolean;
   tracePath: Vec2[];
   pendingConnect: PendingConnect | null;
+  openPopover: OpenPopover;
+  lengthEdit: LengthEdit | null;
+  /** one-shot request for the canvas to zoom to an element (DOF conflict
+   * click-to-zoom); the canvas consumes and clears it */
+  focusElementId: string | null;
   /** ids flashed red because a limit/constraint was hit this frame */
   violated: string[];
   dof: { dof: number; classification: string } | null;
@@ -106,6 +130,9 @@ export interface EditorState {
   appendTrace(p: Vec2): void;
   clearTrace(): void;
   setPendingConnect(pc: PendingConnect | null): void;
+  setOpenPopover(p: OpenPopover): void;
+  setLengthEdit(e: LengthEdit | null): void;
+  setFocusElement(elementId: string | null): void;
   setDiagnostics(dof: EditorState['dof'], violated: string[]): void;
   setEquilibriumOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
@@ -123,6 +150,9 @@ export const useEditorStore = create<EditorState>()((set) => ({
   tracing: false,
   tracePath: [],
   pendingConnect: null,
+  openPopover: null,
+  lengthEdit: null,
+  focusElementId: null,
   violated: [],
   dof: null,
   equilibriumOn: false,
@@ -131,8 +161,15 @@ export const useEditorStore = create<EditorState>()((set) => ({
   // face is deliberately kept on mechanism switch — it is a lens, not a
   // per-mechanism property (§8)
   setActiveMechanism: (id) =>
-    set({ activeMechanismId: id, posePositions: null, selectedElementIds: [], tracePath: [] }),
-  setTool: (tool) => set({ tool, pendingConnect: null }),
+    set({
+      activeMechanismId: id,
+      posePositions: null,
+      selectedElementIds: [],
+      tracePath: [],
+      openPopover: null,
+      lengthEdit: null,
+    }),
+  setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
   setFace: (face) => set({ face }),
   setRightTab: (rightTab) => set({ rightTab }),
   setFocusHint: (focusHint) => set({ focusHint }),
@@ -149,7 +186,18 @@ export const useEditorStore = create<EditorState>()((set) => ({
   setTracing: (tracing) => set({ tracing, tracePath: [] }),
   appendTrace: (p) => set((s) => ({ tracePath: [...s.tracePath, p] })),
   clearTrace: () => set({ tracePath: [] }),
-  setPendingConnect: (pendingConnect) => set({ pendingConnect }),
+  // opening the connect menu closes any other popover (one at a time)
+  setPendingConnect: (pendingConnect) =>
+    set(pendingConnect ? { pendingConnect, openPopover: null } : { pendingConnect }),
+  setOpenPopover: (openPopover) =>
+    set((s) => ({
+      openPopover,
+      // opening a popover cancels a pending connect and an inline edit
+      pendingConnect: openPopover ? null : s.pendingConnect,
+      lengthEdit: openPopover ? null : s.lengthEdit,
+    })),
+  setLengthEdit: (lengthEdit) => set({ lengthEdit }),
+  setFocusElement: (focusElementId) => set({ focusElementId }),
   setDiagnostics: (dof, violated) => set({ dof, violated }),
   setEquilibriumOn: (equilibriumOn) =>
     set({

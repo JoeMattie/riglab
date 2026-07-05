@@ -1,31 +1,28 @@
+// The editor shell (interface overhaul): a full-bleed canvas with floating
+// chrome — project chip (top-left), actions chip (top-right), tool pill
+// (left), transport pill (bottom-center), DOF pill (bottom-right). Element
+// properties live on the canvas (dimension chips, joint popover, selection
+// card, all rendered inside SketchCanvas); the design face additionally docks
+// the tabbed inspector/checklist/materials/BOM panel as a floating column.
 import { useEffect } from 'react';
-import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
-import { setUnitsPref } from '../persistence/prefs';
-import type { UnitsPreference } from '../schema';
 import { useAppStore } from '../state/appStore';
-import { type Face, useEditorStore } from '../state/editorStore';
-import { Badge } from './components/badge';
-import { Button } from './components/button';
-import { ToggleGroup, ToggleGroupItem } from './components/toggle-group';
-import { ConnectMenu } from './editor/ConnectMenu';
-import { ForcesPanel } from './editor/ForcesPanel';
-import { MechanismTabs } from './editor/MechanismTabs';
+import { useEditorStore } from '../state/editorStore';
+import { ActionsChip } from './editor/ActionsChip';
+import { DofPill } from './editor/DofPill';
+import { ProjectChip } from './editor/ProjectChip';
 import { RightDock } from './editor/RightDock';
 import { SketchCanvas } from './editor/SketchCanvas';
-import { Toolbar } from './editor/Toolbar';
-import { TransportBar } from './editor/TransportBar';
+import { ToolPill } from './editor/ToolPill';
+import { TransportPill } from './editor/TransportPill';
+import { EDGE, panelStyle, T } from './editor/theme';
 
 export function EditorShell() {
   const current = useAppStore((s) => s.current);
-  const saveState = useAppStore((s) => s.saveState);
-  const closeProject = useAppStore((s) => s.closeProject);
-  const updateCurrent = useAppStore((s) => s.updateCurrent);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
   const face = useEditorStore((s) => s.face);
-  const setFace = useEditorStore((s) => s.setFace);
 
   // keep an active mechanism selected whenever one exists
   useEffect(() => {
@@ -65,6 +62,7 @@ export function EditorShell() {
         face: s.face,
         selectedElementIds: s.selectedElementIds,
         rightTab: s.rightTab,
+        openPopover: s.openPopover,
       };
     };
     // seam for exercising the equilibrium force-overlay plumbing while the
@@ -75,112 +73,49 @@ export function EditorShell() {
 
   if (!current) return null;
 
-  const onExport = () => {
-    const blob = new Blob([exportProjectJson(current)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = suggestedFileName(current);
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div
       style={{
-        fontFamily: 'system-ui, sans-serif',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'fixed',
+        inset: 0,
+        overflow: 'hidden',
+        background: T.bg,
+        fontFamily: T.sans,
+        fontSize: 13.5,
+        color: T.text,
       }}
     >
-      <header
-        style={{
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-          padding: '8px 16px',
-          borderBottom: '1px solid #ccc',
-        }}
-      >
-        <button type="button" data-testid="back-to-projects" onClick={() => void closeProject()}>
-          ← Projects
-        </button>
-        <input
-          data-testid="project-name-input"
-          value={current.name}
-          onChange={(e) => updateCurrent((doc) => ({ ...doc, name: e.target.value }))}
-          style={{ fontSize: 16, fontWeight: 600 }}
-        />
-        <Badge data-testid="save-state" variant={saveState === 'saved' ? 'secondary' : 'outline'}>
-          {saveState === 'saved' ? 'saved' : 'saving…'}
-        </Badge>
-        <button type="button" data-testid="undo" onClick={undo} title="Ctrl/Cmd+Z">
-          ↶ undo
-        </button>
-        <button type="button" data-testid="redo" onClick={redo} title="Ctrl/Cmd+Shift+Z">
-          ↷ redo
-        </button>
-        {/* Sketch/Design face toggle (§8): two lenses on one document —
-            switching never destroys data */}
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={face}
-          onValueChange={(v) => v && setFace(v as Face)}
-          data-testid="face-toggle"
-        >
-          <ToggleGroupItem value="sketch" data-testid="face-sketch">
-            Sketch
-          </ToggleGroupItem>
-          <ToggleGroupItem value="design" data-testid="face-design">
-            Design
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <span style={{ flex: 1 }} />
-        {/* units toggle (§8.3): stored on the project (display-only — all
-            quantities stay SI internally), mirrored to the localStorage pref
-            that seeds NEW projects */}
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={current.unitsPreference}
-          onValueChange={(v) => {
-            if (!v) return;
-            const units = v as UnitsPreference;
-            updateCurrent((doc) => ({ ...doc, unitsPreference: units }));
-            setUnitsPref(units);
-          }}
-          data-testid="units-toggle"
-        >
-          <ToggleGroupItem value="imperial" data-testid="units-imperial">
-            in/lb
-          </ToggleGroupItem>
-          <ToggleGroupItem value="metric" data-testid="units-metric">
-            m/kg
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          data-testid="export-project"
-          onClick={onExport}
-        >
-          Export JSON
-        </Button>
-      </header>
-      <MechanismTabs />
-      <Toolbar />
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
+      {/* full-bleed canvas; all chrome floats above it */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
         <SketchCanvas />
-        <ConnectMenu />
-        <RightDock />
       </div>
-      <ForcesPanel />
-      <TransportBar />
+
+      <ProjectChip />
+      <ActionsChip />
+      <ToolPill />
+      <TransportPill />
+      <DofPill />
+
+      {/* design face: the tabbed inspector/checklist/materials/BOM dock
+          floats as a right-hand column (its feature scope is unchanged by
+          the overhaul — see DECISIONS.md) */}
+      {face === 'design' && (
+        <div
+          style={{
+            ...panelStyle,
+            position: 'absolute',
+            top: 64,
+            right: EDGE,
+            bottom: 76,
+            width: 384,
+            overflow: 'hidden',
+            display: 'flex',
+            zIndex: 30,
+          }}
+        >
+          <RightDock />
+        </div>
+      )}
     </div>
   );
 }

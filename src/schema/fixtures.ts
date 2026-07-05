@@ -296,3 +296,10 @@ export function fixtureProjectV2(): Record<string, unknown> {
   const { bomSettings: _bom, ...rest } = p;
   return { ...rest, schemaVersion: 2 };
 }
+
+/** A version-3 document — identical to v4 except the stamp (lengthLocked is
+ * optional and absent) — exercises the stamp-only 3→4 migration. */
+export function fixtureProjectV3(): Record<string, unknown> {
+  const p = fixtureProject() as unknown as Record<string, unknown>;
+  return { ...p, schemaVersion: 3 };
+}

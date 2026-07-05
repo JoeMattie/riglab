@@ -24,6 +24,10 @@ export interface SnapContext {
   gridM?: number;
   /** nodes to ignore (e.g. the node being dragged) */
   exclude?: ReadonlySet<string>;
+  /** elements whose spans must not attract onPipe snaps — e.g. every pipe
+   * incident to a dragged endpoint, whose geometry moves with the pointer
+   * (snapping to them would chase a moving target and oscillate) */
+  excludeElements?: ReadonlySet<string>;
 }
 
 const d = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
@@ -76,6 +80,7 @@ export function findSnap(world: Vec2, ctx: SnapContext): Snap {
 
   for (const el of mechanism.elements) {
     if (el.type !== 'link' && el.type !== 'telescope') continue;
+    if (ctx.excludeElements?.has(el.id)) continue;
     const a = positions[el.nodeA] ?? mechanism.nodes.find((n) => n.id === el.nodeA)?.position;
     const b = positions[el.nodeB] ?? mechanism.nodes.find((n) => n.id === el.nodeB)?.position;
     if (!a || !b) continue;
