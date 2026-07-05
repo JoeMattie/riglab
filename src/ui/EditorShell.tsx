@@ -9,7 +9,7 @@ import { buildPipeModel, composeProject, type PipeModelItem } from '../assembly'
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { deleteElement, duplicateElement } from '../state/docOps';
-import { useEditorStore } from '../state/editorStore';
+import { DEFAULT_CLIP_NAME, useEditorStore } from '../state/editorStore';
 import { useThemeStore } from '../state/themeStore';
 import { AssemblyView } from './assembly/AssemblyView';
 import { ControlsDock } from './controls/ControlsDock';
@@ -64,10 +64,15 @@ export function EditorShell() {
       }
       if (typing) return;
 
-      // space toggles the transport
+      // space toggles the transport from anywhere; from the rest pose it
+      // starts the default clip instead of silently playing nothing. OS
+      // key-repeat is ignored so holding space (the canvas pan modifier)
+      // toggles at most once.
       if (key === ' ' || e.key === 'Spacebar') {
         e.preventDefault();
-        ed.setPlayback({ playing: !ed.playback.playing });
+        if (e.repeat) return;
+        if (ed.playback.clipName) ed.setPlayback({ playing: !ed.playback.playing });
+        else ed.setPlayback({ clipName: DEFAULT_CLIP_NAME, tS: 0, playing: true });
         return;
       }
       // escape clears selection / closes floating UI
@@ -129,6 +134,7 @@ export function EditorShell() {
         selectedElementIds: s.selectedElementIds,
         rightTab: s.rightTab,
         openPopover: s.openPopover,
+        playback: s.playback,
         night: useThemeStore.getState().night,
       };
     };

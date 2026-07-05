@@ -1732,3 +1732,15 @@ heat-wrap connector, every socketed end gets `fitting`; zero-allowance ends
 (boltThrough/conduitBox/ropeLashing) are not proposed — noise, not parts. No
 structural/strength reasoning — stated in the preview UI. Proposals are
 transient (no schema change, no schemaVersion bump).
+
+### DECISION: walk clip is the transport default; spacebar always drives it
+Joe asked (2026-07-04) for the walk pose to be selected by default and for
+spacebar to toggle it from everywhere. `playback.clipName` now initializes to
+`DEFAULT_CLIP_NAME` (`'walk'`, exported from `editorStore` and pinned to a
+bundled clip by a test) instead of `null`/rest pose. The existing window-level
+space shortcut in `EditorShell` already fired in every mode, but was a no-op
+until a clip was chosen; it now (a) starts the default clip from the rest pose
+rather than toggling `playing` on nothing, and (b) ignores `e.repeat`, because
+space is also the hold-to-pan modifier and OS key-repeat previously flipped
+play/pause continuously while panning. The typing guard is unchanged — space
+in a text field still types a space. Covered by `src/ui/transportKeys.test.tsx`.
