@@ -30,9 +30,9 @@ test('splitters drag and reset; top-bar toggles reflow the grid', async ({ page 
   // swap in a bundled example (assembly.spec pattern): an empty project
   // shows the onboarding overlay, which covers the splitters
   await page.evaluate(() =>
-    (
-      window as unknown as { __riglab: { loadExample(id: string): void } }
-    ).__riglab.loadExample('example-seesaw-spine'),
+    (window as unknown as { __riglab: { loadExample(id: string): void } }).__riglab.loadExample(
+      'example-seesaw-spine',
+    ),
   );
   await expect(page.getByTestId('quad-splitter-v')).toBeVisible();
 
