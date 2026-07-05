@@ -163,3 +163,43 @@
     font-weight: 600;
   }
 }
+
+/* Printable BOM (§5): a body-portalled document shown only when printing. The
+   editor root is hidden so a clean shop-ready sheet prints on its own. */
+.print-bom {
+  display: none;
+}
+@media print {
+  #root {
+    display: none !important;
+  }
+  .print-bom {
+    display: block !important;
+    padding: 24px;
+    color: #000;
+    font: 12px/1.5 system-ui, sans-serif;
+  }
+  .print-bom h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+  }
+  .print-bom h2 {
+    font-size: 13px;
+    margin: 16px 0 4px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+  }
+  .print-bom table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .print-bom th,
+  .print-bom td {
+    text-align: left;
+    padding: 2px 8px 2px 0;
+  }
+  .print-bom .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
