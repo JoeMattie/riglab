@@ -1608,3 +1608,43 @@ puts tilt/twist on the pad and remaining axes (trigger) on sliders rather than a
 dedicated dial. Mounts offer wearer anchors (the §11 hand.R case) + none; the
 schema also allows instance-node mounts, not yet surfaced in the builder
 dropdown. Called out per CLAUDE.md; revisit in the Phase-5 polish pass.
+
+## Phase 5 — finishing slice (§11)
+
+### New from example + onboarding
+`appStore.createFromExample` seeds a fresh project from a bundled example (new
+id so the same example opens many times) and lands in the editor. ProjectList
+gained a "Start from an example" grid (all seven, with descriptions). A
+brand-new project has no mechanism, so the `EmptyState` onboarding card (§8.1)
+adds a side-view silhouette with the pipe tool active in one click, or opens an
+example — the dev-only `__riglab.loadExample` seam stays for scripted checks.
+
+### Keyboard shortcuts (§5)
+Handled in EditorShell's key listener, skipped while typing in inputs/selects:
+space = play/pause, esc = clear selection + close popovers/connect, delete/
+backspace = delete the 2D selection, ⌘/ctrl-D = duplicate. Duplicate is a pure
+`duplicateElement` docOp cloning links/bentLinks/telescopes with fresh offset
+free nodes (joints/ropes return null — they reference other parts). ⌘Z/⇧⌘Z
+undo/redo unchanged.
+
+### Printable BOM (§5)
+`PrintableBom` renders a shop sheet (title, weight, cut list, bend schedule,
+consumables, techniques) into a `document.body` portal, shown only under
+`@media print` (index.css `.print-bom`); the editor `#root` hides so it prints
+clean. A Print button sits beside Export CSV. Same `computeBom` output as the
+on-screen panel — no second source of truth.
+
+### Performance pass (§11 <16 ms)
+The full-creature assembly (eight mechanisms: solve each + compose to world) is
+the heaviest per-frame path and measures ~1.4 ms/frame; a single kinematic
+drag-solve ~0.3 ms. `perf.test.ts` guards the compose path at <16 ms with ~10×
+headroom, so the drag-solve / clip-playback frame budget holds on the examples
+with no optimization needed.
+
+### Visual polish
+The interface overhaul already applied the floating-glass design tokens across
+the editor chrome. This slice brought the last pre-overhaul surface — the
+ProjectList landing page — onto the same tokens (IBM Plex ramp, panel/accent
+colors, example-card grid), and the onboarding/controls panels use the shared
+`panelStyle`. The design language is now consistent from landing → sketch →
+design → 3D.
