@@ -17,6 +17,7 @@ import { createEmptyProject } from '../schema';
 import {
   assignCordageMaterial,
   assignEndRealization,
+  assignNodeRealization,
   assignPipeMaterial,
   assignRealization,
   assignTelescopeMaterial,
@@ -135,6 +136,46 @@ describe('assignRealization', () => {
     expect(elOf(next, 'L1')).not.toHaveProperty('realization');
     const cleared = assignRealization(next, 'm1', ['P1'], undefined);
     expect(elOf(cleared, 'P1')).toMatchObject({ realization: undefined, maturity: 'sketch' });
+  });
+});
+
+describe('assignNodeRealization', () => {
+  it('materializes a free-pin pivot for an implicit joint, then removes it on clear', () => {
+    // n2 joins two links with no explicit pivot element — an implicit free pin
+    const doc = project(
+      mech(
+        [link('L1', { nodeB: 'n2' }), link('L2', { nodeA: 'n2', nodeB: 'n3' })],
+        [node('n1', 0, 0), node('n2', 1, 0), node('n3', 2, 0)],
+      ),
+    );
+    expect(doc.mechanisms[0]!.elements.some((e) => e.type === 'pivot')).toBe(false);
+    const next = assignNodeRealization(doc, 'm1', 'n2', 'fitting');
+    const created = next.mechanisms[0]!.elements.find((e) => e.type === 'pivot');
+    expect(created).toMatchObject({
+      nodeId: 'n2',
+      realization: 'fitting',
+      maturity: 'engineered',
+      welds: [],
+      memberIds: ['L1', 'L2'],
+    });
+    const cleared = assignNodeRealization(next, 'm1', 'n2', undefined);
+    expect(cleared.mechanisms[0]!.elements.some((e) => e.type === 'pivot')).toBe(false);
+  });
+
+  it('updates an existing joint element in place and keeps welded pins on clear', () => {
+    const welded: PivotElement = { ...pivot('P1'), welds: [['e1', 'e2']] };
+    const doc = project(mech([welded], [node('n1', 0, 0), node('n2', 1, 0)]));
+    const next = assignNodeRealization(doc, 'm1', 'n1', 'boltThrough');
+    expect(elOf(next, 'P1')).toMatchObject({ realization: 'boltThrough', maturity: 'engineered' });
+    // a welded pin is not bare, so clearing keeps the element (drops maturity)
+    const cleared = assignNodeRealization(next, 'm1', 'n1', undefined);
+    expect(elOf(cleared, 'P1')).toMatchObject({ realization: undefined, maturity: 'sketch' });
+  });
+
+  it('is a no-op on a node with fewer than two members', () => {
+    const doc = project(mech([link('L1')], [node('n1', 0, 0), node('n2', 1, 0)]));
+    const next = assignNodeRealization(doc, 'm1', 'n2', 'fitting');
+    expect(next.mechanisms[0]!.elements.some((e) => e.type === 'pivot')).toBe(false);
   });
 });
 

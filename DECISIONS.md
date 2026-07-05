@@ -1332,3 +1332,138 @@ avoids a schemaVersion bump + migration, and preserves the "which rows has
 the user actually measured" signal should a future consumer (e.g. the
 resolution checklist) want it. Only the MaterialsPanel badge rendering and
 its test assertion were removed.
+
+### Settled equilibrium pose renders on canvas (forces overlay on)
+
+Joe expected his sketch to hang under gravity and the canvas never moved:
+the equilibrium solver already computed the settled sag (§5.2 pseudo-dynamic
+relaxation) but `readEquilibrium` kept only the force numbers and threw the
+positions away. We read the planfile's "must run fast enough to re-settle
+live while the user drags a slider" (§5.2) as intending the settled *pose*
+to be displayed, not just its force labels, so this is completing planned
+behavior rather than a scope change. `EquilibriumReadout` now carries
+`positions` and the canvas prefers them via a pure `pickRenderPositions`
+helper: a live node drag always wins (the readout is frozen mid-gesture, so
+it would be stale), then the settled pose while the forces chip is on
+(merged over drawn geometry so nodes added since the last solve still
+render), then the kinematic playback pose, then drawn geometry. Gravity
+alone still moves nothing — the sag display is gated behind the explicit
+forces toggle, keeping the sketch face's drawn-geometry editing predictable
+(§8.1). A `getRenderPositions` debug seam joins `getView` on `__riglab` so
+the scripted browser check asserts the actual render path; verified against
+the production build (tail example sags 0.27 m converged, reverts exactly
+on toggle-off).
+
+### Design-face joint popover always offers realizations, even for implicit pins
+
+The joint popover already swapped joint-type rows for the realization picker
+in the design face — but only when the node carried an *explicit* pivot or
+slider element. Ordinary free-pin pivots are stored as implicit joints (a node
+with ≥2 members and no pivot element; see `setNodeJoint`'s "no explicit pivot
+element = an implicit free pin already"), so the common case still showed
+joint types in design mode. Joe asked for the joint dropdown to show
+realization types instead of joint types in design mode, so the gate now keys
+off `jointKindAtNode` (pivot/weld/slider → realizations) rather than the
+presence of an element. Anchors and free ends keep the joint-type menu —
+`JointRealization` describes how a *joint* is physically made, so it has no
+meaning there. To let an implicit pin be realized, a new
+`assignNodeRealization` docOp finds-or-materializes the pivot element:
+choosing a realization creates a bare free-pin pivot (`welds: []`) carrying
+it, and clearing the realization on a bare pin removes the element again so no
+redundant free-pin pivot lingers (welded pins, angle limits, and torsion
+springs are preserved on clear, matching the prior `assignRealization`
+behavior). This is a UI-behavior refinement within the §6 design-handoff
+scope, not a schema or planfile change. Note: switching a joint's *type*
+(weld ↔ pivot, detach, anchor) now lives only in the sketch face, consistent
+with the sketch=topology / design=realization split the overhaul already
+established for welded pivots and sliders.
+
+### Design-face realizations are gated to the joint kind (2026-07-04, user directive)
+
+Joe noted that "some of the realization types should be gated based on the
+type (pivot, slider, weld, anchor, etc)": the realization picker was offering
+all nine `JointRealization` values for every pivot/weld/slider node, including
+physically-impossible pairings (a heat-wrapped *pivot* on a rigid weld, a
+rigid *fitting* on a pivot). A realization is the physical way a joint is
+built, and each one only produces certain kinematics, so the menu now gates by
+`jointKindAtNode`. Chosen policy (confirmed with Joe: "physical-native"):
+each realization is shown only for the kind(s) it can actually produce, with
+the rest rendered disabled/greyed rather than hidden so the menu stays
+positionally stable (matching the existing `JointMenu` disabled-row pattern).
+Mapping, derived from the planfile §172 realization descriptions plus §100
+(conduit-box = slider) and §231/§235:
+
+- **pivot** (rotates): `heatWrapPivot`, `boltThrough`, `nestedSleeve`,
+  `ropeLashing`, `clickDetachable`
+- **weld** (rigid): `heatWrapRigid`, `nestedCoupler`, `fitting`
+- **slider**: `conduitBox`, `nestedSleeve`, `clickDetachable`
+
+`nestedSleeve` (a bearing/slip pair) and `clickDetachable` (slip fit +
+retaining screw) are the two dual-kind realizations — each works as either a
+pivot or a slider, so they appear (enabled) under both. A currently-set but
+now-incompatible realization stays visible disabled-with-checkmark so a
+mismatch reads instead of vanishing; the user can pick a valid one or unset.
+This is a UI-gating refinement within the §6/§8 design-handoff scope, not a
+schema change (the enum and BOM allowance math are untouched). Encoded as
+`REALIZATIONS_BY_KIND` in `JointPopover.tsx`. **Deferred:** the per-element
+realization selects in the info-panel `ElementInspector`/`MultiInspector` are
+*not* yet gated — they still offer all nine. Left alone to avoid scope creep
+beyond the popover Joe pointed at; flag for a follow-up if consistency there is
+wanted.
+
+### Wearer-bound nodes are moving anchors in equilibrium (drag-held nodes)
+
+Joe's shoulder-mounted linkage didn't dangle with forces on: equilibrium
+mode ignored `inputs.dragTargets` entirely (only `anchor`/`driven` nodes
+were held), so a skeleton-bound node was just a free particle and the whole
+chain free-fell instead of hanging off the body. Marking the node `anchor`
+pinned it to the world and broke clip playback. Now a drag-targeted free
+node is held AT its target in the equilibrium build — the drag is an
+external holder (the wearer's body via a binding, §7, or a hand) that
+supplies whatever reaction the pose demands — so bound linkages dangle and
+re-settle as the clip moves the body. Anchor/driven nodes ignore drags,
+mirroring kinematic mode. Drag-held nodes are likewise excluded from the
+rope-compression static balance (the holder takes the load, so members are
+never asked to push to support them). DOF/mobility counting is unchanged:
+drags are transient inputs, not topology. Acceptance tests in
+`heldDangle.acceptance.test.ts` (dangle geometry + link tensions ±2%,
+moving target, anchor parity, no compression false-flag). Note: the
+leg-exoskeleton example now reports ~0.2 mm of violation at the ankle — it
+pins the exo to both world anchors and three body points, and its drawn
+geometry can't satisfy both exactly; it was already non-converged before
+this change (settle timeout).
+
+### Transport pill wraps instead of sliding under the DOF pill
+
+`e2e/forces.spec.ts` went red on a layout race, not solver behavior: at a
+1280 px viewport with the forces overlay on, a long solver status
+("non-converged") widened the centered transport pill until its trailing
+"inputs" toggle sat underneath the bottom-right DOF pill, which intercepted
+the click. The spec only ever passed by clicking during the brief
+"settling…" window. Pre-existing fragility, surfaced by this session's e2e
+reruns. Fix: the pill gets `flexWrap` + `maxWidth: calc(100vw - 360px)`
+(360 = symmetric clearance for the DOF pill + edge margins), so on narrow
+windows it wraps to a second row and every control stays clickable.
+
+### Binding points always visible; drag-to-bind a pivot in the select tool
+
+Two friction points around wearer bindings (planfile §7.1/§7.3): the silhouette
+skeleton points and structural anchors were only drawn when the tool was not
+`select` (or mid-Bind-gesture), so in the default pose tool the bind targets
+were invisible; and the only way to bind an existing node was the modal Bind
+tool's two-click gesture. Joe asked that the binding points always be visible
+and that a pivot always be snappable/bindable to them. The silhouette points
+and anchors now render whenever a silhouette exists — matching §7.1 ("named
+anchors and skeleton points appear as snappable points"). And the select-tool
+node drag now snaps to a skeleton point when the pointer lands within snap
+tolerance (targeting the point so the pivot visually locks on) and, on release,
+creates the skeleton binding via `addSkeletonBinding` — the "drag from a
+skeleton point to a node" gesture §7.3/§197 calls for, reachable from day one in
+select without switching tools. The dedicated Bind tool stays as-is; this is an
+additive gesture. `findSnap` already ranks skeleton points at priority 1 (above
+pipe spans/grid, below a coincident live node), so no snap-resolution change was
+needed — only the drag wiring. Pure coverage: `findSnap` skeleton-snap tests
+(priority + self-exclusion) in snapping.test.ts; the gesture itself is verified
+against the production build via the scripted `__riglab` hook (dragging the
+example's pivot onto `handL` produced one skeletonBinding), per the "browser
+verification is scripted" rule for drag/snap feel.

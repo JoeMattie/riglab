@@ -39,6 +39,56 @@ function formatRequiredInput(value: number, channel: InputChannel, units: UnitsP
   return formatForce(value, units);
 }
 
+/** Toggle chip (gravity / forces / trace). Both the checked ("label ✓", bold)
+ * and unchecked ("label") states are stacked in one grid cell so the button
+ * always sizes to the wider checked state — toggling swaps visibility without
+ * reflowing neighbours. */
+function ToggleChip({
+  label,
+  on,
+  onClick,
+  testId,
+  title,
+}: {
+  label: string;
+  on: boolean;
+  onClick(): void;
+  testId: string;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-pressed={on}
+      title={title}
+      onClick={onClick}
+      style={{ ...toggleChipStyle(on), display: 'inline-grid', placeItems: 'center' }}
+    >
+      <span
+        aria-hidden={!on}
+        style={{
+          gridArea: '1 / 1',
+          font: `500 12px ${T.sans}`,
+          visibility: on ? 'visible' : 'hidden',
+        }}
+      >
+        {label} ✓
+      </span>
+      <span
+        aria-hidden={on}
+        style={{
+          gridArea: '1 / 1',
+          font: `400 12px ${T.sans}`,
+          visibility: on ? 'hidden' : 'visible',
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
 /** Drag-to-scrub numeric label (speed / amplitude). */
 function ScrubLabel({
   text,
@@ -316,6 +366,12 @@ export function TransportPill() {
           alignItems: 'center',
           gap: 12,
           padding: '9px 14px',
+          // keep clear of the DOF pill (bottom-right): on narrow windows the
+          // pill wraps to a second row instead of sliding under it, where its
+          // trailing controls would be unclickable
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          maxWidth: 'calc(100vw - 360px)',
         }}
       >
         <button
@@ -426,44 +482,41 @@ export function TransportPill() {
           onChange={(v) => setPlayback({ amplitude: v })}
         />
         <span style={{ ...dividerStyle, height: 20 }} />
-        <button
-          type="button"
-          data-testid="gravity-toggle"
-          aria-pressed={mech.gravityOn}
+        <ToggleChip
+          testId="gravity-toggle"
+          label="gravity"
+          on={mech.gravityOn}
           onClick={() => updateCurrent((cur) => setGravity(cur, mech.id, !mech.gravityOn))}
-          style={toggleChipStyle(mech.gravityOn)}
-        >
-          gravity{mech.gravityOn ? ' ✓' : ''}
-        </button>
-        <button
-          type="button"
-          data-testid="equilibrium-toggle"
-          aria-pressed={equilibriumOn}
+        />
+        <ToggleChip
+          testId="equilibrium-toggle"
+          label="forces"
           title="equilibrium force overlays"
+          on={equilibriumOn}
           onClick={() => setEquilibriumOn(!equilibriumOn)}
-          style={toggleChipStyle(equilibriumOn)}
-        >
-          forces{equilibriumOn ? ' ✓' : ''}
-        </button>
-        <button
-          type="button"
-          data-testid="trace-toggle"
-          aria-pressed={tracing}
+        />
+        <ToggleChip
+          testId="trace-toggle"
+          label="trace"
           title="trace the dragged node's motion path"
+          on={tracing}
           onClick={() => setTracing(!tracing)}
-          style={toggleChipStyle(tracing)}
+        />
+        <span
+          data-testid="solver-status"
+          title="equilibrium solver status"
+          style={{
+            font: `500 11px ${T.mono}`,
+            color: T.muted,
+            whiteSpace: 'nowrap',
+            width: 108,
+            flex: 'none',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
         >
-          trace{tracing ? ' ✓' : ''}
-        </button>
-        {equilibriumOn && (
-          <span
-            data-testid="solver-status"
-            title="equilibrium solver status"
-            style={{ font: `500 11px ${T.mono}`, color: T.muted, whiteSpace: 'nowrap' }}
-          >
-            {solverStatusLabel(equilibrium.status)}
-          </span>
-        )}
+          {equilibriumOn ? solverStatusLabel(equilibrium.status) : ''}
+        </span>
         {equilibriumOn && compressionCount > 0 && (
           <span
             data-testid="compression-warning"

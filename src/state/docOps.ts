@@ -13,6 +13,7 @@ import type {
   Project,
   RopeElement,
   SkeletonPoint,
+  SliderElement,
   TorsionCableElement,
   Vec2,
   ViewOrientation,
@@ -648,6 +649,60 @@ export function assignRealization(
       ? withMaturity({ ...el, realization })
       : el,
   );
+}
+
+/** Assign (or clear) the physical realization of the joint at a node — the
+ * design-face joint popover. Unlike `assignRealization`, which needs an
+ * explicit element id, this finds-or-materializes the pivot element so an
+ * implicit free pin (a node with ≥2 members but no pivot element) can be
+ * realized directly. Clearing the realization on a bare materialized pin (no
+ * welds, limits, or spring) removes the element again, restoring the implicit
+ * sketch state. No-op on nodes that are not a pivot-like joint. */
+export function assignNodeRealization(
+  doc: Project,
+  mechId: string,
+  nodeId: string,
+  realization: JointRealization | undefined,
+): Project {
+  return withMechanism(doc, mechId, (m) => {
+    const existing = m.elements.find(
+      (e): e is PivotElement | SliderElement =>
+        (e.type === 'pivot' || e.type === 'slider') && e.nodeId === nodeId,
+    );
+    if (existing) {
+      // a bare pin we materialized only to carry a realization loses its
+      // element when unrealized, so no redundant free-pin pivot lingers
+      const bare =
+        existing.type === 'pivot' &&
+        existing.welds.length === 0 &&
+        !existing.angleLimit &&
+        !existing.torsionSpring;
+      if (realization === undefined && bare) {
+        return { ...m, elements: m.elements.filter((e) => e.id !== existing.id) };
+      }
+      return {
+        ...m,
+        elements: m.elements.map((e) =>
+          e.id === existing.id ? withMaturity({ ...e, realization }) : e,
+        ),
+      };
+    }
+    // no explicit joint element: materialize a free-pin pivot to carry the
+    // realization (clearing an already-implicit pin is a no-op)
+    if (realization === undefined) return m;
+    const members = elementsAtNode(m, nodeId);
+    if (members.length < 2) return m;
+    const pivot: PivotElement = {
+      id: uid(),
+      type: 'pivot',
+      maturity: 'engineered',
+      nodeId,
+      memberIds: members,
+      welds: [],
+      realization,
+    };
+    return { ...m, elements: [...m.elements, pivot] };
+  });
 }
 
 /** Assign (or clear) a link/bentLink END realization (cut allowance at that

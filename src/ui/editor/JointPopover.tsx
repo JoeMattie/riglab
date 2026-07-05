@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import type { JointRealization, Mechanism, Vec2 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { assignRealization, detachNode, setNodeJoint } from '../../state/docOps';
+import { assignNodeRealization, detachNode, setNodeJoint } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { JointGlyph, type JointGlyphName } from './icons';
 import { REALIZATION_OPTIONS } from './infopanel/fields';
@@ -65,28 +65,49 @@ export function JointPopover({
   if (!node) return null;
   const p = toScreen(view, positions[node.id] ?? node.position);
   const anchor = { x: p.x - 33, y: p.y + 20 };
-  // design face: a node with an explicit joint element gets the realization
-  // picker (the engineering question at that point); the sketch face — and
-  // joint-less nodes — get the joint-type menu
-  const joint = mech.elements.find(
-    (e) => (e.type === 'pivot' || e.type === 'slider') && e.nodeId === node.id,
-  );
-  if (face === 'design' && joint && (joint.type === 'pivot' || joint.type === 'slider')) {
-    return <RealizationMenu mech={mech} joint={joint} anchor={anchor} size={size} />;
+  // design face: every pivot-like joint (pivot, weld, or slider) gets the
+  // realization picker — the engineering question at that point — even when
+  // it is an implicit free pin with no explicit element yet. Anchors and free
+  // ends, and the whole sketch face, still get the joint-type menu.
+  const kind = jointKindAtNode(mech, node.id);
+  if (face === 'design' && (kind === 'pivot' || kind === 'weld' || kind === 'slider')) {
+    return <RealizationMenu mech={mech} nodeId={node.id} kind={kind} anchor={anchor} size={size} />;
   }
   return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} size={size} />;
 }
 
+/** Which physical realizations can actually produce each joint kind's
+ * kinematics (planfile §172 descriptions, §100 conduit-box slider, §231/§235).
+ * Rows outside the kind's set are shown disabled rather than hidden, so the
+ * menu stays positionally stable like JointMenu. `nestedSleeve` (a bearing/slip
+ * pair) and `clickDetachable` (slip fit + retaining screw) work as either a
+ * pivot or a slider, so they appear under both. */
+const REALIZATIONS_BY_KIND: Record<'pivot' | 'weld' | 'slider', ReadonlySet<JointRealization>> = {
+  pivot: new Set([
+    'heatWrapPivot',
+    'boltThrough',
+    'nestedSleeve',
+    'ropeLashing',
+    'clickDetachable',
+  ]),
+  weld: new Set(['heatWrapRigid', 'nestedCoupler', 'fitting']),
+  slider: new Set(['conduitBox', 'nestedSleeve', 'clickDetachable']),
+};
+
 /** Design-face variant: the joint's physical realization (heat-wrap, fitting,
- * bolt-through, …) instead of joint types. Assigning re-derives maturity. */
+ * bolt-through, …) instead of joint types. Works on any pivot-like node — an
+ * implicit free pin materializes a pivot element when realized. Assigning
+ * re-derives maturity. */
 function RealizationMenu({
   mech,
-  joint,
+  nodeId,
+  kind,
   anchor,
   size,
 }: {
   mech: Mechanism;
-  joint: Extract<Mechanism['elements'][number], { type: 'pivot' | 'slider' }>;
+  nodeId: string;
+  kind: 'pivot' | 'weld' | 'slider';
   anchor: Vec2;
   size: Size;
 }) {
@@ -94,13 +115,22 @@ function RealizationMenu({
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const ref = useRef<HTMLDivElement>(null);
 
+  // the explicit joint element, if any — carries the current realization;
+  // absent for an implicit free pin (realized on first pick)
+  const joint = mech.elements.find(
+    (e): e is Extract<Mechanism['elements'][number], { type: 'pivot' | 'slider' }> =>
+      (e.type === 'pivot' || e.type === 'slider') && e.nodeId === nodeId,
+  );
+  const current = joint?.realization;
+  const allowed = REALIZATIONS_BY_KIND[kind];
+
   useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, []);
 
   const choose = (realization: JointRealization | undefined) => {
     setOpenPopover(null);
-    updateCurrent((cur) => assignRealization(cur, mech.id, [joint.id], realization));
+    updateCurrent((cur) => assignNodeRealization(cur, mech.id, nodeId, realization));
   };
 
   const pos = clampedPos(anchor, size);
@@ -116,29 +146,39 @@ function RealizationMenu({
       style={{ ...menuStyle, position: 'absolute', ...pos, width: 196, zIndex: 30 }}
     >
       <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
-        Realization · {joint.type} {joint.id.slice(0, 4)}
+        Realization · {kind} {nodeId.slice(0, 4)}
       </div>
-      {REALIZATION_OPTIONS.map((opt) => (
-        <button
-          type="button"
-          key={opt.id}
-          data-testid={`realization-${opt.id}`}
-          onClick={() => choose(opt.id as JointRealization)}
-          style={rowStyle(joint.realization === opt.id)}
-        >
-          {opt.label}
-          {joint.realization === opt.id && <span style={{ marginLeft: 'auto' }}>✓</span>}
-        </button>
-      ))}
+      {REALIZATION_OPTIONS.map((opt) => {
+        // gate rows to the kind's physically-valid realizations; a currently
+        // set-but-incompatible realization stays visible (disabled, checked) so
+        // the mismatch reads rather than silently vanishing.
+        const disabled = !allowed.has(opt.id as JointRealization);
+        return (
+          <button
+            type="button"
+            key={opt.id}
+            data-testid={`realization-${opt.id}`}
+            disabled={disabled}
+            onClick={() => choose(opt.id as JointRealization)}
+            style={{
+              ...rowStyle(current === opt.id),
+              ...(disabled ? { opacity: 0.4, cursor: 'default' } : {}),
+            }}
+          >
+            {opt.label}
+            {current === opt.id && <span style={{ marginLeft: 'auto' }}>✓</span>}
+          </button>
+        );
+      })}
       <div style={{ borderTop: `1px solid ${T.hairline}`, margin: '5px 4px' }} />
       <button
         type="button"
         data-testid="realization-clear"
         onClick={() => choose(undefined)}
-        style={{ ...rowStyle(joint.realization === undefined), color: T.muted }}
+        style={{ ...rowStyle(current === undefined), color: T.muted }}
       >
         unset (sketch)
-        {joint.realization === undefined && <span style={{ marginLeft: 'auto' }}>✓</span>}
+        {current === undefined && <span style={{ marginLeft: 'auto' }}>✓</span>}
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mech, node } from '../../bom/testHelpers';
-import type { LinkElement } from '../../schema';
+import type { LinkElement, SkeletonPoint, Vec2, WearerAnchor } from '../../schema';
+import type { Silhouette } from '../../wearer';
 import { dedupConsecutive, findSnap, isCoincidentFinish } from './snapping';
 
 // Guards for Konva's time-based dblclick (fires for any two clicks within its
@@ -107,5 +108,49 @@ describe('findSnap excludeElements', () => {
       excludeElements: new Set(['L1']),
     });
     expect(snap.kind).toBe('grid');
+  });
+});
+
+// A pivot can always be snapped (and so bound) to a skeleton binding point:
+// the skeleton points sit at priority 1 — above pipe spans and grid, below a
+// live node — so a drag landing near one resolves to a `skeleton` snap that
+// the canvas turns into a binding on release.
+describe('findSnap skeleton binding points', () => {
+  const at = (x: number, y: number): Vec2 => ({ x, y });
+  const points = { handR: at(1, 1), handL: at(-1, 1), pelvis: at(0, 0) } as Record<
+    SkeletonPoint,
+    Vec2
+  >;
+  const anchors = { beltR: at(0.5, 2) } as Record<WearerAnchor, Vec2>;
+  const silhouette: Silhouette = { outlines: [], points, anchors };
+  const m = mech([], [node('n1', 0, 0)]);
+  const positions = { n1: { x: 0, y: 0 } };
+
+  it('snaps a dragged node onto a nearby skeleton point (excluding itself)', () => {
+    const snap = findSnap(
+      { x: 1.004, y: 0.997 },
+      {
+        mechanism: m,
+        positions,
+        silhouette,
+        tolM: 0.02,
+        exclude: new Set(['n1']),
+      },
+    );
+    expect(snap.kind).toBe('skeleton');
+    if (snap.kind === 'skeleton') expect(snap.point).toBe('handR');
+  });
+
+  it('prefers a coincident live node over the skeleton point beneath it', () => {
+    const snap = findSnap(
+      { x: 0.002, y: 0 },
+      {
+        mechanism: m,
+        positions,
+        silhouette,
+        tolM: 0.02,
+      },
+    );
+    expect(snap.kind).toBe('node');
   });
 });

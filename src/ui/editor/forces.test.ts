@@ -7,6 +7,7 @@ import {
   forceLabelElementIds,
   formatForce,
   N_PER_LBF,
+  pickRenderPositions,
   readEquilibrium,
   solverStatusLabel,
   toLbf,
@@ -87,6 +88,12 @@ describe('readEquilibrium (mocked solver)', () => {
     expect(readout.ropesRequiringCompression).toEqual(['e-rope']);
   });
 
+  it('carries the settled pose through so the canvas can render the sag', () => {
+    const settled = { n1: { x: 0, y: -0.3 }, n2: { x: 1, y: 0 } };
+    const readout = readEquilibrium(() => mockResult({ positions: settled }));
+    expect(readout.positions).toEqual(settled);
+  });
+
   it('degrades to unavailable when the solver throws (equilibrium not yet implemented)', () => {
     const readout = readEquilibrium(() => {
       throw new Error('equilibrium mode lands in Phase 2');
@@ -94,6 +101,54 @@ describe('readEquilibrium (mocked solver)', () => {
     expect(readout.status).toBe('unavailable');
     expect(readout.elementForces).toEqual({});
     expect(readout.ropesRequiringCompression).toEqual([]);
+    expect(readout.positions).toBeNull();
+  });
+});
+
+describe('pickRenderPositions (which pose the canvas draws)', () => {
+  const doc = { n1: { x: 0, y: 0 }, n2: { x: 1, y: 0 } };
+  const settled = { n1: { x: 0, y: -0.3 } };
+  const dragPose = { n1: { x: 0.5, y: 0.5 } };
+
+  it('renders the settled equilibrium pose when the forces overlay is on', () => {
+    const out = pickRenderPositions({
+      docPositions: doc,
+      posePositions: null,
+      settledPositions: settled,
+      dragging: false,
+    });
+    expect(out.n1).toEqual({ x: 0, y: -0.3 });
+    // nodes missing from the settled solve (added since) fall back to drawn geometry
+    expect(out.n2).toEqual({ x: 1, y: 0 });
+  });
+
+  it('prefers the live drag pose over a stale settled pose during a gesture', () => {
+    const out = pickRenderPositions({
+      docPositions: doc,
+      posePositions: dragPose,
+      settledPositions: settled,
+      dragging: true,
+    });
+    expect(out.n1).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('falls back to playback pose, then drawn geometry, when no settled pose exists', () => {
+    expect(
+      pickRenderPositions({
+        docPositions: doc,
+        posePositions: dragPose,
+        settledPositions: null,
+        dragging: false,
+      }).n1,
+    ).toEqual({ x: 0.5, y: 0.5 });
+    expect(
+      pickRenderPositions({
+        docPositions: doc,
+        posePositions: null,
+        settledPositions: null,
+        dragging: false,
+      }),
+    ).toEqual(doc);
   });
 });
 

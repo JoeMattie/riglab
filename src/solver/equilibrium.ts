@@ -50,9 +50,9 @@ interface Particle {
   py: number;
   vx: number;
   vy: number;
-  w: number; // inverse mass used by projection (0 = held: anchor/driven)
+  w: number; // inverse mass used by projection (0 = held)
   mass: number; // true mass (kg) — drives gravity and force balance
-  held: boolean; // anchor or driven: position is prescribed
+  held: boolean; // anchor, driven, or drag-held: position is prescribed
 }
 
 const hypot = Math.hypot;
@@ -745,8 +745,14 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
 
   const particles = new Map<string, Particle>();
   for (const n of mechanism.nodes) {
-    const held = n.kind === 'anchor' || n.kind === 'driven';
-    const prescribed = n.kind === 'driven' ? targets[n.id] : undefined;
+    // A drag-targeted free node is held AT its target: the drag is an
+    // external holder — the wearer's body via a skeleton binding (§7), or a
+    // hand — that supplies whatever reaction the pose demands, so a linkage
+    // hung off the shoulder dangles from it. Anchor/driven nodes ignore
+    // drags, mirroring kinematic mode.
+    const dragHold = n.kind === 'free' ? inputs.dragTargets?.[n.id] : undefined;
+    const held = n.kind === 'anchor' || n.kind === 'driven' || dragHold !== undefined;
+    const prescribed = n.kind === 'driven' ? targets[n.id] : dragHold;
     const pos = prescribed ?? n.position;
     const mass = masses.get(n.id) ?? 0;
     particles.set(n.id, {
@@ -1083,10 +1089,16 @@ function ropesRequiringCompression(
   gravity: Vec2,
   density: number,
   elementDensity: Record<string, number>,
+  dragHeldIds: ReadonlySet<string>,
 ): string[] {
   if (!mechanism.elements.some((e) => e.type === 'rope')) return [];
   const posOf = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
-  const freeNodes = mechanism.nodes.filter((n) => n.kind === 'free').map((n) => n.id);
+  // drag-held nodes are excluded from the balance: their holder (the wearer's
+  // body or a hand) supplies whatever reaction is needed, so members never
+  // have to push to support them
+  const freeNodes = mechanism.nodes
+    .filter((n) => n.kind === 'free' && !dragHeldIds.has(n.id))
+    .map((n) => n.id);
   if (freeNodes.length === 0) return [];
   const rowOf = new Map(freeNodes.map((id, i) => [id, i]));
   const masses = accumulateMasses(mechanism, density, elementDensity);
@@ -1312,6 +1324,7 @@ function diagnostics(
   gravity: Vec2,
   density: number,
   elementDensity: Record<string, number>,
+  dragHeldIds: ReadonlySet<string>,
 ): SolveDiagnostics {
   let residual = 0;
   const violated = new Set<string>();
@@ -1335,6 +1348,7 @@ function diagnostics(
       gravity,
       density,
       elementDensity,
+      dragHeldIds,
     ),
   };
 }
@@ -1351,9 +1365,22 @@ export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): Sol
   const positions: Record<string, Vec2> = {};
   for (const p of built.particles.values()) positions[p.id] = { x: p.x, y: p.y };
 
+  const dragHeldIds = new Set(
+    mechanism.nodes
+      .filter((n) => n.kind === 'free' && inputs.dragTargets?.[n.id] !== undefined)
+      .map((n) => n.id),
+  );
   return {
     positions,
     forces: extractForces(mechanism, built, nodeForce, gravity),
-    diagnostics: diagnostics(mechanism, built, settled, gravity, density, elementDensity),
+    diagnostics: diagnostics(
+      mechanism,
+      built,
+      settled,
+      gravity,
+      density,
+      elementDensity,
+      dragHeldIds,
+    ),
   };
 }

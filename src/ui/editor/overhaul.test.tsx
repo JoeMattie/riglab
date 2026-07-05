@@ -212,15 +212,69 @@ describe('JointPopover', () => {
     renderPopover();
     expect(screen.getByTestId('realization-popover')).toBeTruthy();
     expect(screen.queryByTestId('joint-weld')).toBeNull();
-    fireEvent.click(screen.getByTestId('realization-heatWrapPivot'));
+    // n2 is a weld, so a rigid realization (not the pivot-only heat-wrap) applies
+    fireEvent.click(screen.getByTestId('realization-heatWrapRigid'));
     const pivot = mech0().elements.find((e) => e.type === 'pivot');
-    expect(pivot).toMatchObject({ realization: 'heatWrapPivot', maturity: 'engineered' });
+    expect(pivot).toMatchObject({ realization: 'heatWrapRigid', maturity: 'engineered' });
     // re-opening on the still-mounted popover: clearing drops back to sketch
     act(() => useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } }));
     fireEvent.click(screen.getByTestId('realization-clear'));
     expect(mech0().elements.find((e) => e.type === 'pivot')).toMatchObject({
       maturity: 'sketch',
     });
+  });
+
+  it('design face: an implicit free-pin node lists realizations and materializes a pivot', () => {
+    // n2 joins L1 and L2 with no explicit pivot element — an implicit free pin
+    expect(mech0().elements.some((e) => e.type === 'pivot')).toBe(false);
+    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    expect(screen.getByTestId('realization-popover')).toBeTruthy();
+    expect(screen.queryByTestId('joint-weld')).toBeNull();
+    // the free pin is a pivot, so a pivot-native realization applies
+    fireEvent.click(screen.getByTestId('realization-boltThrough'));
+    const pivot = mech0().elements.find((e) => e.type === 'pivot');
+    expect(pivot).toMatchObject({
+      nodeId: 'n2',
+      realization: 'boltThrough',
+      maturity: 'engineered',
+    });
+    expect(pivot).toMatchObject({ welds: [] });
+    // clearing the realization drops the bare pin back to the implicit state
+    act(() => useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } }));
+    fireEvent.click(screen.getByTestId('realization-clear'));
+    expect(mech0().elements.some((e) => e.type === 'pivot')).toBe(false);
+  });
+
+  const disabled = (id: string) =>
+    (screen.getByTestId(`realization-${id}`) as HTMLButtonElement).disabled;
+
+  it('design face: realizations are gated to the joint kind (pivot vs weld)', () => {
+    // implicit free pin at n2 is a pivot: pivot-native + dual-kind enabled,
+    // rigid/slider-only realizations disabled
+    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    expect(disabled('heatWrapPivot')).toBe(false);
+    expect(disabled('boltThrough')).toBe(false);
+    expect(disabled('nestedSleeve')).toBe(false); // dual-kind (pivot|slider)
+    expect(disabled('clickDetachable')).toBe(false); // dual-kind (pivot|slider)
+    expect(disabled('heatWrapRigid')).toBe(true); // weld-only
+    expect(disabled('fitting')).toBe(true); // weld-only
+    expect(disabled('conduitBox')).toBe(true); // slider-only
+    r.unmount();
+
+    // weld n2: the complementary set is enabled/disabled
+    useEditorStore.setState({ face: 'sketch', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r2 = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-weld'));
+    r2.unmount();
+    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    expect(disabled('heatWrapRigid')).toBe(false);
+    expect(disabled('nestedCoupler')).toBe(false);
+    expect(disabled('fitting')).toBe(false);
+    expect(disabled('heatWrapPivot')).toBe(true); // pivot-only
+    expect(disabled('conduitBox')).toBe(true); // slider-only
   });
 
   it('renders the connect menu when a draw is pending; Pivot is the default', () => {

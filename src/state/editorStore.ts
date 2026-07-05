@@ -43,6 +43,10 @@ export interface EquilibriumReadout {
   /** required holding force/torque per input-channel name */
   requiredInputs: Record<string, number>;
   ropesRequiringCompression: string[];
+  /** settled pose per node id — the sag the real rig relaxes into (§5.2).
+   * Rendered by the canvas while the forces overlay is on; null when the
+   * solve is idle/unavailable, falling back to drawn geometry. */
+  positions: Record<string, Vec2> | null;
 }
 
 export const IDLE_EQUILIBRIUM: EquilibriumReadout = {
@@ -50,6 +54,7 @@ export const IDLE_EQUILIBRIUM: EquilibriumReadout = {
   elementForces: {},
   requiredInputs: {},
   ropesRequiringCompression: [],
+  positions: null,
 };
 
 export interface PendingConnect {

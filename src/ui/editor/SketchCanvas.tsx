@@ -21,7 +21,13 @@ import { useEditorStore } from '../../state/editorStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
-import { carriesForceLabel, forceLabelAnchor, formatForce, readEquilibrium } from './forces';
+import {
+  carriesForceLabel,
+  forceLabelAnchor,
+  formatForce,
+  pickRenderPositions,
+  readEquilibrium,
+} from './forces';
 import { pinchStep, wheelGesture } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
@@ -301,7 +307,21 @@ export function SketchCanvas() {
     for (const n of mech?.nodes ?? []) out[n.id] = n.position;
     return out;
   }, [mech?.nodes]);
-  const renderPositions = posePositions ?? docPositions;
+  const renderPositions = pickRenderPositions({
+    docPositions,
+    posePositions,
+    settledPositions: equilibriumOn ? equilibrium.positions : null,
+    dragging: dragNode !== null,
+  });
+
+  // debug seam: the pose the canvas is actually drawing (drawn geometry,
+  // playback pose, or settled equilibrium sag — whichever pickRenderPositions
+  // chose), so scripted checks can assert rendering without pixel parsing
+  useEffect(() => {
+    const w = window as unknown as { __riglab?: Record<string, unknown> };
+    if (!w.__riglab) w.__riglab = {};
+    w.__riglab.getRenderPositions = () => renderPositions;
+  }, [renderPositions]);
 
   // DOF-pill click-to-zoom: consume the one-shot focus request by centering
   // the element's bounding box (padded) and selecting it
@@ -609,9 +629,14 @@ export function SketchCanvas() {
       const liveDoc = useAppStore.getState().current;
       const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
       if (!liveDoc || !liveMech) return;
+      // a drag that lands on a skeleton point snaps to it and binds on release
+      // (planfile §7.3: bind silhouette points to nodes — available in select)
+      const dropSnap = snapAt(screen, new Set([dragNode]));
+      const bindSnap = dropSnap.kind === 'skeleton' ? dropSnap : null;
+      setHoverSnap(bindSnap);
       const targets = {
         ...bindingTargets(liveMech, liveDoc.wearer, pose),
-        [dragNode]: world,
+        [dragNode]: bindSnap ? bindSnap.pos : world,
       };
       const channelValues = Object.fromEntries(liveMech.inputs.map((c) => [c.name, c.value]));
       const result = solve(liveMech, { channelValues, dragTargets: targets }, 'kinematic');
@@ -675,10 +700,20 @@ export function SketchCanvas() {
       const nodeId = dragNode;
       setDragNode(null);
       endGesture();
+      setHoverSnap(null);
       // a stationary click on a node selects the joint element living there
       // (pivots/sliders have no stroke of their own to click on the canvas)
       // and opens the joint popover for one-click type changes
-      if (movedPx < 4) openJointPopover(nodeId, e.evt);
+      if (movedPx < 4) {
+        openJointPopover(nodeId, e.evt);
+        return;
+      }
+      // dropped on a skeleton binding point → bind the node to it, so it now
+      // tracks that body point during clip playback (planfile §7.3)
+      const dropSnap = snapAt(screen, new Set([nodeId]));
+      if (dropSnap.kind === 'skeleton') {
+        updateCurrent((cur) => addSkeletonBinding(cur, mech.id, dropSnap.point, nodeId));
+      }
       return;
     }
     if ((tool === 'elastic' || tool === 'bowden') && dragCord) {
@@ -884,7 +919,6 @@ export function SketchCanvas() {
   }
 
   const boundNodes = new Set(mech.skeletonBindings.map((b) => b.nodeId));
-  const showSilhouettePoints = tool !== 'select' || bindFrom !== null;
 
   const selectedSet = new Set(selectedElementIds);
   const strokeFor = (id: string): string =>
@@ -963,8 +997,10 @@ export function SketchCanvas() {
               lineJoin="round"
             />
           ))}
-          {showSilhouettePoints &&
-            silhouette &&
+          {/* skeleton binding points and structural anchors are always shown
+              (planfile §7.1: named anchors and skeleton points are snappable
+              underlay points) — a pivot can be dropped on one to bind it */}
+          {silhouette &&
             Object.entries(silhouette.points).map(([name, p]) => (
               <Circle
                 key={`sp${name}`}
@@ -975,8 +1011,7 @@ export function SketchCanvas() {
                 strokeWidth={1.5}
               />
             ))}
-          {showSilhouettePoints &&
-            silhouette &&
+          {silhouette &&
             Object.entries(silhouette.anchors).map(([name, p]) => (
               <Rect
                 key={`sa${name}`}

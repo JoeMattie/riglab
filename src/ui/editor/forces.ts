@@ -58,6 +58,7 @@ export function readEquilibrium(run: () => SolveResult): EquilibriumReadout {
       elementForces: r.forces.elements,
       requiredInputs: r.forces.requiredInputs,
       ropesRequiringCompression: r.diagnostics.ropesRequiringCompression,
+      positions: r.positions,
     };
   } catch {
     return {
@@ -65,8 +66,25 @@ export function readEquilibrium(run: () => SolveResult): EquilibriumReadout {
       elementForces: {},
       requiredInputs: {},
       ropesRequiringCompression: [],
+      positions: null,
     };
   }
+}
+
+/** Which pose the canvas renders (§5.2). A live node drag always wins (the
+ * equilibrium readout is frozen during the gesture, so it would be stale);
+ * otherwise the settled equilibrium pose wins while the forces overlay is on —
+ * merged over drawn geometry so nodes added since the last solve still render
+ * — and the kinematic playback pose / drawn geometry come last. */
+export function pickRenderPositions(opts: {
+  docPositions: Record<string, Vec2>;
+  posePositions: Record<string, Vec2> | null;
+  settledPositions: Record<string, Vec2> | null;
+  dragging: boolean;
+}): Record<string, Vec2> {
+  const { docPositions, posePositions, settledPositions, dragging } = opts;
+  if (!dragging && settledPositions) return { ...docPositions, ...settledPositions };
+  return posePositions ?? docPositions;
 }
 
 export function solverStatusLabel(status: EquilibriumReadout['status']): string {
