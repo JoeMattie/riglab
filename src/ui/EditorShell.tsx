@@ -177,6 +177,9 @@ export function EditorShell() {
     // seam for exercising the equilibrium force-overlay plumbing (§5.2)
     hook.setEquilibrium = (readout: unknown) =>
       useEditorStore.getState().setEquilibrium(readout as never);
+    // scripted-verification seam: drive the global selection so clipboard
+    // copy/paste can be exercised without pointer picking
+    hook.setSelection = (ids: string[]) => useEditorStore.getState().setSelection(ids);
     // scripted-verification seam: loads a bundled example as the live
     // document without persisting it
     hook.loadExample = (id: string) => {

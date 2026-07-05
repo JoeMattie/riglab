@@ -1940,3 +1940,46 @@ median (min 3.66, max 5.08) on the full creature; four-bar planarity
 improved to |z| ≤ 8.4e-10. The perf acceptance asserts the MEDIAN of 60
 per-frame timings < 16 ms — robust to GC pauses and test-worker
 parallelism, unlike the old mean.
+
+### DECISION: quad panel layout — shared splitter pair, pure layout engine, localStorage pref
+(PLANFILE-quad-panel-controls A+B.) The quad grid resizes via ONE vertical +
+ONE horizontal splitter fraction shared by all four panels (the classic quad
+CAD model — quadrant edges always stay aligned), plus a center handle that
+drags both; double-click resets an axis to 50/50 and arrow keys nudge (the
+splitter is a focusable ARIA separator widget — one useSemanticElements
+suppression, since <hr> is void and cannot express a draggable splitter).
+Fractions clamp to [0.15, 0.85] in the store setter (min panel size).
+Visibility × fractions → grid templates/areas/splitter set is a pure
+function (`src/ui/quad/quadLayout.ts`, unit-tested for every cardinality:
+3 visible = the hidden quadrant's column-mate spans its column; 2 = stacked
+or side-by-side; 1 = full-bleed; at least one panel always on). Split +
+visibility persist as a localStorage UI pref (`rig-lab.quadLayout`, guarded
+accessor like the night pref) — workspace preference, not document state:
+survives reloads/project switches, never in undo history, no schema change.
+
+### DECISION: clipboard is app state; clone core extracted and shared with mirror-duplicate
+(PLANFILE-quad-panel-controls C.) Copy/paste is transient app state in the
+editor store — no OS-clipboard interop, no file-format change; it clears on
+project switch because its ids/materials/channels are document-scoped. Copy
+SNAPSHOTS the copyable subset of the selection plus every referenced node
+(paste works after the source is deleted); paste deep-clones with fresh ids
+for nodes/elements/attached point masses, offsets ~10 cm in the active
+panel's plane, selects the copies, and is one undo step. The reference-remap
+switch was extracted from `mirrorDuplicate` into `src/state/cloneElements.ts`
+and is now shared by both paths (mirror passes the reflect+negate axis map,
+paste the identity), so the closure rules and remap coverage stay correct
+together. Policy: pasted DRIVEN nodes keep their channel binding when the
+channel still exists (channels are global, shared-by-design); a missing
+channel demotes the node to 'free'. Wearer bindings are never copied (same
+as mirror-duplicate); anchored nodes stay anchored. Deliberate closure-rule
+change for BOTH paths: a single-member GROUND HINGE now travels with its
+member — dropping it (the old mirror behavior) recreated the documented
+bare-spherical-anchor planarity leak on every mirrored/pasted anchored limb.
+
+### DECISION: e2e preview port is overridable (RIGLAB_E2E_PORT)
+`reuseExistingServer` + the fixed port 4173 silently ran the suite against
+ANOTHER checkout's preview server when two worktree sessions overlapped
+(observed: this branch's e2e hit the fun-samples worktree's build and failed
+on chrome that build didn't have). playwright.config.ts now takes the port
+from `RIGLAB_E2E_PORT` (default 4173 unchanged for CI/normal use); parallel
+agent sessions pick a private port.
