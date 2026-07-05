@@ -1563,3 +1563,15 @@ Phase-4 UI is verifiable before the Phase-5 "New from example" menu exists.
 `e2e/assembly.spec.ts` loads the full creature, switches to 3D, and asserts the
 WebGL viewport mounts, the mass readout is a plausible creature weight, and the
 seesaw readout renders with no page errors.
+
+### DECISION: Quad-workspace extension gets its own planfile
+Joe's 2026-07-04 direction (visible 3D synthesis of all mechanisms, a
+pipe-and-fittings model render, and a Rhino-style quad workspace) extends §8.3
+beyond its committed scope. Rather than inline a large amendment, the scope
+lives in `PLANFILE-quad-workspace.md` (agreed decisions, slices, acceptance),
+cross-referenced from §8.3; that file governs where the two overlap. Agreed
+choices recorded there: click-to-activate ortho editing, ghost + one-click
+Place for unplaced mechanisms (ghosts excluded from mass/CG), translucent
+generic tubes for sketch elements in the pipe model, and quad as a third mode
+alongside 2D/3D. No schema change is expected — ghost placement is derived
+from `viewOrientation`, and Place uses the existing instance schema.
