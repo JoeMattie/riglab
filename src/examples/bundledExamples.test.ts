@@ -23,6 +23,7 @@ const FILE_BY_ID: Record<string, string> = {
   'example-leg-exoskeleton': 'leg-exoskeleton.json',
   'example-tail': 'tail.json',
   'example-full-creature': 'full-creature.json',
+  'example-body-frame': 'body-frame.json',
 };
 
 const pivotsOf = (p: Project): PivotElement[] =>
@@ -81,8 +82,8 @@ function elementRefsOf(el: MechanismElement): string[] {
 }
 
 describe('bundled example registry (§9)', () => {
-  it('ships all seven examples, each JSON valid and matching its builder', () => {
-    expect(EXAMPLES).toHaveLength(7);
+  it('ships all bundled examples, each JSON valid and matching its builder', () => {
+    expect(EXAMPLES).toHaveLength(8);
     for (const example of EXAMPLES) {
       const project = example.load();
       const builder = ARTIFACT_BUILDERS[FILE_BY_ID[example.id]!]!;
@@ -454,6 +455,69 @@ describe('example 7 — full creature: ONE compound document (§9 item 7)', () =
   });
 });
 
+describe('example 8 — body frame (suspended), fully-3D closed frame', () => {
+  const project = loadExample('example-body-frame')!;
+  const mech = project.mechanism;
+
+  it('welds the closed frame rigid: every corner pivot welds all member pairs', () => {
+    for (const piv of pivotsOf(project)) {
+      expect(piv.joint, piv.id).toEqual({ kind: 'spherical' });
+      const pairs = (piv.memberIds.length * (piv.memberIds.length - 1)) / 2;
+      expect(piv.welds.length, piv.id).toBe(pairs);
+    }
+    // the prow tip meets BELOW the rail plane — the frame is not planar
+    expect(nodePos(project, 'nose').y).toBeLessThan(nodePos(project, 'cornerFL').y - 0.1);
+  });
+
+  it('carries a genuinely non-planar bent hoop: nonzero dihedrals in the bend schedule', () => {
+    const bom = computeBom(project);
+    const hoop = bom.bendSchedule.find((b) => b.elementId === 'spineHoop');
+    expect(hoop).toBeDefined();
+    expect(hoop!.vertices).toHaveLength(3);
+    // first bend defines the reference plane (dihedral 0 by convention); the
+    // later bends must twist out of it — impossible in a v6 planar document
+    expect(hoop!.vertices[0]!.dihedralRad).toBe(0);
+    const laterTwists = hoop!.vertices.slice(1).map((v) => Math.abs(v.dihedralRad));
+    expect(Math.max(...laterTwists)).toBeGreaterThan(0.1);
+    for (const v of hoop!.vertices) expect(v.angleRad).toBeGreaterThan(0.05);
+  });
+
+  it('derives every bungee and strap length from the drawn geometry', () => {
+    for (const el of mech.elements) {
+      if (el.type === 'elastic' && el.id.startsWith('bungee')) {
+        const drawn = dist3(nodePos(project, el.nodeA), nodePos(project, el.nodeB));
+        expect(el.restLengthM, el.id).toBeCloseTo(0.85 * drawn, 3);
+      }
+      if (el.type === 'rope' && el.id.startsWith('strap')) {
+        const drawn = dist3(nodePos(project, el.path[0]!), nodePos(project, el.path[1]!));
+        expect(el.lengthM, el.id).toBeCloseTo(drawn + 0.005, 3);
+      }
+    }
+  });
+
+  it('binds the suspension anchors to the shoulder and hip-rect wearer anchors', () => {
+    expect(
+      mech.anchorBindings
+        .map((b) => [b.anchor, b.nodeId])
+        .sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    ).toEqual([
+      ['hipRectBackL', 'hipAnchBL'],
+      ['hipRectBackR', 'hipAnchBR'],
+      ['hipRectFrontL', 'hipAnchFL'],
+      ['hipRectFrontR', 'hipAnchFR'],
+      ['shoulderL', 'shoulderAnchL'],
+      ['shoulderR', 'shoulderAnchR'],
+    ]);
+  });
+
+  it('populates a fully resolved BOM with a plausible frame weight', () => {
+    const bom = computeBom(project);
+    expect(bom.unresolved.count).toBe(0);
+    expect(bom.weights.grandTotalKg).toBeGreaterThan(1);
+    expect(bom.weights.grandTotalKg).toBeLessThan(15);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // POST-INTEGRATION: behavioral acceptance through solve(). Assertion
 // calibration note: `converged` requires every constraint within 1e-4 m —
@@ -585,6 +649,39 @@ describe('post-integration — examples solve (enable with the 3D solver)', () =
     expect(Math.sign(pannedDown.positions['neck.head']!.z)).toBe(
       Math.sign(panned.positions['neck.head']!.z),
     );
+  });
+
+  it('body frame: hangs on the bungees within centimetres of the drawn pose', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-body-frame')!.mechanism;
+    const rest = solve(mech, { channelValues: { 'nose tuck': 0 } }, 'equilibrium');
+    expect(rest.diagnostics.converged).toBe(true);
+    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    for (const id of ['cornerFL', 'cornerFR', 'cornerBL', 'cornerBR']) {
+      expect(dist3(rest.positions[id]!, drawn.get(id)!), id).toBeLessThan(0.05);
+    }
+    // the suspended frame stays laterally centred (mirror-symmetric hang)
+    expect(Math.abs(rest.positions.nose!.z)).toBeLessThan(0.01);
+  });
+
+  it('body frame: the nose-tuck cinch pitches the prow down with the frame intact', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-body-frame')!.mechanism;
+    const solveAt = (tuck: number) =>
+      solve(mech, { channelValues: { 'nose tuck': tuck } }, 'equilibrium');
+    const rest = solveAt(0);
+    const tucked = solveAt(-0.08);
+    expect(tucked.diagnostics.converged).toBe(true);
+    expect(tucked.positions.nose!.y).toBeLessThan(rest.positions.nose!.y - 0.02);
+    // the welded frame is one rigid body: every rail keeps its drawn length
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    for (const el of mech.elements) {
+      if (el.type !== 'link') continue;
+      const restLen = dist3(drawn.get(el.nodeA)!, drawn.get(el.nodeB)!);
+      const now = dist3(tucked.positions[el.nodeA]!, tucked.positions[el.nodeB]!);
+      expect(Math.abs(now - restLen), el.id).toBeLessThan(2e-3);
+    }
   });
 
   it('full creature: settles millimetre-true at default channel values', async () => {

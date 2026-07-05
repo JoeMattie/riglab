@@ -5,6 +5,7 @@
 // menu. Deep-clone on load so callers can't mutate the parsed module
 // singleton.
 import { type Project, projectSchema } from '../schema/project';
+import bodyFrameJson from './body-frame.json';
 import fullCreatureJson from './full-creature.json';
 import jawBowdenJson from './jaw-bowden.json';
 import legExoskeletonJson from './leg-exoskeleton.json';
@@ -15,6 +16,7 @@ import tailJson from './tail.json';
 
 export {
   ARTIFACT_BUILDERS,
+  buildBodyFrameProject,
   buildFullCreatureProject,
   buildJawBowdenProject,
   buildLegExoProject,
@@ -36,7 +38,8 @@ export interface BundledExample {
 
 const load = (json: unknown) => (): Project => projectSchema.parse(structuredClone(json));
 
-/** All seven §9 examples, in planfile order. */
+/** All bundled §9 examples, in planfile order (the original seven, then the
+ * fully-3D additions from PLANFILE-3d-raptor-samples.md). */
 export const EXAMPLES: BundledExample[] = [
   {
     id: 'example-seesaw-spine',
@@ -80,6 +83,13 @@ export const EXAMPLES: BundledExample[] = [
     description:
       'One compound mechanism: pan × pitch neck joints, mirrored legs, global weight and cut list.',
     load: load(fullCreatureJson),
+  },
+  {
+    id: 'example-body-frame',
+    name: 'Body frame (suspended)',
+    description:
+      'Closed rigid 3D box frame with a non-planar bent hoop, bungee/strap suspension to the wearer, and a nose-tuck cinch.',
+    load: load(bodyFrameJson),
   },
 ];
 
