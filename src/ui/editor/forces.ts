@@ -76,12 +76,12 @@ export function readEquilibrium(run: () => SolveResult): EquilibriumReadout {
  * otherwise the settled equilibrium pose wins while the forces overlay is on —
  * merged over drawn geometry so nodes added since the last solve still render
  * — and the kinematic playback pose / drawn geometry come last. */
-export function pickRenderPositions(opts: {
-  docPositions: Record<string, Vec2>;
-  posePositions: Record<string, Vec2> | null;
-  settledPositions: Record<string, Vec2> | null;
+export function pickRenderPositions<P>(opts: {
+  docPositions: Record<string, P>;
+  posePositions: Record<string, P> | null;
+  settledPositions: Record<string, P> | null;
   dragging: boolean;
-}): Record<string, Vec2> {
+}): Record<string, P> {
   const { docPositions, posePositions, settledPositions, dragging } = opts;
   if (!dragging && settledPositions) return { ...docPositions, ...settledPositions };
   return posePositions ?? docPositions;

@@ -1,11 +1,11 @@
-// Pure scene extraction for the 3D Assembly viewport (§8.3). Turns a composed
-// assembly into world-space polylines (mechanism elements + the wearer
-// mannequin) the r3f layer draws as <Line>s. Kept pure so the geometry is
-// unit-testable without a WebGL context.
+// Pure scene extraction for the perspective panel (PLANFILE-3d-conversion.md).
+// Turns the solved compound mechanism into world-space primitives (mechanism
+// elements + the wearer mannequin) the r3f layer draws. Kept pure so the
+// geometry is unit-testable without a WebGL context.
 
-import { type ComposedInstance, GENERIC_PIPE_OD_M } from '../../assembly';
 import type { MechanismElement, PipeMaterial, Vec3 } from '../../schema';
 import type { SkeletonFrame } from '../../wearer/skeleton';
+import { GENERIC_PIPE_OD_M, type NodeWorld } from './pipeModel';
 
 export type Segment = [Vec3, Vec3];
 
@@ -19,13 +19,16 @@ export interface TubePrim {
   radiusM: number;
   /** engineered = material OD known; sketch = generic-OD stand-in */
   style: 'engineered' | 'sketch';
+  /** owning element, for click-to-select in the perspective panel */
+  elementId?: string;
 }
 
 export interface CablePrim {
   points: Vec3[];
+  elementId?: string;
 }
 
-export interface InstancePrimitives {
+export interface MechanismPrimitives {
   tubes: TubePrim[];
   cables: CablePrim[];
 }
@@ -53,12 +56,9 @@ export function elementPolylines(el: MechanismElement): string[][] {
   }
 }
 
-/** World-space segments for one instance's mechanism, given its lifted nodes.
- * Segments whose endpoints are missing (unsolved) are skipped. */
-export function instanceSegments(
-  elements: MechanismElement[],
-  nodeWorld: ComposedInstance['nodeWorld'],
-): Segment[] {
+/** World-space segments for the mechanism, given its solved nodes. Segments
+ * whose endpoints are missing (unsolved) are skipped. */
+export function mechanismSegments(elements: MechanismElement[], nodeWorld: NodeWorld): Segment[] {
   const out: Segment[] = [];
   for (const el of elements) {
     for (const poly of elementPolylines(el)) {
@@ -74,7 +74,7 @@ export function instanceSegments(
 
 /** Contiguous runs of ≥2 resolved points along an id polyline. A missing
  * (unsolved) node splits the run rather than bridging across it. */
-function resolvedRuns(ids: string[], nodeWorld: ComposedInstance['nodeWorld']): Vec3[][] {
+function resolvedRuns(ids: string[], nodeWorld: NodeWorld): Vec3[][] {
   const runs: Vec3[][] = [];
   let run: Vec3[] = [];
   for (const id of ids) {
@@ -90,27 +90,32 @@ function resolvedRuns(ids: string[], nodeWorld: ComposedInstance['nodeWorld']): 
   return runs;
 }
 
-/** World-space render primitives for one instance's mechanism: rigid members
+/** World-space render primitives for the compound mechanism: rigid members
  * (link / bentLink / telescope) as tubes — true OD/2 when the element is
  * engineered with a resolvable pipe material, generic OD otherwise — and
  * tension members (rope / elastic / bowden) as cables. Pivots, sliders and
  * torsion couplings carry no drawn geometry here (the pipe model renders
  * joint realizations). */
-export function instancePrimitives(
+export function mechanismPrimitives(
   elements: MechanismElement[],
-  nodeWorld: ComposedInstance['nodeWorld'],
+  nodeWorld: NodeWorld,
   pipes: PipeMaterial[],
-): InstancePrimitives {
+): MechanismPrimitives {
   const tubes: TubePrim[] = [];
   const cables: CablePrim[] = [];
   const pipe = (id: string | undefined) => pipes.find((p) => p.id === id);
 
-  const tubeRun = (ids: string[], mat: PipeMaterial | undefined, engineered: boolean) => {
+  const tubeRun = (
+    elementId: string,
+    ids: string[],
+    mat: PipeMaterial | undefined,
+    engineered: boolean,
+  ) => {
     const style = engineered && mat ? 'engineered' : 'sketch';
     const radiusM = (engineered && mat ? mat.outerDiameterM : GENERIC_PIPE_OD_M) / 2;
     for (const run of resolvedRuns(ids, nodeWorld)) {
       for (let i = 1; i < run.length; i++) {
-        tubes.push({ a: run[i - 1]!, b: run[i]!, radiusM, style });
+        tubes.push({ a: run[i - 1]!, b: run[i]!, radiusM, style, elementId });
       }
     }
   };
@@ -118,19 +123,25 @@ export function instancePrimitives(
   for (const el of elements) {
     switch (el.type) {
       case 'link':
-        tubeRun([el.nodeA, el.nodeB], pipe(el.pipeMaterialId), el.maturity === 'engineered');
+        tubeRun(el.id, [el.nodeA, el.nodeB], pipe(el.pipeMaterialId), el.maturity === 'engineered');
         break;
       case 'bentLink':
-        tubeRun(el.nodeIds, pipe(el.pipeMaterialId), el.maturity === 'engineered');
+        tubeRun(el.id, el.nodeIds, pipe(el.pipeMaterialId), el.maturity === 'engineered');
         break;
       case 'telescope':
-        tubeRun([el.nodeA, el.nodeB], pipe(el.outerPipeMaterialId), el.maturity === 'engineered');
+        tubeRun(
+          el.id,
+          [el.nodeA, el.nodeB],
+          pipe(el.outerPipeMaterialId),
+          el.maturity === 'engineered',
+        );
         break;
       case 'rope':
       case 'elastic':
       case 'bowden':
         for (const poly of elementPolylines(el)) {
-          for (const run of resolvedRuns(poly, nodeWorld)) cables.push({ points: run });
+          for (const run of resolvedRuns(poly, nodeWorld))
+            cables.push({ points: run, elementId: el.id });
         }
         break;
       default:

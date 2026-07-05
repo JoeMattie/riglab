@@ -4,7 +4,12 @@
 // via the window-level shortcut regardless of what has focus.
 import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// the quad workspace hosts Konva + WebGL canvases that jsdom can't create;
+// these tests exercise the shell's transport shortcuts, not the panels
+vi.mock('./quad/QuadView', () => ({ QuadView: () => <div data-testid="quad-stub" /> }));
+
 import { createEmptyProject } from '../schema';
 import { useAppStore } from '../state/appStore';
 import { DEFAULT_CLIP_NAME, useEditorStore } from '../state/editorStore';
@@ -22,7 +27,6 @@ globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObse
 beforeEach(() => {
   useAppStore.setState({ current: createEmptyProject('p1', 'test') });
   useEditorStore.setState({
-    mode: '2d',
     playback: { ...useEditorStore.getInitialState().playback },
   });
 });

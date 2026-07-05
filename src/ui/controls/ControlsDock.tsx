@@ -70,7 +70,7 @@ export function ControlsDock({ left = EDGE }: { left?: number }) {
 
   if (!doc) return null;
 
-  const channelNames = [...new Set(doc.mechanisms.flatMap((m) => m.inputs.map((i) => i.name)))];
+  const channelNames = [...new Set(doc.mechanism.inputs.map((i) => i.name))];
 
   const grabAxis = (control: Control) => {
     beginGesture();

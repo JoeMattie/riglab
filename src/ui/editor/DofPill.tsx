@@ -9,7 +9,6 @@ import { captionStyle, EDGE, menuStyle, T } from './theme';
 export function DofPill() {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const dof = useEditorStore((s) => s.dof);
   const violated = useEditorStore((s) => s.violated);
   const equilibrium = useEditorStore((s) => s.equilibrium);
@@ -17,7 +16,7 @@ export function DofPill() {
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const setFocusElement = useEditorStore((s) => s.setFocusElement);
 
-  const mech = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
+  const mech = doc?.mechanism ?? null;
   if (!mech || !dof) return null;
 
   const conflicts = deriveConflicts(mech, dof, violated, equilibrium.ropesRequiringCompression);

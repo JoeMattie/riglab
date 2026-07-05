@@ -1,25 +1,13 @@
-// Pure projection math for the quad workspace (PLANFILE-quad-workspace
-// slice 4): which ortho panel hosts a mechanism's editing, and how world-space
-// geometry lands in a panel plane or in a placed mechanism's local sketch
-// frame (for the ghost overlays around the active mechanism).
-import { dot, type OrientationFrame, orientationFrame, rotate, sub } from '../../assembly';
-import type { Quaternion, Vec2, Vec3, ViewOrientation } from '../../schema';
+// Pure projection math for the quad workspace (PLANFILE-3d-conversion.md):
+// how document-space (Vec3) geometry lands in an ortho panel's 2D drawing
+// plane, and how panel-plane pointer input lifts back into document space at
+// the panel's active work-plane depth. The frames come from
+// src/geometry/placement.ts — the single panel-frame source of truth.
+import { type OrientationFrame, orientationFrame } from '../../geometry/placement';
+import type { Vec2, Vec3 } from '../../schema';
+import type { OrthoPanelId } from '../../state/editorStore';
 
-export type OrthoPanelId = 'top' | 'front' | 'side';
-
-/** side-left/right edit in the Side panel, top in Top, everything else
- * (front/back/free) in Front. */
-export function panelForOrientation(vo: ViewOrientation): OrthoPanelId {
-  switch (vo) {
-    case 'top':
-      return 'top';
-    case 'side-left':
-    case 'side-right':
-      return 'side';
-    default:
-      return 'front';
-  }
-}
+export type { OrthoPanelId };
 
 export const PANEL_FRAME: Record<OrthoPanelId, OrientationFrame> = {
   top: orientationFrame('top'),
@@ -27,18 +15,37 @@ export const PANEL_FRAME: Record<OrthoPanelId, OrientationFrame> = {
   side: orientationFrame('side-left'),
 };
 
-/** Orthographic projection of a world point onto a panel plane. */
+const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+
+/** Orthographic projection of a document point onto a panel plane. */
 export function projectToPanel(w: Vec3, f: OrientationFrame): Vec2 {
   return { x: dot(w, f.xAxis), y: dot(w, f.yAxis) };
 }
 
-/** Inverse of the composition's node lift: world → a placed mechanism's local
- * sketch coordinates (origin + rotation from the instance/default placement;
- * mirror flips local x). Lets ghost geometry draw around the active mechanism
- * inside its own SketchCanvas frame. */
-export function projectToLocal(w: Vec3, origin: Vec3, rot: Quaternion, mirror: boolean): Vec2 {
-  const d = sub(w, origin);
-  const x = dot(d, rotate(rot, { x: 1, y: 0, z: 0 }));
-  const y = dot(d, rotate(rot, { x: 0, y: 1, z: 0 }));
-  return { x: mirror ? -x : x, y };
+/** Signed distance of a document point along the panel normal — the depth a
+ * work plane must have for new geometry to connect to `w` exactly. */
+export function panelDepthOf(w: Vec3, f: OrientationFrame): number {
+  return dot(w, f.zAxis);
+}
+
+/** Inverse of projectToPanel at a given work-plane depth: lift a panel-plane
+ * 2D point into document space. Exact round-trip because the frame axes are
+ * orthonormal. */
+export function panelToWorld(p: Vec2, f: OrientationFrame, depthM: number): Vec3 {
+  return {
+    x: f.xAxis.x * p.x + f.yAxis.x * p.y + f.zAxis.x * depthM,
+    y: f.xAxis.y * p.x + f.yAxis.y * p.y + f.zAxis.y * depthM,
+    z: f.xAxis.z * p.x + f.yAxis.z * p.y + f.zAxis.z * depthM,
+  };
+}
+
+/** Project a whole positions record (solved pose / document nodes) into a
+ * panel plane — the shape marquee hit-testing and the 2D canvas consume. */
+export function projectPositions(
+  positions: Record<string, Vec3>,
+  f: OrientationFrame,
+): Record<string, Vec2> {
+  const out: Record<string, Vec2> = {};
+  for (const [id, p] of Object.entries(positions)) out[id] = projectToPanel(p, f);
+  return out;
 }

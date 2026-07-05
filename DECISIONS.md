@@ -1833,3 +1833,40 @@ Joe reviews the whole branch instead). Per-commit CI green applies to main;
 this branch may carry WIP checkpoints but ends green. Implementation is
 parallelized across subagents with disjoint file ownership; decisions made by
 agents land under this heading's sub-entries.
+
+### DECISION (editor agent): one global solve loop; panels only project
+With three editable ortho panels hosting the same SketchCanvas, the v6
+pattern (each canvas runs the diagnostics/pose/equilibrium solve effects)
+would triple every solve. The solve loop is hoisted to the shell as
+`useGlobalSolve()` (src/ui/editor/useGlobalSolve.ts): one kinematic solve per
+edit/scrub feeds diagnostics + playback pose, one equilibrium solve feeds the
+force overlay, both into the editor store; panels project the stored Vec3
+pose through their frame and draw. Drag gestures still solve locally per
+pointermove (one panel at a time); a new transient `dragNodeId` in the editor
+store tells the global loop to stand back during a gesture. All solver calls
+are wrapped in try/catch while the 3D solver lands in a parallel worktree —
+a throw degrades to drawn geometry instead of breaking the shell.
+
+### DECISION (editor agent): work-plane depth adoption is a panel-state write
+The planfile says clicking existing geometry sets the panel's work-plane
+depth. Implemented as: any draw-tool press (and select-tool node grab) whose
+snap resolves to existing geometry writes that geometry's depth into the
+panel's `panelDepths` store entry, and the whole stroke drafts at the depth
+captured at gesture start. Endpoints landing on node/onPipe/skeleton/anchor
+snaps always take the snapped target's true 3D position regardless of the
+work plane, so connections land exactly; only grid-snapped points lift at the
+work-plane depth. Node drags are panel-plane-constrained: the drag target
+keeps the node's own out-of-plane depth (captured at mousedown), which is the
+planfile's "UI supplies panel-plane-constrained targets".
+
+### DECISION (editor agent): pipe-model + scene extraction relocated to src/ui/assembly
+src/assembly dissolves at integration, so the pure pipe-model builder moved
+to src/ui/assembly/pipeModel.ts, reworked for the compound world:
+`buildPipeModel(mechanism, nodeWorld, materials)` (no per-instance items; the
+ghost flag now means sketch-maturity only). The wireframe extraction
+(scene.ts) became `mechanismPrimitives`, and tubes/cables now carry their
+owning `elementId` so the perspective panel supports click-to-select.
+Perspective node dragging renders small node-handle spheres and drags on the
+camera-parallel plane through the node (raycast against a THREE.Plane),
+feeding the same solve-then-moveNodes loop as the 2D panels; OrbitControls
+disable while a drag is live.

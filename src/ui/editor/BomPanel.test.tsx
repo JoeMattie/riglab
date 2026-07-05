@@ -36,17 +36,13 @@ function project(elements: LinkElement[]): Project {
     ...createEmptyProject('p1', 'test'),
     unitsPreference: 'metric',
     materials: testMaterials(),
-    mechanisms: [
-      mech(elements, [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 8)], {
-        subsystemTag: undefined,
-      } as never),
-    ],
+    mechanism: mech(elements, [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 8)]),
   };
 }
 
 beforeEach(() => {
   useAppStore.setState({ current: project([engineered, sketchy]) });
-  useEditorStore.setState({ activeMechanismId: 'm1', face: 'design', rightTab: 'bom' });
+  useEditorStore.setState({ face: 'design', rightTab: 'bom' });
 });
 
 afterEach(cleanup);

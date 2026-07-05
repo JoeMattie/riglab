@@ -1,6 +1,7 @@
-// BOM view (§6.2): cut list, bend schedules, fittings, technique summary,
-// consumables, weight rollup, optional cost — over ALL mechanisms (the
-// assembly arrives in Phase 4). Not hard-gated on the checklist: it renders
+// BOM view (§6.2, v7): cut list, bend schedules (incl. the out-of-plane
+// twist° column), fittings, technique summary, consumables, weight rollup
+// (per group + per subsystem tag), optional cost — over the whole compound
+// mechanism. Not hard-gated on the checklist: it renders
 // what is resolvable with a prominent "partial" banner counting what was
 // excluded (play-first, §2 — decision logged in DECISIONS.md).
 import { useMemo } from 'react';
@@ -43,14 +44,11 @@ export function BomPanel() {
   const doc = useAppStore((s) => s.current);
   const setRightTab = useEditorStore((s) => s.setRightTab);
 
-  const bom = useMemo(
-    () => (doc ? computeBom(doc.mechanisms, doc.materials, doc.bomSettings) : null),
-    [doc],
-  );
+  const bom = useMemo(() => (doc ? computeBom(doc) : null), [doc]);
   if (!doc || !bom) return null;
 
   const units = doc.unitsPreference;
-  const mechName = (id: string) => doc.mechanisms.find((m) => m.id === id)?.name ?? id;
+  const groupName = (id: string) => bom.weights.groupNames[id] ?? id;
   const techniques = TECHNIQUE_LABELS.filter(([k]) => bom.techniqueSummary[k] > 0);
 
   return (
@@ -124,7 +122,10 @@ export function BomPanel() {
               </div>
               {b.vertices.map((v, i) => (
                 <Row key={v.nodeId} label={`bend ${i + 1}`}>
-                  {degreesOf(v.angleRad)} @ r {formatLength(v.radiusM, units)}
+                  <span data-testid="bend-angles">
+                    {degreesOf(v.angleRad)} · twist {degreesOf(v.dihedralRad)} @ r{' '}
+                    {formatLength(v.radiusM, units)}
+                  </span>
                 </Row>
               ))}
             </div>
@@ -164,8 +165,8 @@ export function BomPanel() {
       </Section>
 
       <Section title="Weight">
-        {Object.entries(bom.weights.perMechanismKg).map(([id, kg]) => (
-          <Row key={id} label={mechName(id)}>
+        {Object.entries(bom.weights.perGroupKg).map(([id, kg]) => (
+          <Row key={id} label={groupName(id)}>
             {formatMass(kg, units)}
           </Row>
         ))}

@@ -42,7 +42,7 @@ export function deriveConflicts(
         issue: 'locked length in conflict',
         fix: {
           label: 'unlock length',
-          apply: (doc) => setLengthLocked(doc, mech.id, id, false),
+          apply: (doc) => setLengthLocked(doc, id, false),
         },
       });
     } else if (el?.type === 'pivot' && el.angleLimit) {
@@ -75,7 +75,7 @@ export function deriveConflicts(
       fix: locked
         ? {
             label: 'unlock a length',
-            apply: (doc) => setLengthLocked(doc, mech.id, locked.id, false),
+            apply: (doc) => setLengthLocked(doc, locked.id, false),
           }
         : undefined,
     });

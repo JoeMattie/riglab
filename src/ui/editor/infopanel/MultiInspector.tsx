@@ -3,7 +3,7 @@
 // design-face scope; the sketch face shows the selection composition only.
 import { autoResolve } from '../../../design/autoResolve';
 import { elementTypeLabel } from '../../../design/resolution';
-import type { JointRealization, Mechanism, MechanismElement, Project } from '../../../schema';
+import type { JointRealization, MechanismElement, Project } from '../../../schema';
 import { useAppStore } from '../../../state/appStore';
 import {
   assignCordageMaterial,
@@ -22,12 +22,10 @@ function sharedValue<T>(values: (T | undefined)[]): T | null {
 
 export function MultiInspector({
   doc,
-  mech,
   els,
   face,
 }: {
   doc: Project;
-  mech: Mechanism;
   els: MechanismElement[];
   face: Face;
 }) {
@@ -78,8 +76,7 @@ export function MultiInspector({
                 // checklist tab, so hand the user over to it
                 setAutoProposal({
                   docRef: doc,
-                  mechId: mech.id,
-                  changes: autoResolve(doc, mech.id, { elementIds: ids }).changes,
+                  changes: autoResolve(doc, { elementIds: ids }).changes,
                 });
                 setRightTab('checklist');
               }}
@@ -97,7 +94,7 @@ export function MultiInspector({
             options={doc.materials.pipes.map((p) => ({ id: p.id, label: p.name }))}
             placeholder="mixed — assign to all…"
             testId="bulk-material-select"
-            onChange={(id) => updateCurrent((cur) => assignPipeMaterial(cur, mech.id, ids, id))}
+            onChange={(id) => updateCurrent((cur) => assignPipeMaterial(cur, ids, id))}
           />
         </Section>
       )}
@@ -109,7 +106,7 @@ export function MultiInspector({
             options={doc.materials.cordage.map((c) => ({ id: c.id, label: c.name }))}
             placeholder="mixed — assign to all…"
             testId="bulk-cordage-select"
-            onChange={(id) => updateCurrent((cur) => assignCordageMaterial(cur, mech.id, ids, id))}
+            onChange={(id) => updateCurrent((cur) => assignCordageMaterial(cur, ids, id))}
           />
         </Section>
       )}
@@ -122,9 +119,7 @@ export function MultiInspector({
             placeholder="mixed — assign to all…"
             testId="bulk-realization-select"
             onChange={(r) =>
-              updateCurrent((cur) =>
-                assignRealization(cur, mech.id, ids, r as JointRealization | undefined),
-              )
+              updateCurrent((cur) => assignRealization(cur, ids, r as JointRealization | undefined))
             }
           />
         </Section>

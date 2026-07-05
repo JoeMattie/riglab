@@ -35,6 +35,7 @@ const P1: PivotElement = {
   type: 'pivot',
   maturity: 'sketch',
   nodeId: 'n2',
+  joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
   memberIds: ['L1', 'L2'],
   welds: [],
 };
@@ -54,31 +55,28 @@ function project(): Project {
     // imperial display path is asserted separately at the end of this file
     unitsPreference: 'metric',
     materials: testMaterials(),
-    mechanisms: [
-      mech([L1, L2, P1, R1], [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 4)], {
-        inputs: [
-          {
-            id: 'ch1',
-            name: 'steer',
-            kind: 'angle' as const,
-            min: 0,
-            max: 1,
-            value: 0,
-            locked: false,
-          },
-        ],
-      }),
-    ],
+    mechanism: mech([L1, L2, P1, R1], [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 4)], {
+      inputs: [
+        {
+          id: 'ch1',
+          name: 'steer',
+          kind: 'angle' as const,
+          min: 0,
+          max: 1,
+          value: 0,
+          locked: false,
+        },
+      ],
+    }),
   };
 }
 
 const doc = () => useAppStore.getState().current!;
-const mech0 = () => doc().mechanisms[0]!;
+const mech0 = () => doc().mechanism;
 
 beforeEach(() => {
   useAppStore.setState({ current: project() });
   useEditorStore.setState({
-    activeMechanismId: 'm1',
     face: 'sketch',
     selectedElementIds: [],
     dof: { dof: 1, classification: 'mechanism' },
@@ -88,7 +86,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('empty selection', () => {
-  it('shows the mechanism summary: DOF, element counts, gravity, unbound channels', () => {
+  it('shows the mechanism summary: DOF, element counts, unbound channels', () => {
     render(<InfoPanel />);
     expect(screen.getByTestId('mechanism-summary')).toBeTruthy();
     expect(screen.getByTestId('summary-dof').textContent).toContain('1 · mechanism');
@@ -143,7 +141,7 @@ describe('single selection', () => {
     expect(n2.position.x).toBeCloseTo(6, 9);
     expect(n2.position.y).toBeCloseTo(8, 9);
     // endpoint A stays put
-    expect(mech0().nodes.find((n) => n.id === 'n1')!.position).toEqual({ x: 0, y: 0 });
+    expect(mech0().nodes.find((n) => n.id === 'n1')!.position).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it('editing rope L₀ writes through to the document', () => {

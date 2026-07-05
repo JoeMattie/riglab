@@ -8,17 +8,17 @@ import { useAppStore } from '../../../state/appStore';
 import { useEditorStore } from '../../../state/editorStore';
 import { useDiagnosticsShim } from './diagnosticsShim';
 import { ElementInspector } from './ElementInspector';
+import { GroupsSection } from './GroupsSection';
 import { MechanismSummary } from './MechanismSummary';
 import { MultiInspector } from './MultiInspector';
 
 export function InfoPanel() {
   const doc = useAppStore((s) => s.current);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const face = useEditorStore((s) => s.face);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const diagnostics = useDiagnosticsShim();
 
-  const mech = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
+  const mech = doc?.mechanism ?? null;
   if (!doc || !mech) return null;
 
   // drop stale ids (deleted elements) without writing state during render
@@ -45,7 +45,8 @@ export function InfoPanel() {
           diagnostics={diagnostics}
         />
       )}
-      {selected.length > 1 && <MultiInspector doc={doc} mech={mech} els={selected} face={face} />}
+      {selected.length > 1 && <MultiInspector doc={doc} els={selected} face={face} />}
+      <GroupsSection />
     </div>
   );
 }

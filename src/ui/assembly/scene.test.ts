@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { composeProject } from '../../assembly';
-import { buildFullCreatureProject } from '../../examples';
-import type { PipeMaterial } from '../../schema';
+import type { PipeMaterial, Vec3 } from '../../schema';
 import { computeSkeleton, REST_POSE } from '../../wearer';
 import {
   elementPolylines,
   GENERIC_PIPE_OD_M,
-  instancePrimitives,
-  instanceSegments,
   MANNEQUIN_RADIUS_M,
   mannequinBones,
   mannequinTubes,
+  mechanismPrimitives,
+  mechanismSegments,
 } from './scene';
 
 describe('elementPolylines', () => {
@@ -37,24 +35,28 @@ describe('elementPolylines', () => {
   });
 });
 
-describe('instanceSegments + mannequinBones on the full creature', () => {
-  const project = buildFullCreatureProject();
-
-  it('produces drawable segments for every instanced mechanism', () => {
-    const c = composeProject(project);
-    const mechById = new Map(project.mechanisms.map((m) => [m.id, m]));
-    for (const inst of project.assembly.instances) {
-      const composed = c.instances[inst.id]!;
-      const segs = instanceSegments(mechById.get(inst.mechanismId)!.elements, composed.nodeWorld);
-      expect(segs.length).toBeGreaterThan(0);
-      for (const [a, b] of segs) {
-        expect(Number.isFinite(a.x) && Number.isFinite(b.z)).toBe(true);
-      }
+describe('mechanismSegments + mannequinBones', () => {
+  it('produces drawable segments from solved Vec3 positions', () => {
+    const world: Record<string, Vec3> = {
+      a: { x: 0, y: 1, z: 0 },
+      b: { x: 1, y: 1, z: 0.2 },
+      c: { x: 1, y: 2, z: 0.2 },
+    };
+    const segs = mechanismSegments(
+      [
+        { id: 'l1', type: 'link', nodeA: 'a', nodeB: 'b' } as never,
+        { id: 'bl1', type: 'bentLink', nodeIds: ['a', 'b', 'c'] } as never,
+      ],
+      world,
+    );
+    expect(segs).toHaveLength(3);
+    for (const [a, b] of segs) {
+      expect(Number.isFinite(a.x) && Number.isFinite(b.z)).toBe(true);
     }
   });
 
   it('skips segments whose endpoints are unsolved', () => {
-    const segs = instanceSegments(
+    const segs = mechanismSegments(
       [{ id: 'x', type: 'link', nodeA: 'a', nodeB: 'missing' } as never],
       { a: { x: 0, y: 0, z: 0 } },
     );
@@ -62,19 +64,24 @@ describe('instanceSegments + mannequinBones on the full creature', () => {
   });
 
   it('draws the mannequin skeleton', () => {
-    const bones = mannequinBones(computeSkeleton(project.wearer, REST_POSE));
+    const bones = mannequinBones(
+      computeSkeleton({ heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 }, REST_POSE),
+    );
     expect(bones.length).toBeGreaterThan(8);
   });
 
   it('renders the mannequin as capsule tubes matching the bones', () => {
-    const frame = computeSkeleton(project.wearer, REST_POSE);
+    const frame = computeSkeleton(
+      { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 },
+      REST_POSE,
+    );
     const tubes = mannequinTubes(frame);
     expect(tubes).toHaveLength(mannequinBones(frame).length);
     for (const t of tubes) expect(t.radiusM).toBe(MANNEQUIN_RADIUS_M);
   });
 });
 
-describe('instancePrimitives', () => {
+describe('mechanismPrimitives', () => {
   const pvc: PipeMaterial = {
     id: 'pvc34',
     name: 'PVC 3/4"',
@@ -92,7 +99,7 @@ describe('instancePrimitives', () => {
   };
 
   it('engineered links get true-OD tubes; sketch links get generic-OD tubes', () => {
-    const { tubes } = instancePrimitives(
+    const { tubes } = mechanismPrimitives(
       [
         {
           id: 'l1',
@@ -116,12 +123,20 @@ describe('instancePrimitives', () => {
       [pvc],
     );
     expect(tubes).toHaveLength(2);
-    expect(tubes[0]).toMatchObject({ radiusM: pvc.outerDiameterM / 2, style: 'engineered' });
-    expect(tubes[1]).toMatchObject({ radiusM: GENERIC_PIPE_OD_M / 2, style: 'sketch' });
+    expect(tubes[0]).toMatchObject({
+      radiusM: pvc.outerDiameterM / 2,
+      style: 'engineered',
+      elementId: 'l1',
+    });
+    expect(tubes[1]).toMatchObject({
+      radiusM: GENERIC_PIPE_OD_M / 2,
+      style: 'sketch',
+      elementId: 'l2',
+    });
   });
 
   it('an engineered link without a resolvable material still renders, as sketch', () => {
-    const { tubes } = instancePrimitives(
+    const { tubes } = mechanismPrimitives(
       [
         {
           id: 'l1',
@@ -140,7 +155,7 @@ describe('instancePrimitives', () => {
   });
 
   it('telescopes use the outer pipe OD; bentLinks tube every segment', () => {
-    const { tubes } = instancePrimitives(
+    const { tubes } = mechanismPrimitives(
       [
         {
           id: 't1',
@@ -171,8 +186,8 @@ describe('instancePrimitives', () => {
     expect(tubes[0]).toMatchObject({ radiusM: pvc.outerDiameterM / 2, style: 'engineered' });
   });
 
-  it('ropes/elastics/bowdens become cables, split at unsolved nodes', () => {
-    const { tubes, cables } = instancePrimitives(
+  it('ropes/elastics/bowdens become cables carrying their element id, split at unsolved nodes', () => {
+    const { tubes, cables } = mechanismPrimitives(
       [
         {
           id: 'r1',
@@ -211,5 +226,6 @@ describe('instancePrimitives', () => {
     // missing waypoint as single-point runs are dropped); elastic 1; bowden 2
     expect(cables).toHaveLength(3);
     for (const c of cables) expect(c.points.length).toBeGreaterThanOrEqual(2);
+    expect(cables.map((c) => c.elementId).sort()).toEqual(['bo1', 'bo1', 'e1']);
   });
 });

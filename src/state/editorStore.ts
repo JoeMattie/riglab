@@ -142,6 +142,9 @@ export interface EditorState {
   /** live solved pose during drag/playback (document space); null = document
    * positions */
   posePositions: Record<string, Vec3> | null;
+  /** node under an active pointer drag (any panel); the global solve loop
+   * defers to the gesture's own solves while set */
+  dragNodeId: string | null;
   playback: PlaybackState;
   tracing: boolean;
   /** traced node path in document space; panels project it for display */
@@ -197,6 +200,7 @@ export interface EditorState {
   setSelection(elementIds: string[]): void;
   clearSelection(): void;
   setPosePositions(p: Record<string, Vec3> | null): void;
+  setDragNode(nodeId: string | null): void;
   setPlayback(p: Partial<PlaybackState>): void;
   startRecording(): void;
   recordFrame(frame: RecordFrame): void;
@@ -227,6 +231,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   focusHint: null,
   selectedElementIds: [],
   posePositions: null,
+  dragNodeId: null,
   playback: {
     clipName: DEFAULT_CLIP_NAME,
     controlClipName: null,
@@ -281,6 +286,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setSelection: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
   clearSelection: () => set({ selectedElementIds: [] }),
   setPosePositions: (posePositions) => set({ posePositions }),
+  setDragNode: (dragNodeId) => set({ dragNodeId }),
   setPlayback: (p) => set((s) => ({ playback: { ...s.playback, ...p } })),
   // recording resets the timeline and starts the transport so live control
   // scrubbing is captured against a movement clip on the same timeline (§4.4)

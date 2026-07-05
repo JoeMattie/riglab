@@ -35,6 +35,7 @@ import { Button } from '../../components/button';
 import { Checkbox } from '../../components/checkbox';
 import { lengthUnit } from '../../units';
 import { formatForce } from '../forces';
+import { PivotJointControls } from '../JointPopover';
 import {
   AssignSelect,
   degrees,
@@ -82,7 +83,7 @@ export function ElementInspector({
   const patch = <K extends MechanismElement['type']>(
     type: K,
     p: Partial<Extract<MechanismElement, { type: K }>>,
-  ) => updateCurrent((cur) => patchElement(cur, mech.id, el.id, type, p));
+  ) => updateCurrent((cur) => patchElement(cur, el.id, type, p));
 
   return (
     <div data-testid="element-inspector">
@@ -109,7 +110,7 @@ export function ElementInspector({
               minM={1e-3}
               units={units}
               testId="length-field"
-              onCommitM={(v) => updateCurrent((cur) => setLinkLength(cur, mech.id, el.id, v))}
+              onCommitM={(v) => updateCurrent((cur) => setLinkLength(cur, el.id, v))}
             />
           </Row>
         )}
@@ -134,7 +135,7 @@ export function ElementInspector({
               return p ? (
                 <Row key={nodeId} label={i === 0 ? 'endpoints' : ''}>
                   <span className="font-mono text-xs">
-                    ({Number(p.x.toFixed(3))}, {Number(p.y.toFixed(3))})
+                    ({Number(p.x.toFixed(3))}, {Number(p.y.toFixed(3))}, {Number(p.z.toFixed(3))})
                   </span>
                 </Row>
               ) : null;
@@ -206,6 +207,12 @@ function BehaviorSection({
         <Section title="Joint">
           <Row label="members">{el.memberIds.length}</Row>
           <Row label="welded pairs">{el.welds.length}</Row>
+          <Row label="joint">
+            {el.joint.kind === 'hinge'
+              ? `hinge (${el.joint.axis.x.toFixed(2)}, ${el.joint.axis.y.toFixed(2)}, ${el.joint.axis.z.toFixed(2)})`
+              : 'spherical'}
+          </Row>
+          <PivotJointControls pivot={el} />
           {el.angleLimit && (
             <>
               <Row label="limit min">
@@ -428,9 +435,7 @@ function DesignSections({
               options={pipeOptions(materials)}
               placeholder="assign a pipe…"
               testId="material-select"
-              onChange={(id) =>
-                updateCurrent((cur) => assignPipeMaterial(cur, mech.id, [el.id], id))
-              }
+              onChange={(id) => updateCurrent((cur) => assignPipeMaterial(cur, [el.id], id))}
             />
           </FocusTarget>
           {applyToSimilar.length > 0 && (
@@ -441,9 +446,7 @@ function DesignSections({
               className="mt-1 h-6 w-full text-xs"
               data-testid="apply-to-similar"
               onClick={() =>
-                updateCurrent((cur) =>
-                  assignPipeMaterial(cur, mech.id, applyToSimilar, el.pipeMaterialId),
-                )
+                updateCurrent((cur) => assignPipeMaterial(cur, applyToSimilar, el.pipeMaterialId))
               }
             >
               Apply to {applyToSimilar.length} unassigned {elementTypeLabel(el.type)}
@@ -463,7 +466,7 @@ function DesignSections({
                 placeholder="outer pipe…"
                 testId="material-select-outer"
                 onChange={(id) =>
-                  updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'outer', id))
+                  updateCurrent((cur) => assignTelescopeMaterial(cur, el.id, 'outer', id))
                 }
               />
               <AssignSelect
@@ -472,7 +475,7 @@ function DesignSections({
                 placeholder="inner pipe…"
                 testId="material-select-inner"
                 onChange={(id) =>
-                  updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'inner', id))
+                  updateCurrent((cur) => assignTelescopeMaterial(cur, el.id, 'inner', id))
                 }
               />
               <NestingBadge el={el} materials={materials} />
@@ -492,9 +495,7 @@ function DesignSections({
               )}
               placeholder="assign cordage…"
               testId="material-select"
-              onChange={(id) =>
-                updateCurrent((cur) => assignCordageMaterial(cur, mech.id, [el.id], id))
-              }
+              onChange={(id) => updateCurrent((cur) => assignCordageMaterial(cur, [el.id], id))}
             />
           </FocusTarget>
         </Section>
@@ -510,7 +511,7 @@ function DesignSections({
               testId="realization-select"
               onChange={(r) =>
                 updateCurrent((cur) =>
-                  assignRealization(cur, mech.id, [el.id], r as JointRealization | undefined),
+                  assignRealization(cur, [el.id], r as JointRealization | undefined),
                 )
               }
             />
@@ -528,7 +529,7 @@ function DesignSections({
               testId="end-realization-a"
               onChange={(r) =>
                 updateCurrent((cur) =>
-                  assignEndRealization(cur, mech.id, el.id, 'A', r as JointRealization | undefined),
+                  assignEndRealization(cur, el.id, 'A', r as JointRealization | undefined),
                 )
               }
             />
@@ -539,7 +540,7 @@ function DesignSections({
               testId="end-realization-b"
               onChange={(r) =>
                 updateCurrent((cur) =>
-                  assignEndRealization(cur, mech.id, el.id, 'B', r as JointRealization | undefined),
+                  assignEndRealization(cur, el.id, 'B', r as JointRealization | undefined),
                 )
               }
             />

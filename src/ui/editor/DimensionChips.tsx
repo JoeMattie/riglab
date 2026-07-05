@@ -56,6 +56,7 @@ export function DimensionChips({
   mech,
   view,
   positions,
+  lengths,
   hoveredElementId,
   endpointDrag,
   dragging = false,
@@ -63,7 +64,11 @@ export function DimensionChips({
   doc: Project;
   mech: Mechanism;
   view: ViewTransform;
+  /** node positions PROJECTED into this panel's plane (chip anchoring) */
   positions: Record<string, Vec2>;
+  /** true 3D segment length between two node ids (document space) — the
+   * panel projection foreshortens, so chips must not measure on screen */
+  lengths: { of(nodeA: string, nodeB: string): number };
   hoveredElementId: string | null;
   endpointDrag: ({ elementId: string } & EndpointDragReadout) | null;
   /** any canvas drag in progress: chips become click-through so the Konva
@@ -87,7 +92,7 @@ export function DimensionChips({
       id: el.id,
       a,
       b,
-      lengthM: Math.hypot(b.x - a.x, b.y - a.y),
+      lengthM: lengths.of(el.nodeA, el.nodeB),
       locked,
       selected,
       hovered,
@@ -100,7 +105,6 @@ export function DimensionChips({
         <PipeChip
           key={p.id}
           pipe={p}
-          mechId={mech.id}
           units={units}
           anchor={chipAnchor(view, p.a, p.b)}
           drag={endpointDrag?.elementId === p.id ? endpointDrag : null}
@@ -113,14 +117,12 @@ export function DimensionChips({
 
 function PipeChip({
   pipe,
-  mechId,
   units,
   anchor,
   drag,
   inert,
 }: {
   pipe: ChipPipe;
-  mechId: string;
   units: Project['unitsPreference'];
   anchor: { x: number; y: number };
   drag: EndpointDragReadout | null;
@@ -187,7 +189,7 @@ function PipeChip({
 
   const toggleLock = (e: React.MouseEvent) => {
     e.stopPropagation();
-    updateCurrent((cur) => setLengthLocked(cur, mechId, pipe.id, !pipe.locked));
+    updateCurrent((cur) => setLengthLocked(cur, pipe.id, !pipe.locked));
   };
 
   // locked: solid blue chip; if the pipe is also selected, the lock button
@@ -247,7 +249,7 @@ function PipeChip({
     setLengthEdit(null);
     const v = Number.parseFloat(cur.draft);
     if (!Number.isFinite(v) || v <= 0) return;
-    updateCurrent((d) => setLinkLength(d, mechId, pipe.id, lengthFromDisplay(v, units)));
+    updateCurrent((d) => setLinkLength(d, pipe.id, lengthFromDisplay(v, units)));
   };
 
   // click = inline edit; horizontal drag = scrub (storyboard 1e·3/4)
@@ -268,7 +270,7 @@ function PipeChip({
     // coarse enough to cross whole units in one drag
     const perPx = units === 'imperial' ? 0.0254 / 16 : 0.001;
     const next = Math.max(1e-3, s.startLenM + dx * perPx);
-    updateCurrent((d) => setLinkLength(d, mechId, pipe.id, next));
+    updateCurrent((d) => setLinkLength(d, pipe.id, next));
   };
   const onPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
     const s = scrubRef.current;

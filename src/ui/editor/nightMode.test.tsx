@@ -17,7 +17,7 @@ beforeEach(() => {
   useThemeStore.setState({ night: false });
   applyTheme('day');
   useAppStore.setState({ current: createEmptyProject('p1', 'test') });
-  useEditorStore.setState({ mode: '2d', face: 'sketch' });
+  useEditorStore.setState({ face: 'sketch' });
 });
 
 afterEach(cleanup);

@@ -1,16 +1,13 @@
-// Transport pill (design handoff §8): clip chip · play · scrubber · time ·
-// speed/amp scrub labels · gravity/forces/trace chips · inputs popover.
+// Transport pill (design handoff §8, v7): clip chip · play · scrubber ·
+// time · speed/amp scrub labels · forces/trace chips · inputs popover.
+// Gravity is global −y and always on (PLANFILE-3d-conversion.md decision 4),
+// so the per-mechanism gravity chip is gone; equilibrium stays explicit.
 // Replaces TransportBar.tsx and ForcesPanel.tsx (the input-channel rows and
 // solver status move into the inputs popover / inline status).
 import { useEffect, useRef } from 'react';
 import type { InputChannel, UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import {
-  addInputChannel,
-  removeInputChannel,
-  setGravity,
-  setInputChannel,
-} from '../../state/docOps';
+import { addInputChannel, removeInputChannel, setInputChannel } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { CLIPS, getClip } from '../../wearer';
 import { formatForce, solverStatusLabel } from './forces';
@@ -141,7 +138,6 @@ export function TransportPill() {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const playback = useEditorStore((s) => s.playback);
   const setPlayback = useEditorStore((s) => s.setPlayback);
   const setPosePositions = useEditorStore((s) => s.setPosePositions);
@@ -172,7 +168,7 @@ export function TransportPill() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [playback.playing, clip, setPlayback]);
 
-  const mech = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
+  const mech = doc?.mechanism ?? null;
   if (!doc || !mech) return null;
 
   const units = doc.unitsPreference;
@@ -264,9 +260,7 @@ export function TransportPill() {
                     data-testid="input-name"
                     value={ch.name}
                     onChange={(e) =>
-                      updateCurrent((cur) =>
-                        setInputChannel(cur, mech.id, ch.id, { name: e.target.value }),
-                      )
+                      updateCurrent((cur) => setInputChannel(cur, ch.id, { name: e.target.value }))
                     }
                     style={{
                       width: 64,
@@ -290,7 +284,7 @@ export function TransportPill() {
                     onPointerUp={endGesture}
                     onChange={(e) =>
                       updateCurrent((cur) =>
-                        setInputChannel(cur, mech.id, ch.id, { value: Number(e.target.value) }),
+                        setInputChannel(cur, ch.id, { value: Number(e.target.value) }),
                       )
                     }
                     style={{ width: 80 }}
@@ -311,9 +305,7 @@ export function TransportPill() {
                     title={ch.locked ? 'unlock channel' : 'lock channel (freeze value)'}
                     aria-pressed={ch.locked}
                     onClick={() =>
-                      updateCurrent((cur) =>
-                        setInputChannel(cur, mech.id, ch.id, { locked: !ch.locked }),
-                      )
+                      updateCurrent((cur) => setInputChannel(cur, ch.id, { locked: !ch.locked }))
                     }
                     style={{
                       border: 'none',
@@ -337,7 +329,7 @@ export function TransportPill() {
                     type="button"
                     data-testid="input-remove"
                     title="remove channel"
-                    onClick={() => updateCurrent((cur) => removeInputChannel(cur, mech.id, ch.id))}
+                    onClick={() => updateCurrent((cur) => removeInputChannel(cur, ch.id))}
                     style={{
                       border: 'none',
                       background: 'none',
@@ -356,7 +348,7 @@ export function TransportPill() {
               type="button"
               data-testid="add-input"
               title="add an input channel"
-              onClick={() => updateCurrent((cur) => addInputChannel(cur, mech.id).doc)}
+              onClick={() => updateCurrent((cur) => addInputChannel(cur).doc)}
               style={{ ...rowStyle(false), color: T.accent }}
             >
               + input
@@ -488,12 +480,6 @@ export function TransportPill() {
             onChange={(v) => setPlayback({ amplitude: v })}
           />
           <span style={{ ...dividerStyle, height: 20 }} />
-          <ToggleChip
-            testId="gravity-toggle"
-            label="gravity"
-            on={mech.gravityOn}
-            onClick={() => updateCurrent((cur) => setGravity(cur, mech.id, !mech.gravityOn))}
-          />
           <ToggleChip
             testId="equilibrium-toggle"
             label="forces"

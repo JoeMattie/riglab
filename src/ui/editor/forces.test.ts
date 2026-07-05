@@ -39,7 +39,7 @@ describe('force formatting', () => {
 });
 
 describe('which elements get force labels', () => {
-  const mech = fixtureProject().mechanisms[0]!;
+  const mech = fixtureProject().mechanism;
   it('labels rope/elastic/bowden only', () => {
     expect(forceLabelElementIds(mech).sort()).toEqual(['e-bowden', 'e-elastic', 'e-rope']);
     const rope = mech.elements.find((e) => e.id === 'e-rope')!;
@@ -89,7 +89,7 @@ describe('readEquilibrium (mocked solver)', () => {
   });
 
   it('carries the settled pose through so the canvas can render the sag', () => {
-    const settled = { n1: { x: 0, y: -0.3 }, n2: { x: 1, y: 0 } };
+    const settled = { n1: { x: 0, y: -0.3, z: 0 }, n2: { x: 1, y: 0, z: 0 } };
     const readout = readEquilibrium(() => mockResult({ positions: settled }));
     expect(readout.positions).toEqual(settled);
   });

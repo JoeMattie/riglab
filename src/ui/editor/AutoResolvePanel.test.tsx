@@ -28,6 +28,7 @@ const pivot = (id: string, nodeId: string, memberIds: string[]): PivotElement =>
   type: 'pivot',
   maturity: 'sketch',
   nodeId,
+  joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
   memberIds,
   welds: [],
 });
@@ -37,11 +38,11 @@ function project(elements: Array<LinkElement | PivotElement>): Project {
   return {
     ...p,
     materials: testMaterials(),
-    mechanisms: [mech(elements, [node('n1', 0, 0), node('n2', 1, 0), node('n3', 2, 0)])],
+    mechanism: mech(elements, [node('n1', 0, 0), node('n2', 1, 0), node('n3', 2, 0)]),
   };
 }
 
-const els = () => useAppStore.getState().current!.mechanisms[0]!.elements;
+const els = () => useAppStore.getState().current!.mechanism.elements;
 
 beforeEach(() => {
   useAppStore.setState({
@@ -52,7 +53,6 @@ beforeEach(() => {
     ]),
   });
   useEditorStore.setState({
-    activeMechanismId: 'm1',
     rightTab: 'checklist',
     autoProposal: null,
     selectedElementIds: [],
@@ -120,15 +120,10 @@ describe('AutoResolvePanel in the checklist', () => {
 describe('MultiInspector entry point', () => {
   it('scopes the proposal to the selection and hands over to the checklist tab', () => {
     const doc = useAppStore.getState().current!;
-    const m = doc.mechanisms[0]!;
+    const m = doc.mechanism;
     useEditorStore.setState({ rightTab: 'inspector' });
     render(
-      <MultiInspector
-        doc={doc}
-        mech={m}
-        els={m.elements.filter((e) => e.id === 'L1')}
-        face="design"
-      />,
+      <MultiInspector doc={doc} els={m.elements.filter((e) => e.id === 'L1')} face="design" />,
     );
     fireEvent.click(screen.getByTestId('auto-resolve-selection'));
     const proposal = useEditorStore.getState().autoProposal;

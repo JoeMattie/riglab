@@ -25,6 +25,7 @@ const P1: PivotElement = {
   type: 'pivot',
   maturity: 'sketch',
   nodeId: 'n2',
+  joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
   memberIds: ['L1'],
   welds: [],
 };
@@ -34,20 +35,17 @@ function project(elements: Array<LinkElement | PivotElement>, inputs = false): P
   return {
     ...p,
     materials: testMaterials(),
-    mechanisms: [
-      mech(elements, [node('n1', 0, 0), node('n2', 3, 4)], {
-        inputs: inputs
-          ? [{ id: 'ch1', name: 'steer', kind: 'angle', min: 0, max: 1, value: 0, locked: false }]
-          : [],
-      }),
-    ],
+    mechanism: mech(elements, [node('n1', 0, 0), node('n2', 3, 4)], {
+      inputs: inputs
+        ? [{ id: 'ch1', name: 'steer', kind: 'angle', min: 0, max: 1, value: 0, locked: false }]
+        : [],
+    }),
   };
 }
 
 beforeEach(() => {
   useAppStore.setState({ current: project([L1, P1], true) });
   useEditorStore.setState({
-    activeMechanismId: 'm1',
     face: 'design',
     rightTab: 'checklist',
     focusHint: null,

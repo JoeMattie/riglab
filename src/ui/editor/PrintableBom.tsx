@@ -22,7 +22,7 @@ const TECHNIQUES: Array<[keyof Bom['techniqueSummary'], string]> = [
 ];
 
 export function PrintableBom({ doc }: { doc: Project }) {
-  const bom = computeBom(doc.mechanisms, doc.materials, doc.bomSettings);
+  const bom = computeBom(doc);
   const units = doc.unitsPreference;
 
   return createPortal(
@@ -69,7 +69,8 @@ export function PrintableBom({ doc }: { doc: Project }) {
                       {b.elementId.slice(0, 8)} · bend {i + 1}
                     </td>
                     <td className="num">
-                      {Math.round((v.angleRad * 180) / Math.PI)}° @ r{' '}
+                      {Math.round((v.angleRad * 180) / Math.PI)}° · twist{' '}
+                      {Math.round((v.dihedralRad * 180) / Math.PI)}° @ r{' '}
                       {formatLength(v.radiusM, units)}
                     </td>
                   </tr>

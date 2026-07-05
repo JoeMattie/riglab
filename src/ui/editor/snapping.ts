@@ -16,7 +16,9 @@ export type Snap =
 
 export interface SnapContext {
   mechanism: Mechanism;
-  /** live positions (pose during playback/drag, else document positions) */
+  /** live positions PROJECTED into the panel plane (pose during
+   * playback/drag, else document positions) — the document is Vec3, so the
+   * caller projects first; nodes missing here are not snappable */
   positions: Record<string, Vec2>;
   silhouette: Silhouette | null;
   /** snap radius in world meters (derived from px tolerance / zoom) */
@@ -65,7 +67,8 @@ export function findSnap(world: Vec2, ctx: SnapContext): Snap {
 
   for (const n of mechanism.nodes) {
     if (ctx.exclude?.has(n.id)) continue;
-    const p = positions[n.id] ?? n.position;
+    const p = positions[n.id];
+    if (!p) continue;
     consider({ kind: 'node', nodeId: n.id, pos: p }, d(world, p), 0);
   }
 
@@ -81,8 +84,8 @@ export function findSnap(world: Vec2, ctx: SnapContext): Snap {
   for (const el of mechanism.elements) {
     if (el.type !== 'link' && el.type !== 'telescope') continue;
     if (ctx.excludeElements?.has(el.id)) continue;
-    const a = positions[el.nodeA] ?? mechanism.nodes.find((n) => n.id === el.nodeA)?.position;
-    const b = positions[el.nodeB] ?? mechanism.nodes.find((n) => n.id === el.nodeB)?.position;
+    const a = positions[el.nodeA];
+    const b = positions[el.nodeB];
     if (!a || !b) continue;
     const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
     if (len2 < 1e-12) continue;
