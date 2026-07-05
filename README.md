@@ -5,6 +5,9 @@ linkage mechanisms for wearable articulated creatures / pseudo-marionettes
 mounted on a pack frame — then estimating the parts list, weight, and balance
 before any pipe gets cut.
 
+**Live at [riglab.pages.dev](https://riglab.pages.dev)** — fully client-side,
+works offline once loaded.
+
 **Play first, engineer second**: sketch pipes on a wearer silhouette, snap
 them together, and drag the wireframe through its range of motion
 immediately. Materials, joint realizations, forces, and the bill of materials
@@ -18,7 +21,12 @@ bundled example content only.
 
 ## Status
 
-**Fully 3D** (2026-07-04, [PLANFILE-3d-conversion.md](PLANFILE-3d-conversion.md)):
+**Complete.** All planned phases have shipped; the specs that drove them are
+archived in [docs/planfiles/](docs/planfiles/), with the founding spec at
+[PLANFILE-pvc-rig-lab.md](docs/planfiles/PLANFILE-pvc-rig-lab.md).
+
+**Fully 3D** (2026-07-04,
+[PLANFILE-3d-conversion.md](docs/planfiles/PLANFILE-3d-conversion.md)):
 the project is one compound 3D mechanism edited in a Rhino-style quad
 workspace (Top / Front / Side orthographic panels + perspective). Drawing in
 a panel sketches into that panel's plane at an adjustable work-plane depth;
@@ -37,8 +45,7 @@ conversion: sketch & play, forces (ropes/elastics/bowden/torsion +
 equilibrium readouts), the design face (materials DB, nesting matrix,
 resolution checklist, BOM + CSV + printable view), controls & control
 clips, the fifteen bundled examples (seven §9 items + three fully-3D
-samples per PLANFILE-3d-raptor-samples.md + five complete-costume
-samples per PLANFILE-fun-costume-samples.md), movement-clip library
+samples + five complete-costume samples), movement-clip library
 ([docs/movement-clips.md](docs/movement-clips.md)), onboarding, and the
 floating-glass interface overhaul.
 
@@ -71,10 +78,9 @@ npm run build      # production build to dist/
 ```
 
 CI (GitHub Actions) runs typecheck, lint, tests, build, and the Playwright
-smoke on every push. Solver and BOM math are covered by acceptance tests
-keyed to the planfile phases; each phase must pass its tests before it
-counts as done. UI logic is tested in Vitest (Testing Library); the
-Playwright suite stays smoke-level.
+smoke on every push to main, then deploys the tested build to Cloudflare
+Pages. Solver and BOM math are covered by acceptance tests; UI logic is
+tested in Vitest (Testing Library); the Playwright suite stays smoke-level.
 
 ## Layout
 
@@ -91,6 +97,7 @@ src/ui/            React UI (quad workspace, panel editors, perspective view, do
 src/wearer/        mannequin, panel-basis silhouette projection, movement clips
 src/examples/      bundled example content (all fifteen examples, builder-generated)
 e2e/               Playwright smoke suite
+docs/planfiles/    archived specs for the shipped phases and features
 ```
 
 The Phase 0 evaluation harness (three solver candidates benchmarked against

@@ -2060,3 +2060,12 @@ ranges are clamped to the honest-solve envelope (wag ±0.05, lift
 frame-pinned (the ground-hinge rule) — no bracket-spin, no extra keels;
 the tail gimbal's LIFT pivot rides the mobile wag cluster and keeps the
 fullCreature.ts anti-roll keel verbatim.
+### DECISION: planfiles archived to docs/planfiles/; repo enters maintenance (2026-07-05)
+Every phase of the founding spec and every follow-on feature planfile has
+shipped, so the nine root-level `PLANFILE-*.md` files moved to
+`docs/planfiles/` and the stray "Riglab interface overhaul.zip" design
+reference was deleted (retrievable from git history). CLAUDE.md now names
+current app behavior plus this file as the source of truth, with new feature
+work getting a planfile under `docs/planfiles/` before it starts; README
+links were updated to the archived paths and the GitHub repo
+description/homepage now point at the Cloudflare Pages deployment.
