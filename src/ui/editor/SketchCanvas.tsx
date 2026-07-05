@@ -1,6 +1,7 @@
 import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { elementLinearDensities } from '../../design/densities';
 import type { Mechanism, Vec2 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
@@ -296,8 +297,19 @@ export function SketchCanvas() {
     if (!mech || !doc || !equilibriumOn || dragNode) return;
     const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
     const targets = bindingTargets(mech, doc.wearer, pose);
+    // materials integration (§4.2): engineered pipes weigh what their material
+    // weighs; sketch pipes fall back to the configurable generic density
     const readout = readEquilibrium(() =>
-      solve(mech, { channelValues, dragTargets: targets }, 'equilibrium'),
+      solve(
+        mech,
+        {
+          channelValues,
+          dragTargets: targets,
+          linkDensityKgPerM: doc.materials.genericPipeLinearDensityKgPerM,
+          elementLinearDensityKgPerM: elementLinearDensities(mech, doc.materials),
+        },
+        'equilibrium',
+      ),
     );
     setEquilibrium(readout);
   }, [mech, doc, equilibriumOn, dragNode, pose, setEquilibrium]);
