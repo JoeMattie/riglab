@@ -134,6 +134,8 @@ export interface EditorState {
   select(elementId: string | null): void;
   /** shift/cmd-click semantics: add if absent, remove if present */
   toggleSelect(elementId: string): void;
+  /** replace the whole selection at once (marquee); deduped, order kept */
+  setSelection(elementIds: string[]): void;
   clearSelection(): void;
   setPosePositions(p: Record<string, Vec2> | null): void;
   setPlayback(p: Partial<PlaybackState>): void;
@@ -193,6 +195,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
         ? s.selectedElementIds.filter((id) => id !== elementId)
         : [...s.selectedElementIds, elementId],
     })),
+  setSelection: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
   clearSelection: () => set({ selectedElementIds: [] }),
   setPosePositions: (posePositions) => set({ posePositions }),
   setPlayback: (p) => set((s) => ({ playback: { ...s.playback, ...p } })),

@@ -2,6 +2,7 @@ import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import { elementLinearDensities } from '../../design/densities';
+import { elementIdsInRect, normalizedRect } from '../../design/marquee';
 import type { Mechanism, PivotElement, SliderElement, Vec2 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
@@ -181,6 +182,13 @@ export function SketchCanvas() {
   const panRef = useRef<{ x: number; y: number } | null>(null);
   /** where the last mousedown landed, to tell a click from a drag/pan */
   const mouseDownScreenRef = useRef<Vec2 | null>(null);
+  /** marquee (drag-box) selection, in screen coords while dragging */
+  const [marquee, setMarquee] = useState<{ start: Vec2; cursor: Vec2 } | null>(null);
+  /** space held ⇒ drag pans instead of drawing the marquee */
+  const spaceDownRef = useRef(false);
+  /** set when a marquee commits on mouseup — the Konva click that fires for
+   * the same down/up pair on a shape must not replace the fresh selection */
+  const marqueeCommittedRef = useRef(false);
 
   const pivotAtNode = useCallback(
     (nodeId: string) =>
@@ -191,6 +199,7 @@ export function SketchCanvas() {
   // shift/cmd-click toggles membership in the selection; plain click replaces
   const clickSelect = useCallback(
     (elementId: string, evt: MouseEvent) => {
+      if (marqueeCommittedRef.current) return; // that "click" was a marquee drag
       if (evt.shiftKey || evt.metaKey || evt.ctrlKey) toggleSelect(elementId);
       else select(elementId);
     },
@@ -487,6 +496,12 @@ export function SketchCanvas() {
     const snap = snapAt(screen);
 
     if (tool === 'select') {
+      marqueeCommittedRef.current = false;
+      // middle-mouse or space+drag pans; plain drag on empty space marquees
+      if (e.evt.button === 1 || spaceDownRef.current) {
+        panRef.current = screen;
+        return;
+      }
       if (snap.kind === 'node') {
         // an endpoint of a selected, unlocked pipe drags as a LENGTH edit
         // (direct geometry move); any other node drags as a pose
@@ -527,7 +542,7 @@ export function SketchCanvas() {
         setDragNode(snap.nodeId);
         useEditorStore.getState().clearTrace();
       } else {
-        panRef.current = screen;
+        setMarquee({ start: screen, cursor: screen });
       }
       return;
     }
@@ -583,6 +598,11 @@ export function SketchCanvas() {
     if (panRef.current) {
       setView((v) => panBy(v, screen.x - panRef.current!.x, screen.y - panRef.current!.y));
       panRef.current = screen;
+      return;
+    }
+
+    if (tool === 'select' && marquee) {
+      setMarquee((m) => (m ? { ...m, cursor: screen } : m));
       return;
     }
 
@@ -682,6 +702,24 @@ export function SketchCanvas() {
     const screen = stagePointer(e);
     panRef.current = null;
     if (!screen || !mech) return;
+
+    if (tool === 'select' && marquee) {
+      setMarquee(null);
+      const movedPx = Math.hypot(screen.x - marquee.start.x, screen.y - marquee.start.y);
+      // a stationary click stays a click (onStageClick clears the selection)
+      if (movedPx < 4) return;
+      const rect = normalizedRect(toWorld(view, marquee.start), toWorld(view, screen));
+      const ids = elementIdsInRect(mech, renderPositions, rect);
+      const editor = useEditorStore.getState();
+      // shift/cmd at release adds to the selection; plain drag replaces it
+      editor.setSelection(
+        e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey
+          ? [...editor.selectedElementIds, ...ids]
+          : ids,
+      );
+      marqueeCommittedRef.current = true;
+      return;
+    }
 
     if (tool === 'select' && endpointDrag) {
       const start = mouseDownScreenRef.current;
@@ -824,6 +862,28 @@ export function SketchCanvas() {
     setView((v) => (g.kind === 'zoom' ? zoomAt(v, screen, g.factor) : panBy(v, g.dxPx, g.dyPx)));
   };
 
+  // space held = drag pans (the marquee took over plain empty-space drag);
+  // tracked on window so the hand is available regardless of focus, but not
+  // while typing in a field
+  useEffect(() => {
+    const isTyping = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement;
+      return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA';
+    };
+    const onDown = (ev: KeyboardEvent) => {
+      if (ev.code === 'Space' && !isTyping(ev)) spaceDownRef.current = true;
+    };
+    const onUp = (ev: KeyboardEvent) => {
+      if (ev.code === 'Space') spaceDownRef.current = false;
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
+  }, []);
+
   // keyboard: delete selection, escape cancels draft/bind
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -833,6 +893,7 @@ export function SketchCanvas() {
         setPendingConnect(null);
         resetForceDrafts();
         setEndpointDrag(null);
+        setMarquee(null);
       }
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
@@ -1401,6 +1462,20 @@ export function SketchCanvas() {
               radius={8}
               stroke={hoverSnap.kind === 'grid' ? '#bbb' : '#e33'}
               strokeWidth={1.5}
+              listening={false}
+            />
+          )}
+
+          {marquee && (
+            <Rect
+              x={Math.min(marquee.start.x, marquee.cursor.x)}
+              y={Math.min(marquee.start.y, marquee.cursor.y)}
+              width={Math.abs(marquee.cursor.x - marquee.start.x)}
+              height={Math.abs(marquee.cursor.y - marquee.start.y)}
+              fill="rgba(42,120,214,0.08)"
+              stroke="#2a78d6"
+              strokeWidth={1}
+              dash={[4, 4]}
               listening={false}
             />
           )}

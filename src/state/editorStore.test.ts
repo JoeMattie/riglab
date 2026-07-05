@@ -29,6 +29,14 @@ describe('selection', () => {
     expect(state().selectedElementIds).toEqual(['a', 'c']);
   });
 
+  it('setSelection replaces the whole selection and dedupes, keeping order', () => {
+    state().select('x');
+    state().setSelection(['a', 'b', 'a', 'c']);
+    expect(state().selectedElementIds).toEqual(['a', 'b', 'c']);
+    state().setSelection([]);
+    expect(state().selectedElementIds).toEqual([]);
+  });
+
   it('clearSelection empties; switching mechanisms clears the selection', () => {
     state().select('a');
     state().toggleSelect('b');

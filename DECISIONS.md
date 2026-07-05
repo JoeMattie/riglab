@@ -1563,3 +1563,16 @@ Phase-4 UI is verifiable before the Phase-5 "New from example" menu exists.
 `e2e/assembly.spec.ts` loads the full creature, switches to 3D, and asserts the
 WebGL viewport mounts, the mass readout is a plausible creature weight, and the
 seesaw readout renders with no page errors.
+
+## Marquee selection + auto-resolve (feature planfile: PLANFILE-marquee-autoresolve.md)
+
+### DECISION: marquee replaces plain empty-space drag-pan (select tool)
+Dragging on empty canvas with the select tool now draws a selection box
+(crossing semantics — touching the box selects; shift/cmd at release unions
+with the existing selection). Panning remains on trackpad/wheel (`onWheel`)
+and moves to **space+drag** and **middle-mouse drag** for mouse users — the
+Figma/Illustrator convention Joe chose (2026-07-04). Hit-testing is a pure
+world-space module (`src/design/marquee.ts`) run against the posed render
+positions, so what you box on screen is what gets selected. A guard ref
+swallows the Konva `click` that fires when a marquee's down/up pair lands on
+one shape, which would otherwise replace the fresh multi-selection.

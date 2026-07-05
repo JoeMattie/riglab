@@ -203,7 +203,7 @@ A right-side panel, present in both faces, that reacts to the current selection 
 
 - **Sketch face scope**: identity (name, element type), geometry (length / developed length, endpoint coordinates, vertex angles), behavior parameters (joint type and angle limits, torsion spring, rope L₀ and eyelets, elastic k/rest/pretension, telescope range, channel bindings), and derived info (DOF contribution, current motion range, what it's connected to — each connection clickable to navigate). No engineering fields.
 - **Design face scope**: everything above plus material assignment, joint realization, allowances, computed mass, nesting-compatibility status, current force readouts (when equilibrium is on), and this element's unresolved checklist items.
-- **Multi-select**: shows the shared editable properties across the selection — this is the surface bulk assignment (§8.2) acts through.
+- **Multi-select**: shows the shared editable properties across the selection — this is the surface bulk assignment (§8.2) acts through. Built by shift/cmd-click or by a **marquee**: with the select tool, plain drag on empty canvas draws a selection box (crossing semantics — touching selects; shift-drag adds). Panning is trackpad/wheel, space+drag, or middle-mouse drag.
 - **Empty selection**: mechanism-level summary (DOF, element counts, gravity state, unbound channels; plus weight and checklist progress in the design face).
 - Editing a dimension here is the same inline dimension-edit machinery (§8.2); geometry updates live.
 
