@@ -5,6 +5,15 @@ import type { Mechanism } from '../../schema';
 import { solve } from '..';
 import { crankTip, FOUR_BAR, fourBarB, fourBarInitial } from './analytic';
 
+// the crank sweeps a full circle, dipping to y = -a in ground frame — the
+// mechanism is raised LIFT above the floor (slice C) so the sweep is clear,
+// and the analytic ground-frame solution is compared with the same offset
+const LIFT = 1;
+const raise = (p: { x: number; y: number }): { x: number; y: number } => ({
+  x: p.x,
+  y: p.y + LIFT,
+});
+
 function fourBarMechanism(): Mechanism {
   const { A, B } = fourBarInitial(FOUR_BAR);
   const link = (id: string, nodeA: string, nodeB: string): Mechanism['elements'][number] => ({
@@ -21,10 +30,10 @@ function fourBarMechanism(): Mechanism {
     viewOrientation: 'side-left',
     gravityOn: false,
     nodes: [
-      { id: 'O2', kind: 'anchor', position: { x: 0, y: 0 } },
-      { id: 'A', kind: 'free', position: A },
-      { id: 'B', kind: 'free', position: B },
-      { id: 'O4', kind: 'anchor', position: { x: FOUR_BAR.d, y: 0 } },
+      { id: 'O2', kind: 'anchor', position: { x: 0, y: LIFT } },
+      { id: 'A', kind: 'free', position: raise(A) },
+      { id: 'B', kind: 'free', position: raise(B) },
+      { id: 'O4', kind: 'anchor', position: { x: FOUR_BAR.d, y: LIFT } },
     ],
     elements: [link('crank', 'O2', 'A'), link('coupler', 'A', 'B'), link('rocker', 'B', 'O4')],
     pointMasses: [],
@@ -42,14 +51,15 @@ describe('ACCEPTANCE Phase 1 — four-bar kinematic drag', () => {
     let maxErr = 0;
     for (let k = 1; k <= 72; k++) {
       const theta = Math.PI / 2 + (k * 2 * Math.PI) / 72;
-      const target = crankTip(FOUR_BAR, theta);
+      const target = raise(crankTip(FOUR_BAR, theta));
       const result = solve(
         mechanism,
         { channelValues: {}, dragTargets: { A: target } },
         'kinematic',
       );
-      const expB = fourBarB(FOUR_BAR, theta, prevB);
-      prevB = expB;
+      const expBGround = fourBarB(FOUR_BAR, theta, prevB);
+      prevB = expBGround;
+      const expB = raise(expBGround);
       const gotA = result.positions.A;
       const gotB = result.positions.B;
       if (!gotA || !gotB) throw new Error('solver returned no positions');

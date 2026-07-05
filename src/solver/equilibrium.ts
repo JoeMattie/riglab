@@ -738,6 +738,28 @@ interface Built {
   freeCount: number;
 }
 
+/** Ground plane y ≥ 0 for free particles (slice C). A pure position clamp:
+ * no λ (contact reactions are out of scope), no mobility cost. */
+class FloorC implements EqConstraint {
+  readonly elementId = '__floor__';
+  lambda = 0;
+  readonly mobility = 0;
+  constructor(private readonly p: Particle) {}
+
+  reset(): void {}
+
+  project(): void {
+    if (this.p.held) return;
+    if (this.p.y < 0) this.p.y = 0;
+  }
+
+  violation(): number {
+    return this.p.held ? 0 : Math.max(0, -this.p.y);
+  }
+
+  addForces(): void {}
+}
+
 function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   const density = inputs.linkDensityKgPerM ?? 0;
   const masses = accumulateMasses(mechanism, density, inputs.elementLinearDensityKgPerM ?? {});
@@ -750,7 +772,13 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
     // hand — that supplies whatever reaction the pose demands, so a linkage
     // hung off the shoulder dangles from it. Anchor/driven nodes ignore
     // drags, mirroring kinematic mode.
-    const dragHold = n.kind === 'free' ? inputs.dragTargets?.[n.id] : undefined;
+    // a drag hold below the floor is clamped onto it — the holder's hand
+    // cannot be underground (slice C; mirrors the kinematic drag clamp)
+    const dragHoldRaw = n.kind === 'free' ? inputs.dragTargets?.[n.id] : undefined;
+    const dragHold =
+      dragHoldRaw && mechanism.viewOrientation !== 'top'
+        ? { x: dragHoldRaw.x, y: Math.max(0, dragHoldRaw.y) }
+        : dragHoldRaw;
     const held = n.kind === 'anchor' || n.kind === 'driven' || dragHold !== undefined;
     // anchor nodes attached to the wearer (anchorBindings) are held AT the
     // caller's ground target — the pack frame / body carries the ground point
@@ -956,6 +984,18 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         el.backlashRad,
       ),
     );
+  }
+
+  // ground plane (PLANFILE-wearer-attachments-and-floor, slice C): free
+  // particles cannot settle below y = 0 in non-`top` views. Appended last so
+  // every projection pass ends floor-satisfied — it never enters `violated`;
+  // geometry that cannot stay above it reports on its own elements. Held
+  // particles (anchor/driven/drag-held) are prescribed and exempt. Contact
+  // reactions are NOT reported (addForces is a no-op) — positional only.
+  if (mechanism.viewOrientation !== 'top') {
+    for (const n of mechanism.nodes) {
+      if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
+    }
   }
 
   return {

@@ -1156,6 +1156,17 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
               strokeWidth={1}
             />
           ))}
+          {/* ground plane at world y = 0 (slice C): the solver's floor —
+              free nodes cannot be dragged or settle below it. Not in `top`
+              (that view maps the ground plane itself). */}
+          {mech.viewOrientation !== 'top' && (
+            <Line
+              points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
+              stroke={C.silhouette}
+              strokeWidth={1.5}
+              dash={[10, 6]}
+            />
+          )}
           {silhouette?.outlines.map((poly, i) => (
             <Line
               // biome-ignore lint/suspicious/noArrayIndexKey: silhouette outlines are a fixed projection, regenerated wholesale, never reordered

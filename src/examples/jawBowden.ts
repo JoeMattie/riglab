@@ -16,16 +16,21 @@ import {
   PIPE_CTS_075,
 } from './shared';
 
+/** jaw pivot height above the ground plane — mechanism space is the wearer's
+ * world frame (planfile §7), so the head geometry sits at head height and the
+ * open jaw swings clear of the floor (slice C). */
+export const JAW_PIVOT_Y = 1.5;
+
 const P: Record<string, Vec2> = {
-  skullBack: { x: -0.12, y: 0 },
-  jawPivot: { x: 0, y: 0 },
-  crest: { x: 0.02, y: 0.16 },
-  casingJaw: { x: -0.1, y: -0.09 },
-  jawTip: { x: 0.24, y: 0 },
-  jawHeel: { x: -0.065, y: 0.03 },
-  triggerBase: { x: -0.32, y: -0.36 },
-  trigger: { x: -0.32, y: -0.22 },
-  casingTrigger: { x: -0.32, y: -0.3 },
+  skullBack: { x: -0.12, y: JAW_PIVOT_Y },
+  jawPivot: { x: 0, y: JAW_PIVOT_Y },
+  crest: { x: 0.02, y: JAW_PIVOT_Y + 0.16 },
+  casingJaw: { x: -0.1, y: JAW_PIVOT_Y - 0.09 },
+  jawTip: { x: 0.24, y: JAW_PIVOT_Y },
+  jawHeel: { x: -0.065, y: JAW_PIVOT_Y + 0.03 },
+  triggerBase: { x: -0.32, y: JAW_PIVOT_Y - 0.36 },
+  trigger: { x: -0.32, y: JAW_PIVOT_Y - 0.22 },
+  casingTrigger: { x: -0.32, y: JAW_PIVOT_Y - 0.3 },
 };
 
 /** lenB at the fully-open angle limit (heel rotated −0.7 rad about the
@@ -33,9 +38,11 @@ const P: Record<string, Vec2> = {
  * the way when the trigger is released. */
 function openHeelDistance(): number {
   const a = -0.7;
+  const piv = P.jawPivot!;
+  const rel = { x: P.jawHeel!.x - piv.x, y: P.jawHeel!.y - piv.y };
   const heel = {
-    x: Math.cos(a) * P.jawHeel!.x - Math.sin(a) * P.jawHeel!.y,
-    y: Math.sin(a) * P.jawHeel!.x + Math.cos(a) * P.jawHeel!.y,
+    x: piv.x + Math.cos(a) * rel.x - Math.sin(a) * rel.y,
+    y: piv.y + Math.sin(a) * rel.x + Math.cos(a) * rel.y,
   };
   return dist(heel, P.casingJaw!);
 }

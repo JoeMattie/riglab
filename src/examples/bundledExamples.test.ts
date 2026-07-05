@@ -12,7 +12,7 @@ import { DEFAULT_WEARER } from '../schema';
 import { solve } from '../solver';
 import { bindingTargets, getClip, samplePose } from '../wearer';
 import { ARTIFACT_BUILDERS, EXAMPLES, loadExample } from '.';
-import { buildJawBowdenMechanism } from './jawBowden';
+import { buildJawBowdenMechanism, JAW_PIVOT_Y } from './jawBowden';
 import { buildLegExoMechanism } from './legExo';
 import { buildNeckTrussMechanism } from './neckTruss';
 import { buildSteerMirrorMechanism } from './steerMirror';
@@ -110,16 +110,16 @@ describe('example 4 — jaw + Bowden', () => {
   it('rests open: the opening elastic swings the jaw tip down to the limit', () => {
     const open = solveAt(0);
     expect(open.diagnostics.converged).toBe(true);
-    expect(open.positions.jawTip!.y).toBeLessThan(-0.1);
+    expect(open.positions.jawTip!.y).toBeLessThan(JAW_PIVOT_Y - 0.1);
   });
 
   it('squeezing the trigger closes the jaw through the cable', () => {
     const half = solveAt(0.02);
     const closed = solveAt(0.038);
     expect(closed.diagnostics.converged).toBe(true);
-    expect(half.positions.jawTip!.y).toBeGreaterThan(-0.1);
-    expect(half.positions.jawTip!.y).toBeLessThan(-0.05);
-    expect(closed.positions.jawTip!.y).toBeGreaterThan(-0.02);
+    expect(half.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.1);
+    expect(half.positions.jawTip!.y).toBeLessThan(JAW_PIVOT_Y - 0.05);
+    expect(closed.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
   });
 
   it('locking the trigger channel freezes the jaw (set-screw analogue)', () => {
@@ -128,7 +128,7 @@ describe('example 4 — jaw + Bowden', () => {
     locked.inputs[0]!.locked = true;
     // an override that would open the jaw is ignored while locked
     const result = solve(locked, { channelValues: { 'jaw trigger': 0 } }, 'equilibrium');
-    expect(result.positions.jawTip!.y).toBeGreaterThan(-0.02);
+    expect(result.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
   });
 });
 

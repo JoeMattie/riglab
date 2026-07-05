@@ -59,10 +59,11 @@ describe('ACCEPTANCE Phase 2 — lever balance', () => {
   function leverMechanism(): Mechanism {
     return mech(
       [
-        node('O', 0, 0.3, 'anchor'), // fulcrum, above the arms → CG hangs below it (stable, level)
-        node('L', -0.5, 0), // 2 kg arm end
-        node('R', 1.0, 0), // 1 kg arm end
-        node('O2', 0, -0.2, 'anchor'), // ground stub for the pivot's 2nd member
+        // raised well above the floor (slice C) so the arms can tip freely
+        node('O', 0, 2.3, 'anchor'), // fulcrum, above the arms → CG hangs below it (stable, level)
+        node('L', -0.5, 2), // 2 kg arm end
+        node('R', 1.0, 2), // 1 kg arm end
+        node('O2', 0, 1.8, 'anchor'), // ground stub for the pivot's 2nd member
       ],
       [
         {
@@ -110,7 +111,7 @@ describe('ACCEPTANCE Phase 2 — lever balance', () => {
   it('an unbalanced lever tips toward the heavier moment', () => {
     // move the 1 kg mass out to 1.5 m: right moment (1.5) now beats left (1.0)
     const m = leverMechanism();
-    m.nodes = m.nodes.map((n) => (n.id === 'R' ? { ...n, position: { x: 1.5, y: 0 } } : n));
+    m.nodes = m.nodes.map((n) => (n.id === 'R' ? { ...n, position: { x: 1.5, y: 2 } } : n));
     const result = solve(m, { channelValues: {} }, 'equilibrium');
     // right side sinks below the left
     expect(result.positions.R!.y).toBeLessThan(result.positions.L!.y - 0.02);
@@ -454,9 +455,10 @@ describe('Phase 2 unit — link self-weight from generic density', () => {
   function twoBarChain(): Mechanism {
     return mech(
       [
-        node('A', 0, 0, 'anchor'),
-        node('B', 0.5, 0), // free mid node, no point mass
-        node('C', 1.0, 0), // free tip, no point mass
+        // raised above the floor (slice C) so the tip can droop
+        node('A', 0, 2, 'anchor'),
+        node('B', 0.5, 2), // free mid node, no point mass
+        node('C', 1.0, 2), // free tip, no point mass
       ],
       [link('l1', 'A', 'B'), link('l2', 'B', 'C')],
     );
@@ -465,8 +467,8 @@ describe('Phase 2 unit — link self-weight from generic density', () => {
   it('links are massless without a density (chain holds its drawn pose)', () => {
     const result = solve(twoBarChain(), { channelValues: {} }, 'equilibrium');
     // massless free nodes see no gravity → the horizontal chain stays put
-    expect(result.positions.B!.y).toBeCloseTo(0, 6);
-    expect(result.positions.C!.y).toBeCloseTo(0, 6);
+    expect(result.positions.B!.y).toBeCloseTo(2, 6);
+    expect(result.positions.C!.y).toBeCloseTo(2, 6);
   });
 
   it('a supplied linear density makes the chain sag under self-weight', () => {
@@ -477,7 +479,7 @@ describe('Phase 2 unit — link self-weight from generic density', () => {
     );
     expect(result.diagnostics.converged).toBe(true);
     // the unsupported end droops below the anchor
-    expect(result.positions.C!.y).toBeLessThan(-0.01);
+    expect(result.positions.C!.y).toBeLessThan(2 - 0.01);
   });
 });
 

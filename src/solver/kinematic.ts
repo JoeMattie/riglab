@@ -206,6 +206,26 @@ class PointOnLineC implements KConstraint {
   }
 }
 
+/** Ground plane y ≥ 0 (PLANFILE-wearer-attachments-and-floor, slice C):
+ * free nodes cannot pass below the floor in non-`top` views. A pure clamp —
+ * zero mobility cost, and floors project last in every pass, so the floor
+ * itself is always satisfied afterwards and never appears in `violated`;
+ * geometry that cannot stay above it reports on its own elements. */
+class FloorC implements KConstraint {
+  readonly elementId = '__floor__';
+  readonly mobilityEqualities = 0;
+  constructor(private readonly p: P) {}
+
+  project(): void {
+    if (this.p.w === 0) return;
+    if (this.p.y < 0) this.p.y = 0;
+  }
+
+  violation(): number {
+    return Math.max(0, -this.p.y);
+  }
+}
+
 /** Drag target: a wish, projected before the real constraints each
  * iteration so geometry always wins. Not counted in residual/DOF. */
 class DragC {
@@ -375,10 +395,25 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
     }
   }
 
+  // floor last so each pass ends with y ≥ 0 for every free node
+  const floorOn = mechanism.viewOrientation !== 'top';
+  if (floorOn) {
+    for (const n of mechanism.nodes) {
+      if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
+    }
+  }
+
+  // a drag wish cannot point underground: clamped to the floor surface, so a
+  // pointer below ground drags ALONG the ground instead of collapsing the
+  // linkage collinear onto it (a degenerate manifold the symmetry nudge
+  // cannot escape — the floor clamp kills the downward half of every nudge)
   const drags: DragC[] = Object.entries(inputs.dragTargets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .filter(([id]) => particles.has(id))
-    .map(([id, target]) => new DragC(get(id), target));
+    .map(
+      ([id, target]) =>
+        new DragC(get(id), floorOn ? { x: target.x, y: Math.max(0, target.y) } : target),
+    );
 
   const settle = () => {
     for (let it = 0; it < SETTLE_ITERATIONS; it++) {
@@ -403,12 +438,20 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry.
   // Truly conflicting constraints stay violated and get reported below.
   for (let round = 0; round < 3 && maxViolation() > CONVERGE_TOL; round++) {
+    // escalate per round: 1e-6 breaks exact collinearity; a floor wedge (the
+    // satisfying pose is well above ground, the iterate pinned onto the
+    // floor by the clamp) needs a kick on the scale of the violation itself
+    // to leave the wrong basin, so the last round lifts by maxViolation()
+    const mag = round < 2 ? 1e-6 * 10 ** round : Math.max(1e-4, maxViolation());
     let k = 0;
     for (const p of particles.values()) {
       if (p.w === 0) continue;
       k++;
       p.x += 1e-6 * Math.sin(k * 2.39996);
-      p.y += 1e-6 * Math.cos(k * 2.39996);
+      // a particle resting on the floor can only escape upward, and by the
+      // full magnitude — the clamp erases downward nudges, and a golden-angle
+      // fraction can be arbitrarily small for exactly the stuck particle
+      p.y += floorOn && p.y <= CONVERGE_TOL ? mag : 1e-6 * Math.cos(k * 2.39996);
     }
     settle();
   }

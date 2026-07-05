@@ -10,7 +10,8 @@ import { solve } from '..';
 
 const G = 9.81;
 const TIP_KG = 2;
-const SHOULDER: Vec2 = { x: 2, y: 1 };
+// high enough that the ~2.04 m chain dangles clear of the floor (slice C)
+const SHOULDER: Vec2 = { x: 2, y: 3 };
 
 /** Two bars pinned in the middle, drawn roughly level off the shoulder —
  * the sketch from the bug report. No anchors anywhere. */
@@ -22,8 +23,8 @@ function shoulderBoom(): Mechanism {
     gravityOn: true,
     nodes: [
       { id: 'S', kind: 'free', position: SHOULDER }, // bound to the shoulder
-      { id: 'P', kind: 'free', position: { x: 1, y: 1.2 } },
-      { id: 'E', kind: 'free', position: { x: 0, y: 1 } },
+      { id: 'P', kind: 'free', position: { x: 1, y: 3.2 } },
+      { id: 'E', kind: 'free', position: { x: 0, y: 3 } },
     ],
     elements: [
       { id: 'l1', type: 'link', maturity: 'sketch', nodeA: 'S', nodeB: 'P', pointMasses: [] },
@@ -37,8 +38,8 @@ function shoulderBoom(): Mechanism {
   };
 }
 
-const L1 = Math.hypot(2 - 1, 1 - 1.2);
-const L2 = Math.hypot(1 - 0, 1.2 - 1);
+const L1 = Math.hypot(2 - 1, 3 - 3.2);
+const L2 = Math.hypot(1 - 0, 3.2 - 3);
 
 function expectDangleBelow(mech: Mechanism, hold: Vec2): void {
   const result = solve(mech, { channelValues: {}, dragTargets: { S: hold } }, 'equilibrium');
@@ -66,7 +67,7 @@ describe('ACCEPTANCE — drag-held node is a moving anchor in equilibrium', () =
   });
 
   it('re-dangles below the target when the animation moves the shoulder', () => {
-    expectDangleBelow(shoulderBoom(), { x: 2.3, y: 1.15 });
+    expectDangleBelow(shoulderBoom(), { x: 2.3, y: 3.15 });
   });
 
   it('anchor and driven nodes ignore drag targets (kinematic-mode parity)', () => {
