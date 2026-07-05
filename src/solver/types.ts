@@ -1,4 +1,4 @@
-import type { Mechanism, Vec2 } from '../schema';
+import type { Mechanism, Vec3 } from '../schema';
 
 // The solver's public interface (§12): pure, deterministic, framework-free.
 // It consumes schema types (plain data) and returns plain data — the UI
@@ -11,7 +11,7 @@ export interface SolveInputs {
    * mechanisms, §4.2) */
   channelValues: Record<string, number>;
   /** transient drag targets keyed by node id (kinematic drag, §5.1) */
-  dragTargets?: Record<string, Vec2>;
+  dragTargets?: Record<string, Vec3>;
   /** Prescribed positions for kind-'anchor' nodes attached to the wearer
    * (anchorBindings): the pack frame / body carries the ground point through
    * pose and clip playback. Applied in both modes; entries for non-anchor
@@ -35,14 +35,14 @@ export interface SolveForces {
   /** signed axial force per element id, newtons, tension positive */
   elements: Record<string, number>;
   /** reaction force per pivot element id */
-  pivotReactions: Record<string, Vec2>;
+  pivotReactions: Record<string, Vec3>;
   /** required holding force/torque per channel name — "how hard does the
    * operator's hand work" (§5.2) */
   requiredInputs: Record<string, number>;
 }
 
 export interface SolveDiagnostics {
-  /** Grübler–Kutzbach 2D mobility (§5.3) */
+  /** particle-space spatial mobility: 3·(non-anchor nodes) − independent equalities (PLANFILE-3d-conversion.md) */
   dof: number;
   classification: 'structure' | 'mechanism' | 'overconstrained';
   converged: boolean;
@@ -54,7 +54,7 @@ export interface SolveDiagnostics {
 }
 
 export interface SolveResult {
-  positions: Record<string, Vec2>;
+  positions: Record<string, Vec3>;
   forces: SolveForces;
   diagnostics: SolveDiagnostics;
 }
