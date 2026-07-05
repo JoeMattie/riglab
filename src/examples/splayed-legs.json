@@ -1,0 +1,1488 @@
+{
+  "schemaVersion": 7,
+  "id": "example-splayed-legs",
+  "name": "Example — Raptor splayed legs",
+  "unitsPreference": "imperial",
+  "materials": {
+    "pipes": [
+      {
+        "id": "pipe-nps-sch40-050",
+        "name": "PVC Sch 40 1/2\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "outerDiameterM": 0.021335999999999997,
+        "innerDiameterM": 0.015798799999999998,
+        "linearDensityKgPerM": 0.238106224,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-075",
+        "name": "PVC Sch 40 3/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.02667,
+        "innerDiameterM": 0.0209296,
+        "linearDensityKgPerM": 0.312514419,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-100",
+        "name": "PVC Sch 40 1\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.033401,
+        "innerDiameterM": 0.026644599999999997,
+        "linearDensityKgPerM": 0.476212448,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-125",
+        "name": "PVC Sch 40 1-1/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "outerDiameterM": 0.04216399999999999,
+        "innerDiameterM": 0.03505199999999999,
+        "linearDensityKgPerM": 0.639910477,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-sch40-150",
+        "name": "PVC Sch 40 1-1/2\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "outerDiameterM": 0.04826,
+        "innerDiameterM": 0.040894,
+        "linearDensityKgPerM": 0.758963589,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-cls200-075",
+        "name": "PVC Class 200 3/4\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.02667,
+        "innerDiameterM": 0.023622,
+        "linearDensityKgPerM": 0.1800678319,
+        "approximate": true
+      },
+      {
+        "id": "pipe-nps-cls200-100",
+        "name": "PVC Class 200 1\" (NPS)",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.033401,
+        "innerDiameterM": 0.0302006,
+        "linearDensityKgPerM": 0.24108255180000002,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-050",
+        "name": "CPVC CTS 1/2\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "outerDiameterM": 0.015875,
+        "innerDiameterM": 0.012420599999999999,
+        "linearDensityKgPerM": 0.12649393150000002,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-075",
+        "name": "CPVC CTS 3/4\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "outerDiameterM": 0.022224999999999998,
+        "innerDiameterM": 0.018161,
+        "linearDensityKgPerM": 0.20834294600000003,
+        "approximate": true
+      },
+      {
+        "id": "pipe-cts-cpvc-100",
+        "name": "CPVC CTS 1\"",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "outerDiameterM": 0.028575,
+        "innerDiameterM": 0.0233934,
+        "linearDensityKgPerM": 0.3244197302,
+        "approximate": true
+      }
+    ],
+    "fittings": [
+      {
+        "id": "fitting-nps-elbow90-1_2",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.03,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_2",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.027,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_2",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.0372,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_2",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.056999999999999995,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_2",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.0168,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_2",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1/2",
+        "massKg": 0.010799999999999999,
+        "socketDepthM": 0.0175,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-3_4",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.05,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-3_4",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.045,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-3_4",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.062,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-3_4",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.095,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-3_4",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.028,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-3_4",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "3/4",
+        "massKg": 0.018,
+        "socketDepthM": 0.0183,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.085,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.0765,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.1054,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.1615,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.047599999999999996,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1",
+        "massKg": 0.030599999999999995,
+        "socketDepthM": 0.0223,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1_1_4",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.13,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_1_4",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.11699999999999999,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_1_4",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.1612,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_1_4",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.24700000000000003,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_1_4",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.0728,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_1_4",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/4",
+        "massKg": 0.0468,
+        "socketDepthM": 0.0238,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow90-1_1_2",
+        "type": "elbow90",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.17,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-elbow45-1_1_2",
+        "type": "elbow45",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.153,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-tee-1_1_2",
+        "type": "tee",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.2108,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cross-1_1_2",
+        "type": "cross",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.323,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-coupling-1_1_2",
+        "type": "coupling",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.09519999999999999,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-nps-cap-1_1_2",
+        "type": "cap",
+        "sizingSystem": "NPS",
+        "nominalSize": "1-1/2",
+        "massKg": 0.06119999999999999,
+        "socketDepthM": 0.0246,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-1_2",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.020000000000000004,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-1_2",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.018,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-1_2",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.024800000000000003,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-1_2",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.038000000000000006,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-1_2",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.011200000000000002,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-1_2",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "1/2",
+        "massKg": 0.0072,
+        "socketDepthM": 0.014,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-3_4",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.034999999999999996,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-3_4",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.0315,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-3_4",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.043399999999999994,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-3_4",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.06649999999999999,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-3_4",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.0196,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-3_4",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "3/4",
+        "massKg": 0.012599999999999998,
+        "socketDepthM": 0.017,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow90-1",
+        "type": "elbow90",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.06,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-elbow45-1",
+        "type": "elbow45",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.054,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-tee-1",
+        "type": "tee",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.0744,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cross-1",
+        "type": "cross",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.11399999999999999,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-coupling-1",
+        "type": "coupling",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.0336,
+        "socketDepthM": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "fitting-cts-cap-1",
+        "type": "cap",
+        "sizingSystem": "CTS",
+        "nominalSize": "1",
+        "massKg": 0.021599999999999998,
+        "socketDepthM": 0.02,
+        "approximate": true
+      }
+    ],
+    "cordage": [
+      {
+        "id": "cord-paracord550",
+        "name": "Paracord 550",
+        "kind": "rope",
+        "linearDensityKgPerM": 0.0088,
+        "approximate": true
+      },
+      {
+        "id": "cord-nylon4mm",
+        "name": "4 mm nylon rope",
+        "kind": "rope",
+        "linearDensityKgPerM": 0.011,
+        "approximate": true
+      },
+      {
+        "id": "cord-bungee6",
+        "name": "6 mm bungee / elastic",
+        "kind": "elastic",
+        "linearDensityKgPerM": 0.02,
+        "defaultStiffnessNPerM": 300,
+        "approximate": true
+      },
+      {
+        "id": "cord-bungee8",
+        "name": "8 mm bungee / elastic",
+        "kind": "elastic",
+        "linearDensityKgPerM": 0.034,
+        "defaultStiffnessNPerM": 520,
+        "approximate": true
+      },
+      {
+        "id": "cord-bowden",
+        "name": "Bowden cable + housing",
+        "kind": "bowdenCable",
+        "linearDensityKgPerM": 0.052,
+        "approximate": true
+      }
+    ],
+    "sheets": [
+      {
+        "id": "sheet-eva10",
+        "name": "EVA foam floor tile 10 mm",
+        "arealDensityKgPerM2": 0.9,
+        "approximate": true
+      },
+      {
+        "id": "sheet-eva12",
+        "name": "EVA foam floor tile 12 mm",
+        "arealDensityKgPerM2": 1.1,
+        "approximate": true
+      }
+    ],
+    "hardware": [
+      {
+        "id": "hw-boltset",
+        "name": "Bolt + nut set (M6)",
+        "massKg": 0.02,
+        "approximate": true
+      },
+      {
+        "id": "hw-conduitbox",
+        "name": "Electrical conduit box",
+        "massKg": 0.12,
+        "approximate": true
+      },
+      {
+        "id": "hw-hosesleeve",
+        "name": "Garden-hose joint sleeve",
+        "massKg": 0.05,
+        "approximate": true
+      },
+      {
+        "id": "hw-fiberglassrod",
+        "name": "Fiberglass rod 1/4\" (per m)",
+        "massKg": 0.055,
+        "approximate": true
+      }
+    ],
+    "genericPipeLinearDensityKgPerM": 0.25,
+    "unitPrices": {}
+  },
+  "mechanism": {
+    "id": "splayed-legs",
+    "name": "Splayed legs (3D gait)",
+    "nodes": [
+      {
+        "id": "legL.hipMount",
+        "kind": "anchor",
+        "position": {
+          "x": 0.02,
+          "y": 0.98,
+          "z": 0.25
+        }
+      },
+      {
+        "id": "legL.hipYoke",
+        "kind": "anchor",
+        "position": {
+          "x": -0.06,
+          "y": 0.98,
+          "z": 0.3
+        }
+      },
+      {
+        "id": "legL.hipSwing",
+        "kind": "free",
+        "position": {
+          "x": -0.019,
+          "y": 0.842,
+          "z": 0.3092
+        }
+      },
+      {
+        "id": "legL.frameSide",
+        "kind": "anchor",
+        "position": {
+          "x": -0.099,
+          "y": 0.75,
+          "z": 0.2913
+        }
+      },
+      {
+        "id": "legL.wHip",
+        "kind": "free",
+        "position": {
+          "x": -0.0014,
+          "y": 0.9275,
+          "z": 0.3131
+        }
+      },
+      {
+        "id": "legL.wKnee",
+        "kind": "free",
+        "position": {
+          "x": -0.0014,
+          "y": 0.49875,
+          "z": 0.3131
+        }
+      },
+      {
+        "id": "legL.wShoe",
+        "kind": "free",
+        "position": {
+          "x": 0.0961,
+          "y": 0,
+          "z": 0.3349
+        }
+      },
+      {
+        "id": "legL.eKnee",
+        "kind": "free",
+        "position": {
+          "x": 0.0766,
+          "y": 0.52,
+          "z": 0.3306
+        }
+      },
+      {
+        "id": "legL.eAnkle",
+        "kind": "free",
+        "position": {
+          "x": 0.0473,
+          "y": 0.1,
+          "z": 0.324
+        }
+      },
+      {
+        "id": "legL.eHeel",
+        "kind": "free",
+        "position": {
+          "x": -0.0502,
+          "y": 0.13,
+          "z": 0.3022
+        }
+      },
+      {
+        "id": "legL.eToeJ",
+        "kind": "free",
+        "position": {
+          "x": 0.1742,
+          "y": 0.045,
+          "z": 0.3524
+        }
+      },
+      {
+        "id": "legL.eToePad",
+        "kind": "free",
+        "position": {
+          "x": 0.1742,
+          "y": -0.02,
+          "z": 0.3524
+        }
+      },
+      {
+        "id": "legL.eToe",
+        "kind": "free",
+        "position": {
+          "x": 0.2913,
+          "y": 0.03,
+          "z": 0.3786
+        }
+      },
+      {
+        "id": "legR.hipMount",
+        "kind": "anchor",
+        "position": {
+          "x": 0.02,
+          "y": 0.98,
+          "z": -0.25
+        }
+      },
+      {
+        "id": "legR.hipYoke",
+        "kind": "anchor",
+        "position": {
+          "x": -0.06,
+          "y": 0.98,
+          "z": -0.3
+        }
+      },
+      {
+        "id": "legR.hipSwing",
+        "kind": "free",
+        "position": {
+          "x": -0.019,
+          "y": 0.842,
+          "z": -0.3092
+        }
+      },
+      {
+        "id": "legR.frameSide",
+        "kind": "anchor",
+        "position": {
+          "x": -0.099,
+          "y": 0.75,
+          "z": -0.2913
+        }
+      },
+      {
+        "id": "legR.wHip",
+        "kind": "free",
+        "position": {
+          "x": -0.0014,
+          "y": 0.9275,
+          "z": -0.3131
+        }
+      },
+      {
+        "id": "legR.wKnee",
+        "kind": "free",
+        "position": {
+          "x": -0.0014,
+          "y": 0.49875,
+          "z": -0.3131
+        }
+      },
+      {
+        "id": "legR.wShoe",
+        "kind": "free",
+        "position": {
+          "x": 0.0961,
+          "y": 0,
+          "z": -0.3349
+        }
+      },
+      {
+        "id": "legR.eKnee",
+        "kind": "free",
+        "position": {
+          "x": 0.0766,
+          "y": 0.52,
+          "z": -0.3306
+        }
+      },
+      {
+        "id": "legR.eAnkle",
+        "kind": "free",
+        "position": {
+          "x": 0.0473,
+          "y": 0.1,
+          "z": -0.324
+        }
+      },
+      {
+        "id": "legR.eHeel",
+        "kind": "free",
+        "position": {
+          "x": -0.0502,
+          "y": 0.13,
+          "z": -0.3022
+        }
+      },
+      {
+        "id": "legR.eToeJ",
+        "kind": "free",
+        "position": {
+          "x": 0.1742,
+          "y": 0.045,
+          "z": -0.3524
+        }
+      },
+      {
+        "id": "legR.eToePad",
+        "kind": "free",
+        "position": {
+          "x": 0.1742,
+          "y": -0.02,
+          "z": -0.3524
+        }
+      },
+      {
+        "id": "legR.eToe",
+        "kind": "free",
+        "position": {
+          "x": 0.2913,
+          "y": 0.03,
+          "z": -0.3786
+        }
+      }
+    ],
+    "elements": [
+      {
+        "id": "legL.hipPost",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.hipMount",
+        "nodeB": "legL.hipYoke",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.yokeArm",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.hipYoke",
+        "nodeB": "legL.hipSwing",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "nestedSleeve",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoFemur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.hipSwing",
+        "nodeB": "legL.eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoTibia",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eKnee",
+        "nodeB": "legL.eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoFootMain",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eAnkle",
+        "nodeB": "legL.eToeJ",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoHeelSpur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eAnkle",
+        "nodeB": "legL.eHeel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoToePadBar",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eToeJ",
+        "nodeB": "legL.eToePad",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.exoToe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eToeJ",
+        "nodeB": "legL.eToe",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.tieKnee",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.wKnee",
+        "nodeB": "legL.eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.tieShoe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.wShoe",
+        "nodeB": "legL.eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legL.yawPivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legL.hipYoke",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          }
+        },
+        "memberIds": ["legL.hipPost", "legL.yokeArm"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "legL.hipPost",
+          "memberB": "legL.yokeArm",
+          "minRad": -2.7123,
+          "maxRad": -2.0123
+        },
+        "torsionSpring": {
+          "memberA": "legL.hipPost",
+          "memberB": "legL.yokeArm",
+          "stiffnessNmPerRad": 40,
+          "restAngleRad": -2.3623
+        },
+        "realization": "nestedSleeve"
+      },
+      {
+        "id": "legL.kneePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legL.eKnee",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": -0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legL.exoFemur", "legL.exoTibia", "legL.tieKnee"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "legL.exoFemur",
+          "memberB": "legL.exoTibia",
+          "minRad": -1.5,
+          "maxRad": 0.05
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legL.anklePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legL.eAnkle",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": -0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legL.exoTibia", "legL.exoFootMain", "legL.exoHeelSpur", "legL.tieShoe"],
+        "welds": [["legL.exoFootMain", "legL.exoHeelSpur"]],
+        "angleLimit": {
+          "memberA": "legL.exoTibia",
+          "memberB": "legL.exoFootMain",
+          "minRad": 0.6,
+          "maxRad": 1.9
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legL.toePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legL.eToeJ",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": -0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legL.exoFootMain", "legL.exoToe", "legL.exoToePadBar"],
+        "welds": [["legL.exoFootMain", "legL.exoToePadBar"]],
+        "angleLimit": {
+          "memberA": "legL.exoFootMain",
+          "memberB": "legL.exoToe",
+          "minRad": -0.6,
+          "maxRad": 0.35
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legL.heelLiftElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.frameSide",
+        "nodeB": "legL.eHeel",
+        "restLengthM": 0.4478,
+        "stiffnessNPerM": 150,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee8"
+      },
+      {
+        "id": "legL.toeLimitRope",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "path": ["legL.eToe", "legL.eToePad"],
+        "lengthM": 0.15,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "legL.toeReturnElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legL.eToe",
+        "nodeB": "legL.eToePad",
+        "restLengthM": 0.13,
+        "stiffnessNPerM": 60,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee6"
+      },
+      {
+        "id": "legR.hipPost",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.hipMount",
+        "nodeB": "legR.hipYoke",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.yokeArm",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.hipYoke",
+        "nodeB": "legR.hipSwing",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "nestedSleeve",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoFemur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.hipSwing",
+        "nodeB": "legR.eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoTibia",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eKnee",
+        "nodeB": "legR.eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoFootMain",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eAnkle",
+        "nodeB": "legR.eToeJ",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoHeelSpur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eAnkle",
+        "nodeB": "legR.eHeel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoToePadBar",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eToeJ",
+        "nodeB": "legR.eToePad",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.exoToe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eToeJ",
+        "nodeB": "legR.eToe",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.tieKnee",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.wKnee",
+        "nodeB": "legR.eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.tieShoe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.wShoe",
+        "nodeB": "legR.eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "legR.yawPivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legR.hipYoke",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          }
+        },
+        "memberIds": ["legR.hipPost", "legR.yokeArm"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "legR.hipPost",
+          "memberB": "legR.yokeArm",
+          "minRad": -2.7123,
+          "maxRad": -2.0123
+        },
+        "torsionSpring": {
+          "memberA": "legR.hipPost",
+          "memberB": "legR.yokeArm",
+          "stiffnessNmPerRad": 40,
+          "restAngleRad": -2.3623
+        },
+        "realization": "nestedSleeve"
+      },
+      {
+        "id": "legR.kneePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legR.eKnee",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legR.exoFemur", "legR.exoTibia", "legR.tieKnee"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "legR.exoFemur",
+          "memberB": "legR.exoTibia",
+          "minRad": -1.5,
+          "maxRad": 0.05
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legR.anklePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legR.eAnkle",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legR.exoTibia", "legR.exoFootMain", "legR.exoHeelSpur", "legR.tieShoe"],
+        "welds": [["legR.exoFootMain", "legR.exoHeelSpur"]],
+        "angleLimit": {
+          "memberA": "legR.exoTibia",
+          "memberB": "legR.exoFootMain",
+          "minRad": 0.6,
+          "maxRad": 1.9
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legR.toePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "legR.eToeJ",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0.21822962308086932,
+            "y": 0,
+            "z": 0.9758974493306055
+          }
+        },
+        "memberIds": ["legR.exoFootMain", "legR.exoToe", "legR.exoToePadBar"],
+        "welds": [["legR.exoFootMain", "legR.exoToePadBar"]],
+        "angleLimit": {
+          "memberA": "legR.exoFootMain",
+          "memberB": "legR.exoToe",
+          "minRad": -0.6,
+          "maxRad": 0.35
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "legR.heelLiftElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.frameSide",
+        "nodeB": "legR.eHeel",
+        "restLengthM": 0.4478,
+        "stiffnessNPerM": 150,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee8"
+      },
+      {
+        "id": "legR.toeLimitRope",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "path": ["legR.eToe", "legR.eToePad"],
+        "lengthM": 0.15,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "legR.toeReturnElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "legR.eToe",
+        "nodeB": "legR.eToePad",
+        "restLengthM": 0.13,
+        "stiffnessNPerM": 60,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee6"
+      }
+    ],
+    "pointMasses": [
+      {
+        "id": "legL.pawMass",
+        "name": "paw claw",
+        "massKg": 0.1,
+        "nodeId": "legL.eToe"
+      },
+      {
+        "id": "legR.pawMass",
+        "name": "paw claw",
+        "massKg": 0.1,
+        "nodeId": "legR.eToe"
+      }
+    ],
+    "skeletonBindings": [
+      {
+        "id": "legL.bindHip",
+        "point": "hipL",
+        "nodeId": "legL.wHip"
+      },
+      {
+        "id": "legL.bindKnee",
+        "point": "kneeL",
+        "nodeId": "legL.wKnee"
+      },
+      {
+        "id": "legL.bindShoe",
+        "point": "shoeL",
+        "nodeId": "legL.wShoe"
+      },
+      {
+        "id": "legR.bindHip",
+        "point": "hipR",
+        "nodeId": "legR.wHip"
+      },
+      {
+        "id": "legR.bindKnee",
+        "point": "kneeR",
+        "nodeId": "legR.wKnee"
+      },
+      {
+        "id": "legR.bindShoe",
+        "point": "shoeR",
+        "nodeId": "legR.wShoe"
+      }
+    ],
+    "anchorBindings": [],
+    "inputs": [],
+    "namedStates": []
+  },
+  "groups": [
+    {
+      "id": "grp-leg-left",
+      "name": "Leg (left)",
+      "elementIds": [
+        "legL.hipPost",
+        "legL.yokeArm",
+        "legL.exoFemur",
+        "legL.exoTibia",
+        "legL.exoFootMain",
+        "legL.exoHeelSpur",
+        "legL.exoToePadBar",
+        "legL.exoToe",
+        "legL.tieKnee",
+        "legL.tieShoe",
+        "legL.yawPivot",
+        "legL.kneePivot",
+        "legL.anklePivot",
+        "legL.toePivot",
+        "legL.heelLiftElastic",
+        "legL.toeLimitRope",
+        "legL.toeReturnElastic"
+      ]
+    },
+    {
+      "id": "grp-leg-right",
+      "name": "Leg (right)",
+      "elementIds": [
+        "legR.hipPost",
+        "legR.yokeArm",
+        "legR.exoFemur",
+        "legR.exoTibia",
+        "legR.exoFootMain",
+        "legR.exoHeelSpur",
+        "legR.exoToePadBar",
+        "legR.exoToe",
+        "legR.tieKnee",
+        "legR.tieShoe",
+        "legR.yawPivot",
+        "legR.kneePivot",
+        "legR.anklePivot",
+        "legR.toePivot",
+        "legR.heelLiftElastic",
+        "legR.toeLimitRope",
+        "legR.toeReturnElastic"
+      ]
+    }
+  ],
+  "pointMasses": [],
+  "foamPlates": [],
+  "controls": [],
+  "controlClips": [],
+  "wearer": {
+    "heightM": 1.75,
+    "shoulderWidthM": 0.46,
+    "hipWidthM": 0.36
+  },
+  "wearerAnchorOverrides": {},
+  "bomSettings": {
+    "heatWrapAllowanceFactor": 1.5,
+    "ropeWasteFactor": 1.2
+  }
+}

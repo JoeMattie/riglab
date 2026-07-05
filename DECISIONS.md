@@ -2030,3 +2030,33 @@ ANOTHER checkout's preview server when two worktree sessions overlapped
 on chrome that build didn't have). playwright.config.ts now takes the port
 from `RIGLAB_E2E_PORT` (default 4173 unchanged for CI/normal use); parallel
 agent sessions pick a private port.
+### DECISION: three fully-3D sample projects (§9 grows to ten)
+Added at Joe's request (2026-07-05), governed by
+PLANFILE-3d-raptor-samples.md: body frame (suspended), splayed legs
+(3D gait), and tail gimbal (wag × lift) join the seven rebuilt examples —
+the genuinely spatial v7 vocabulary (non-planar bentLink dihedrals, 3D
+anchorBinding suspension, off-panel-normal hinge axes, stacked
+non-parallel hinges) is now first-class sample content instead of living
+only inside full-creature. Same pipeline: authoritative builders, JSON
+artifacts via generate-examples.mjs, registry/structural/solve coverage in
+bundledExamples.test.ts (count 7 → 10), per-example walk-frame perf checks
+alongside the full-creature budget. Three deliberate deviations from the
+governing planfile's letter, all solver-driven and within its "simplify
+and log" clause: (1) splayed legs — the yaw pivot turns a short yoke ARM
+with the femur hanging spherically off its end, instead of the literal
+members [post, femur]; a hinge holding the femur itself pinned the leg
+yaw-only against the sagittal gait harness (up to 11 mm femur stretch on
+the yaw limit), while the yoke-arm form keeps "the swing linkage hangs off
+the yaw joint" and solves at ~1e-9. Its torsion spring rests at the DRAWN
+splay angle, not the planfile's literal "rest 0" — zero is the straight
+continuation of the post, ~2.4 rad away, and would yank the leg off its
+splay. (2) body frame — hip-strap slack halved to 5 mm (1 cm let the
+bungee-over-lifted back corners ride ~4.7 cm, at the edge of the 5 cm
+settle budget). (3) tail gimbal — each crossed wag rope carries 2 mm of
+slack (a straight-rail grip cannot keep both ropes of a crossed pair taut
+through travel; taut pairs fight and blow the residual), and channel
+ranges are clamped to the honest-solve envelope (wag ±0.05, lift
+−0.05..+0.01). Yaw/wag pivots sit at ANCHORED nodes so their axes are
+frame-pinned (the ground-hinge rule) — no bracket-spin, no extra keels;
+the tail gimbal's LIFT pivot rides the mobile wag cluster and keeps the
+fullCreature.ts anti-roll keel verbatim.

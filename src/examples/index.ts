@@ -5,6 +5,7 @@
 // menu. Deep-clone on load so callers can't mutate the parsed module
 // singleton.
 import { type Project, projectSchema } from '../schema/project';
+import bodyFrameJson from './body-frame.json';
 import fullCreatureJson from './full-creature.json';
 import jawBowdenJson from './jaw-bowden.json';
 import legExoskeletonJson from './leg-exoskeleton.json';
@@ -12,14 +13,17 @@ import neckTrussJson from './neck-truss.json';
 import pincerCostumeJson from './pincer-costume.json';
 import seesawSpineJson from './seesaw-spine.json';
 import serpentCostumeJson from './serpent-costume.json';
+import splayedLegsJson from './splayed-legs.json';
 import steerMirrorJson from './steer-mirror.json';
 import tailJson from './tail.json';
+import tailGimbalJson from './tail-gimbal.json';
 import tallQuadrupedJson from './tall-quadruped.json';
 import toweringFigureJson from './towering-figure.json';
 import wingedCostumeJson from './winged-costume.json';
 
 export {
   ARTIFACT_BUILDERS,
+  buildBodyFrameProject,
   buildFullCreatureProject,
   buildJawBowdenProject,
   buildLegExoProject,
@@ -27,7 +31,9 @@ export {
   buildPincerCostumeProject,
   buildSeesawSpineProject,
   buildSerpentCostumeProject,
+  buildSplayedLegsProject,
   buildSteerMirrorProject,
+  buildTailGimbalProject,
   buildTailProject,
   buildTallQuadrupedProject,
   buildToweringFigureProject,
@@ -46,8 +52,9 @@ export interface BundledExample {
 
 const load = (json: unknown) => (): Project => projectSchema.parse(structuredClone(json));
 
-/** All twelve bundled examples: the seven §9 items in planfile order, then
- * the five complete-costume samples (PLANFILE-fun-costume-samples.md). */
+/** All fifteen bundled examples: the seven §9 items in planfile order,
+ * the three fully-3D additions (PLANFILE-3d-raptor-samples.md), then the
+ * five complete-costume samples (PLANFILE-fun-costume-samples.md). */
 export const EXAMPLES: BundledExample[] = [
   {
     id: 'example-seesaw-spine',
@@ -91,6 +98,27 @@ export const EXAMPLES: BundledExample[] = [
     description:
       'One compound mechanism: pan × pitch neck joints, mirrored legs, global weight and cut list.',
     load: load(fullCreatureJson),
+  },
+  {
+    id: 'example-body-frame',
+    name: 'Body frame (suspended)',
+    description:
+      'Closed rigid 3D box frame with a non-planar bent hoop, bungee/strap suspension to the wearer, and a nose-tuck cinch.',
+    load: load(bodyFrameJson),
+  },
+  {
+    id: 'example-splayed-legs',
+    name: 'Splayed legs (3D gait)',
+    description:
+      'Mirrored gait-driven legs with off-panel hinge axes and a sprung hip-yaw joint — the paw wanders in 3D.',
+    load: load(splayedLegsJson),
+  },
+  {
+    id: 'example-tail-gimbal',
+    name: 'Tail gimbal (wag × lift)',
+    description:
+      'Stacked non-parallel hinges: rope-driven wag carries a sprung lift, and the swish clip orbits the tip in 3D.',
+    load: load(tailGimbalJson),
   },
   // Complete-costume examples C1–C5 (PLANFILE-fun-costume-samples.md): full
   // wearable rigs — suspension harness + body structure + several subsystems.

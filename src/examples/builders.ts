@@ -1,5 +1,6 @@
-// Authoritative constructors for all seven bundled §9 example projects,
-// native v7 single-compound documents (PLANFILE-3d-conversion.md).
+// Authoritative constructors for all bundled §9 example projects,
+// native v7 single-compound documents (PLANFILE-3d-conversion.md; the three
+// fully-3D additions are specified by PLANFILE-3d-raptor-samples.md).
 // The JSON artifacts in this directory are generated from these builders by
 // `node scripts/generate-examples.mjs`; sync tests guard that they agree.
 // This module deliberately imports no JSON so the generator can run before
@@ -12,11 +13,17 @@ import { exampleProject, groupOf, partsMechanism } from './shared';
 import { buildSteerMirrorParts } from './steerMirror';
 import { buildTailParts } from './tailBoom';
 
+export { buildBodyFrameProject } from './bodyFrame';
 export { buildFullCreatureProject } from './fullCreature';
 export { buildSeesawSpineProject } from './seesawSpine';
+export { buildSplayedLegsProject } from './splayedLegs';
+export { buildTailGimbalProject } from './tailGimbal';
 
+import { buildBodyFrameProject } from './bodyFrame';
 import { buildFullCreatureProject } from './fullCreature';
 import { buildSeesawSpineProject } from './seesawSpine';
+import { buildSplayedLegsProject } from './splayedLegs';
+import { buildTailGimbalProject } from './tailGimbal';
 
 export function buildNeckTrussProject(): Project {
   const parts = buildNeckTrussParts();
@@ -91,6 +98,9 @@ export const ARTIFACT_BUILDERS: Record<string, () => Project> = {
   'leg-exoskeleton.json': buildLegExoProject,
   'tail.json': buildTailProject,
   'full-creature.json': buildFullCreatureProject,
+  'body-frame.json': buildBodyFrameProject,
+  'splayed-legs.json': buildSplayedLegsProject,
+  'tail-gimbal.json': buildTailGimbalProject,
   'towering-figure.json': buildToweringFigureProject,
   'winged-costume.json': buildWingedCostumeProject,
   'pincer-costume.json': buildPincerCostumeProject,

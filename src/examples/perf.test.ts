@@ -6,9 +6,13 @@
 // solve + compose loop. The assertion uses the MEDIAN of 60 frames: a robust
 // per-frame statistic that a GC pause or a parallel test worker cannot flip.
 import { describe, expect, it } from 'vitest';
+import type { Project } from '../schema';
 import { solve } from '../solver';
 import { anchorTargets, bindingTargets, getClip, samplePose } from '../wearer';
+import { buildBodyFrameProject } from './bodyFrame';
 import { buildFullCreatureProject } from './fullCreature';
+import { buildSplayedLegsProject } from './splayedLegs';
+import { buildTailGimbalProject } from './tailGimbal';
 
 describe('compound solve stays within the frame budget', () => {
   it('solves the full-creature compound at a walk pose in <16 ms/frame (median)', () => {
@@ -41,4 +45,45 @@ describe('compound solve stays within the frame budget', () => {
       `median frame time ${median.toFixed(2)} ms (min ${times[0]!.toFixed(2)}, max ${times[N - 1]!.toFixed(2)})`,
     ).toBeLessThan(16);
   });
+
+  // the fully-3D samples (PLANFILE-3d-raptor-samples.md) are much smaller
+  // than the full creature but exercise new per-frame content (pinned-axis
+  // wag, crossed rope pairs, splayed hinge ties) — same walk-pose kinematic
+  // frame, same median-of-60 statistic, same 16 ms budget
+  const NEW_EXAMPLES: Array<[string, () => Project]> = [
+    ['body frame', buildBodyFrameProject],
+    ['splayed legs', buildSplayedLegsProject],
+    ['tail gimbal', buildTailGimbalProject],
+  ];
+  for (const [name, build] of NEW_EXAMPLES) {
+    it(`solves the ${name} example at a walk pose in <16 ms/frame (median)`, () => {
+      const project = build();
+      const mechanism = project.mechanism;
+      const walk = getClip('walk');
+      expect(walk).toBeTruthy();
+      const frame = (t: number) => {
+        const pose = samplePose(walk!, t);
+        const inputs = {
+          channelValues: Object.fromEntries(mechanism.inputs.map((c) => [c.name, c.value])),
+          dragTargets: bindingTargets(mechanism, project.wearer, pose),
+          groundTargets: anchorTargets(mechanism, project.wearer, pose),
+        };
+        return solve(mechanism, inputs, 'kinematic');
+      };
+      for (let i = 0; i < 20; i++) frame(i * 0.05);
+      const N = 60;
+      const times: number[] = [];
+      for (let i = 0; i < N; i++) {
+        const t0 = performance.now();
+        frame(i * 0.03);
+        times.push(performance.now() - t0);
+      }
+      times.sort((a, b) => a - b);
+      const median = times[N / 2]!;
+      expect(
+        median,
+        `median frame time ${median.toFixed(2)} ms (min ${times[0]!.toFixed(2)}, max ${times[N - 1]!.toFixed(2)})`,
+      ).toBeLessThan(16);
+    });
+  }
 });

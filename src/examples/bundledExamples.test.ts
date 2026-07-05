@@ -23,6 +23,9 @@ const FILE_BY_ID: Record<string, string> = {
   'example-leg-exoskeleton': 'leg-exoskeleton.json',
   'example-tail': 'tail.json',
   'example-full-creature': 'full-creature.json',
+  'example-body-frame': 'body-frame.json',
+  'example-splayed-legs': 'splayed-legs.json',
+  'example-tail-gimbal': 'tail-gimbal.json',
   // complete-costume samples C1–C5 (PLANFILE-fun-costume-samples.md);
   // per-costume structural + solve acceptance lives in each costume's own
   // test file (toweringFigure.test.ts, …)
@@ -89,8 +92,8 @@ function elementRefsOf(el: MechanismElement): string[] {
 }
 
 describe('bundled example registry (§9)', () => {
-  it('ships all twelve examples, each JSON valid and matching its builder', () => {
-    expect(EXAMPLES).toHaveLength(12);
+  it('ships all fifteen examples, each JSON valid and matching its builder', () => {
+    expect(EXAMPLES).toHaveLength(15);
     for (const example of EXAMPLES) {
       const project = example.load();
       const builder = ARTIFACT_BUILDERS[FILE_BY_ID[example.id]!]!;
@@ -462,6 +465,247 @@ describe('example 7 — full creature: ONE compound document (§9 item 7)', () =
   });
 });
 
+describe('example 8 — body frame (suspended), fully-3D closed frame', () => {
+  const project = loadExample('example-body-frame')!;
+  const mech = project.mechanism;
+
+  it('welds the closed frame rigid: every corner pivot welds all member pairs', () => {
+    for (const piv of pivotsOf(project)) {
+      expect(piv.joint, piv.id).toEqual({ kind: 'spherical' });
+      const pairs = (piv.memberIds.length * (piv.memberIds.length - 1)) / 2;
+      expect(piv.welds.length, piv.id).toBe(pairs);
+    }
+    // the prow tip meets BELOW the rail plane — the frame is not planar
+    expect(nodePos(project, 'nose').y).toBeLessThan(nodePos(project, 'cornerFL').y - 0.1);
+  });
+
+  it('carries a genuinely non-planar bent hoop: nonzero dihedrals in the bend schedule', () => {
+    const bom = computeBom(project);
+    const hoop = bom.bendSchedule.find((b) => b.elementId === 'spineHoop');
+    expect(hoop).toBeDefined();
+    expect(hoop!.vertices).toHaveLength(3);
+    // first bend defines the reference plane (dihedral 0 by convention); the
+    // later bends must twist out of it — impossible in a v6 planar document
+    expect(hoop!.vertices[0]!.dihedralRad).toBe(0);
+    const laterTwists = hoop!.vertices.slice(1).map((v) => Math.abs(v.dihedralRad));
+    expect(Math.max(...laterTwists)).toBeGreaterThan(0.1);
+    for (const v of hoop!.vertices) expect(v.angleRad).toBeGreaterThan(0.05);
+  });
+
+  it('derives every bungee and strap length from the drawn geometry', () => {
+    for (const el of mech.elements) {
+      if (el.type === 'elastic' && el.id.startsWith('bungee')) {
+        const drawn = dist3(nodePos(project, el.nodeA), nodePos(project, el.nodeB));
+        expect(el.restLengthM, el.id).toBeCloseTo(0.85 * drawn, 3);
+      }
+      if (el.type === 'rope' && el.id.startsWith('strap')) {
+        const drawn = dist3(nodePos(project, el.path[0]!), nodePos(project, el.path[1]!));
+        expect(el.lengthM, el.id).toBeCloseTo(drawn + 0.005, 3);
+      }
+    }
+  });
+
+  it('binds the suspension anchors to the shoulder and hip-rect wearer anchors', () => {
+    expect(
+      mech.anchorBindings
+        .map((b) => [b.anchor, b.nodeId])
+        .sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    ).toEqual([
+      ['hipRectBackL', 'hipAnchBL'],
+      ['hipRectBackR', 'hipAnchBR'],
+      ['hipRectFrontL', 'hipAnchFL'],
+      ['hipRectFrontR', 'hipAnchFR'],
+      ['shoulderL', 'shoulderAnchL'],
+      ['shoulderR', 'shoulderAnchR'],
+    ]);
+  });
+
+  it('populates a fully resolved BOM with a plausible frame weight', () => {
+    const bom = computeBom(project);
+    expect(bom.unresolved.count).toBe(0);
+    expect(bom.weights.grandTotalKg).toBeGreaterThan(1);
+    expect(bom.weights.grandTotalKg).toBeLessThan(15);
+  });
+});
+
+describe('example 9 — splayed legs (3D gait), hinge axes off every panel normal', () => {
+  const project = loadExample('example-splayed-legs')!;
+  const mech = project.mechanism;
+
+  it('is a true mirror pair: every node matches across z = 0, axes as axial vectors', () => {
+    const left = mech.nodes.filter((n) => n.id.startsWith('legL.'));
+    expect(left.length).toBeGreaterThan(0);
+    for (const node of left) {
+      const twin = mech.nodes.find((n) => n.id === node.id.replace('legL.', 'legR.'));
+      expect(twin, node.id).toBeDefined();
+      expect(twin!.position.x).toBe(node.position.x);
+      expect(twin!.position.y).toBe(node.position.y);
+      expect(twin!.position.z).toBeCloseTo(-node.position.z, 9);
+      expect(twin!.kind).toBe(node.kind);
+    }
+    // splayed geometry is NOT mirror-invariant about +z: hinge axes mirror
+    // as axial vectors, (x, y, z) → (−x, −y, z), preserving limit signs
+    for (const id of ['yawPivot', 'kneePivot', 'anklePivot', 'toePivot']) {
+      const l = pivot(project, `legL.${id}`);
+      const r = pivot(project, `legR.${id}`);
+      if (l.joint.kind !== 'hinge' || r.joint.kind !== 'hinge') throw new Error('hinges expected');
+      expect(r.joint.axis.x).toBeCloseTo(-l.joint.axis.x, 9);
+      expect(r.joint.axis.y).toBeCloseTo(-l.joint.axis.y, 9);
+      expect(r.joint.axis.z).toBeCloseTo(l.joint.axis.z, 9);
+      expect(r.angleLimit?.minRad).toBe(l.angleLimit?.minRad);
+      expect(r.angleLimit?.maxRad).toBe(l.angleLimit?.maxRad);
+    }
+  });
+
+  it('rotates the leg hinge axes off every panel normal (unit, |x| > 0.2)', () => {
+    for (const side of ['legL', 'legR']) {
+      for (const id of ['kneePivot', 'anklePivot', 'toePivot']) {
+        const piv = pivot(project, `${side}.${id}`);
+        if (piv.joint.kind !== 'hinge') throw new Error('hinge expected');
+        const { x, y, z } = piv.joint.axis;
+        expect(Math.hypot(x, y, z), piv.id).toBeCloseTo(1, 3);
+        expect(Math.abs(x), piv.id).toBeGreaterThan(0.2);
+      }
+    }
+  });
+
+  it('stacks a sprung hip yaw on the swing linkage, centred at the drawn splay', () => {
+    for (const side of ['legL', 'legR']) {
+      const yaw = pivot(project, `${side}.yawPivot`);
+      expect(yaw.joint.kind).toBe('hinge');
+      if (yaw.joint.kind !== 'hinge') throw new Error('hinge expected');
+      // vertical bearing at an anchored yoke (frame-pinned axis)
+      expect(Math.abs(yaw.joint.axis.y)).toBe(1);
+      const yoke = mech.nodes.find((n) => n.id === yaw.nodeId)!;
+      expect(yoke.kind).toBe('anchor');
+      expect(yaw.torsionSpring).toBeDefined();
+      expect(yaw.torsionSpring!.stiffnessNmPerRad).toBe(40);
+      // the spring rests at the drawn splay angle and the limit brackets it
+      const rest = yaw.torsionSpring!.restAngleRad;
+      expect(yaw.angleLimit!.minRad).toBeCloseTo(rest - 0.35, 3);
+      expect(yaw.angleLimit!.maxRad).toBeCloseTo(rest + 0.35, 3);
+    }
+  });
+
+  it('keeps the leg-exo gait harness: bindings, heel elastic, toe rope-as-limit', () => {
+    expect(mech.skeletonBindings.map((b) => b.point).sort()).toEqual([
+      'hipL',
+      'hipR',
+      'kneeL',
+      'kneeR',
+      'shoeL',
+      'shoeR',
+    ]);
+    for (const side of ['legL', 'legR']) {
+      const rope = mech.elements.find((e) => e.id === `${side}.toeLimitRope`);
+      if (rope?.type !== 'rope') throw new Error('toe rope expected');
+      const drawn = dist3(nodePos(project, rope.path[0]!), nodePos(project, rope.path[1]!));
+      expect(rope.lengthM).toBeCloseTo(drawn + 0.02, 3);
+      const heel = mech.elements.find((e) => e.id === `${side}.heelLiftElastic`);
+      if (heel?.type !== 'elastic') throw new Error('heel elastic expected');
+      const hang = dist3(nodePos(project, heel.nodeA), nodePos(project, heel.nodeB));
+      expect(heel.restLengthM).toBeCloseTo(0.72 * hang, 3);
+    }
+  });
+
+  it('populates a fully resolved BOM', () => {
+    const bom = computeBom(project);
+    expect(bom.unresolved.count).toBe(0);
+    expect(bom.weights.grandTotalKg).toBeGreaterThan(1);
+    expect(bom.weights.grandTotalKg).toBeLessThan(15);
+  });
+});
+
+describe('example 10 — tail gimbal (wag × lift), stacked non-parallel hinges', () => {
+  const project = loadExample('example-tail-gimbal')!;
+  const mech = project.mechanism;
+
+  it('stacks lift on wag through the shared root member, axes non-parallel', () => {
+    const wag = pivot(project, 'wagPivot');
+    const lift = pivot(project, 'liftPivot');
+    // wag: vertical axis at the ANCHORED base (frame-pinned, steer pattern)
+    expect(wag.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: -1, z: 0 } });
+    expect(mech.nodes.find((n) => n.id === wag.nodeId)!.kind).toBe('anchor');
+    expect(wag.welds).toEqual([
+      ['tailRoot', 'wagBarL'],
+      ['tailRoot', 'wagBarR'],
+    ]);
+    // lift: horizontal rest axis CARRIED by the wag-side root — the shared
+    // member is what makes the lift plane rotate with wag
+    expect(lift.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+    expect(lift.memberIds).toContain('tailRoot');
+    expect(wag.memberIds).toContain('tailRoot');
+    // the lift limit brackets the drawn rest deviation of the boom (signed
+    // about the +z axis, "0 = straight continuation" convention)
+    const va = {
+      x: nodePos(project, 'liftBase').x - nodePos(project, 'tailBase').x,
+      y: nodePos(project, 'liftBase').y - nodePos(project, 'tailBase').y,
+    };
+    const vb = {
+      x: nodePos(project, 'j1').x - nodePos(project, 'liftBase').x,
+      y: nodePos(project, 'j1').y - nodePos(project, 'liftBase').y,
+    };
+    const rest = Math.atan2(va.x * vb.y - va.y * vb.x, va.x * vb.x + va.y * vb.y);
+    expect(lift.angleLimit!.minRad).toBeLessThan(rest);
+    expect(lift.angleLimit!.maxRad).toBeGreaterThan(rest);
+    expect(lift.angleLimit!.maxRad - lift.angleLimit!.minRad).toBeCloseTo(1, 3);
+  });
+
+  it('ties the lift axis to the wag cluster through the anti-roll keel', () => {
+    const lift = pivot(project, 'liftPivot');
+    expect(lift.memberIds).toContain('keelPost');
+    // the keel braces run to the wag bar tips: rigid to the WAG cluster,
+    // not the world, so the lift plane rides the wag joint
+    const braceEnds = mech.elements
+      .filter((e) => e.type === 'link' && e.id.startsWith('keelBrace'))
+      .map((e) => (e.type === 'link' ? [e.nodeA, e.nodeB] : []));
+    expect(braceEnds).toEqual([
+      ['keelTop', 'wagL'],
+      ['keelTop', 'wagR'],
+    ]);
+    // the boom joint keeps the tail example's torsion-sprung compliance
+    expect(pivot(project, 'flexPivot').torsionSpring).toBeDefined();
+  });
+
+  it('derives every drive rope length from the drawn geometry', () => {
+    for (const id of ['wagRopeL', 'wagRopeR']) {
+      const rope = mech.elements.find((e) => e.id === id);
+      if (rope?.type !== 'rope') throw new Error(`${id} must be a rope`);
+      const drawn = dist3(nodePos(project, rope.path[0]!), nodePos(project, rope.path[1]!));
+      expect(rope.lengthM, id).toBeCloseTo(drawn + 0.002, 3);
+    }
+    const lift = mech.elements.find((e) => e.id === 'liftRope');
+    if (lift?.type !== 'rope') throw new Error('liftRope must be a rope');
+    const drawn =
+      dist3(nodePos(project, 'liftPull'), nodePos(project, 'liftMast')) +
+      dist3(nodePos(project, 'liftMast'), nodePos(project, 'j1'));
+    expect(lift.lengthM).toBeCloseTo(drawn + 0.002, 3);
+  });
+
+  it('ships the looping swish clip with lift peaking at the wag zero-crossings', () => {
+    const clip = project.controlClips.find((c) => c.name === 'tail swish');
+    expect(clip).toBeDefined();
+    expect(clip!.loop).toBe(true);
+    expect(Object.keys(clip!.tracks).sort()).toEqual(['tail lift', 'tail wag']);
+    const wagTrack = clip!.tracks['tail wag']!;
+    const liftTrack = clip!.tracks['tail lift']!;
+    // wag crosses zero at t = 0, 2, 4 — exactly where lift is at full pull
+    for (const [i, t] of wagTrack.timesS.entries()) {
+      if (wagTrack.values[i] === 0) {
+        const j = liftTrack.timesS.indexOf(t);
+        expect(liftTrack.values[j], `t=${t}`).toBe(Math.min(...liftTrack.values));
+      }
+    }
+  });
+
+  it('populates a fully resolved BOM', () => {
+    const bom = computeBom(project);
+    expect(bom.unresolved.count).toBe(0);
+    expect(bom.weights.grandTotalKg).toBeGreaterThan(1);
+    expect(bom.weights.grandTotalKg).toBeLessThan(15);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // POST-INTEGRATION: behavioral acceptance through solve(). Assertion
 // calibration note: `converged` requires every constraint within 1e-4 m —
@@ -593,6 +837,169 @@ describe('post-integration — examples solve (enable with the 3D solver)', () =
     expect(Math.sign(pannedDown.positions['neck.head']!.z)).toBe(
       Math.sign(panned.positions['neck.head']!.z),
     );
+  });
+
+  it('splayed legs: the walk cycle traces a genuinely out-of-plane paw path', async () => {
+    const { solve } = await import('../solver');
+    const { bindingTargets, getClip, samplePose } = await import('../wearer');
+    const { DEFAULT_WEARER } = await import('../schema');
+    const mech = loadExample('example-splayed-legs')!.mechanism;
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    const femurDrawn = dist3(drawn.get('legL.hipSwing')!, drawn.get('legL.eKnee')!);
+    const walk = getClip('walk')!;
+    const stats = {
+      L: { minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY, sumAbsZ: 0 },
+      R: { minZ: Number.POSITIVE_INFINITY, maxZ: Number.NEGATIVE_INFINITY, sumAbsZ: 0 },
+    };
+    for (let i = 0; i < 12; i++) {
+      const pose = samplePose(walk, (i / 12) * walk.durationS);
+      const targets = bindingTargets(mech, DEFAULT_WEARER, pose);
+      const result = solve(mech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      for (const s of ['L', 'R'] as const) {
+        const p = result.positions;
+        // the femur stays a rigid pipe through the whole gait
+        const femur = dist3(p[`leg${s}.hipSwing`]!, p[`leg${s}.eKnee`]!);
+        expect(femur, `sample ${i} ${s}`).toBeCloseTo(femurDrawn, 2);
+        expect(dist3(p[`leg${s}.eToe`]!, p[`leg${s}.eToePad`]!)).toBeLessThan(0.155);
+        const pawZ = p[`leg${s}.eToe`]!.z;
+        stats[s].minZ = Math.min(stats[s].minZ, pawZ);
+        stats[s].maxZ = Math.max(stats[s].maxZ, pawZ);
+        stats[s].sumAbsZ += Math.abs(pawZ);
+      }
+    }
+    for (const s of ['L', 'R'] as const) {
+      // out-of-plane path: the paw's z moves over the cycle AND lives
+      // outside the wearer's sagittal band (mean |z| > hip half-width)
+      expect(stats[s].maxZ - stats[s].minZ, s).toBeGreaterThan(0.02);
+      expect(stats[s].sumAbsZ / 12, s).toBeGreaterThan(DEFAULT_WEARER.hipWidthM / 2);
+    }
+    // left lives wearer-left (+z), right wearer-right (−z), and the two
+    // excursions mirror each other across the (phase-shifted) cycle
+    expect(stats.L.minZ).toBeGreaterThan(0);
+    expect(stats.R.maxZ).toBeLessThan(0);
+    expect(stats.L.sumAbsZ / 12).toBeCloseTo(stats.R.sumAbsZ / 12, 1);
+    expect(stats.L.maxZ - stats.L.minZ).toBeCloseTo(stats.R.maxZ - stats.R.minZ, 1);
+  });
+
+  it('body frame: hangs on the bungees within centimetres of the drawn pose', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-body-frame')!.mechanism;
+    const rest = solve(mech, { channelValues: { 'nose tuck': 0 } }, 'equilibrium');
+    expect(rest.diagnostics.converged).toBe(true);
+    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    for (const id of ['cornerFL', 'cornerFR', 'cornerBL', 'cornerBR']) {
+      expect(dist3(rest.positions[id]!, drawn.get(id)!), id).toBeLessThan(0.05);
+    }
+    // the suspended frame stays laterally centred (mirror-symmetric hang)
+    expect(Math.abs(rest.positions.nose!.z)).toBeLessThan(0.01);
+  });
+
+  it('body frame: the nose-tuck cinch pitches the prow down with the frame intact', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-body-frame')!.mechanism;
+    const solveAt = (tuck: number) =>
+      solve(mech, { channelValues: { 'nose tuck': tuck } }, 'equilibrium');
+    const rest = solveAt(0);
+    const tucked = solveAt(-0.08);
+    expect(tucked.diagnostics.converged).toBe(true);
+    expect(tucked.positions.nose!.y).toBeLessThan(rest.positions.nose!.y - 0.02);
+    // the welded frame is one rigid body: every rail keeps its drawn length
+    const drawn = new Map(mech.nodes.map((n) => [n.id, n.position]));
+    for (const el of mech.elements) {
+      if (el.type !== 'link') continue;
+      const restLen = dist3(drawn.get(el.nodeA)!, drawn.get(el.nodeB)!);
+      const now = dist3(tucked.positions[el.nodeA]!, tucked.positions[el.nodeB]!);
+      expect(Math.abs(now - restLen), el.id).toBeLessThan(2e-3);
+    }
+  });
+
+  it('tail gimbal: rests sagittal; wag follows the grip side; lift rides wag', {
+    timeout: 30_000,
+  }, async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-tail-gimbal')!.mechanism;
+    const solveAt = (wag: number, lift: number) =>
+      solve(mech, { channelValues: { 'tail wag': wag, 'tail lift': lift } }, 'equilibrium');
+    const rest = solveAt(0, 0);
+    expect(rest.diagnostics.converged).toBe(true);
+    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
+    // near the sagittal plane at rest (the crossed pair's 2 mm slack leaves
+    // a small free dead-band, so "near", not "on")
+    expect(Math.abs(rest.positions.tailTip!.z)).toBeLessThan(0.05);
+    // wag: the tip swings to the SAME side as the grip, both ways. Massy
+    // chain against rope limits: assert residual + behaviour (see header)
+    const wagged = new Map<number, ReturnType<typeof solveAt>>();
+    for (const wag of [0.05, -0.05]) {
+      const result = solveAt(wag, 0);
+      wagged.set(wag, result);
+      expect(result.diagnostics.residual).toBeLessThan(1e-3);
+      const tipZ = result.positions.tailTip!.z;
+      expect(Math.abs(tipZ), `wag ${wag}`).toBeGreaterThan(0.05);
+      expect(Math.sign(tipZ), `wag ${wag}`).toBe(Math.sign(wag));
+    }
+    // lift RIDES wag: pulling lift while wagged raises the tip measurably
+    // without giving up the wagged side — the lift hinge rode the wag joint
+    const waggedOnly = wagged.get(0.05)!;
+    const waggedLifted = solveAt(0.05, -0.05);
+    expect(waggedLifted.diagnostics.residual).toBeLessThan(1e-3);
+    expect(waggedLifted.positions.tailTip!.y).toBeGreaterThan(
+      waggedOnly.positions.tailTip!.y + 0.05,
+    );
+    expect(Math.abs(waggedLifted.positions.tailTip!.z)).toBeGreaterThan(0.05);
+    expect(Math.sign(waggedLifted.positions.tailTip!.z)).toBe(
+      Math.sign(waggedOnly.positions.tailTip!.z),
+    );
+  });
+
+  it('tail gimbal: torsion compliance sags a heavier tip lower', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-tail-gimbal')!.mechanism;
+    const rest = solve(mech, { channelValues: {} }, 'equilibrium');
+    const heavy = structuredClone(mech);
+    heavy.pointMasses.find((m) => m.id === 'tipMass')!.massKg = 1.2;
+    const sagged = solve(heavy, { channelValues: {} }, 'equilibrium');
+    expect(sagged.positions.tailTip!.y).toBeLessThan(rest.positions.tailTip!.y - 0.01);
+  });
+
+  it('tail gimbal: the swish clip orbits the tip through distinct 3D states', {
+    timeout: 30_000,
+  }, async () => {
+    const { solve } = await import('../solver');
+    const project = loadExample('example-tail-gimbal')!;
+    const mech = project.mechanism;
+    const clip = project.controlClips.find((c) => c.name === 'tail swish')!;
+    const trackAt = (name: string, t: number): number => {
+      const track = clip.tracks[name]!;
+      const i = track.timesS.findIndex(
+        (time, idx) => time <= t && (track.timesS[idx + 1] ?? Number.POSITIVE_INFINITY) > t,
+      );
+      const t0 = track.timesS[i]!;
+      const t1 = track.timesS[i + 1] ?? t0;
+      const f = t1 === t0 ? 0 : (t - t0) / (t1 - t0);
+      return track.values[i]! + f * ((track.values[i + 1] ?? track.values[i])! - track.values[i]!);
+    };
+    // quarter points: full pull at the wag zero-crossings, wag extremes at
+    // slack — the tip visits high-centre, low-left and low-right states
+    const states = [0, 1, 3].map((t) => {
+      const result = solve(
+        mech,
+        {
+          channelValues: {
+            'tail wag': trackAt('tail wag', t),
+            'tail lift': trackAt('tail lift', t),
+          },
+        },
+        'equilibrium',
+      );
+      expect(result.diagnostics.residual, `t=${t}`).toBeLessThan(2e-3);
+      return result.positions.tailTip!;
+    });
+    const [high, left, right] = states;
+    expect(high!.y).toBeGreaterThan(left!.y + 0.1);
+    expect(high!.y).toBeGreaterThan(right!.y + 0.1);
+    expect(left!.z).toBeGreaterThan(0.1);
+    expect(right!.z).toBeLessThan(-0.1);
   });
 
   it('full creature: settles millimetre-true at default channel values', async () => {

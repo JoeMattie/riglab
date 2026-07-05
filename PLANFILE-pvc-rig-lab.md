@@ -237,6 +237,7 @@ Ship these as bundled JSON example projects in a "New from example" menu, so the
 7. **Full raptor assembly** — all of the above placed on the wearer with mirrored legs, plus the two arms (single pipe + joint with reel-up rope) and speaker/battery point masses; global CG and BOM populated. Includes a **yoke control** (§4.4) mounted to the hands mapping tilt→head pitch, twist→head roll, swing→head pan, trigger→jaw, and a short bundled control clip (head sweep + jaw snap) that plays over `walk` — demonstrating the full control layer.
 
 *Sync (2026-07-05): the bundled set grows from seven to twelve — five complete-costume samples (towering figure, winged, pincer, serpent, tall quadruped) governed by `PLANFILE-fun-costume-samples.md`, requested by Joe.*
+*Sync (2026-07-05): three fully-3D samples — body frame (suspended), splayed legs (3D gait), tail gimbal (wag × lift) — extend this set to **ten**; PLANFILE-3d-raptor-samples.md governs them.*
 
 ## 10. Stretch goals (only after all phases pass)
 - Cantilever sag estimate per pipe span (E·I from pipe size, closed-form point/distributed-load deflection) with a "sag > 2 cm" warning.
