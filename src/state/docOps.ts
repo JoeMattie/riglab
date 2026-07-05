@@ -33,6 +33,7 @@ import type {
   Vec3,
   WearerAnchor,
 } from '../schema';
+import { cloneElement, copyableSubset, referencedNodeIds } from './cloneElements';
 
 const uid = (): string => crypto.randomUUID();
 
@@ -1250,7 +1251,8 @@ export const SAGITTAL_PLANE: MirrorPlane = {
  * conventions (limits, torsion rest angles) survive the reflection — the
  * same rule the v6→v7 migration uses for mirrored instances. Dependent
  * elements whose references fall outside the selection are dropped (a pivot
- * keeps only in-selection members and needs ≥2; sliders need their rail;
+ * keeps only in-selection members and needs ≥2, except a single-member
+ * ground hinge which travels with its member; sliders need their rail;
  * torsion cables need both pivots). Wearer bindings are NOT copied — the
  * mirrored side is re-bound explicitly (left/right anchors don't reflect
  * mechanically). Creates a group "<source group or 'mirror'> (mirrored)"
@@ -1266,19 +1268,9 @@ export function mirrorDuplicate(
   const selected = m.elements.filter((e) => wanted.has(e.id));
   if (selected.length === 0) return { doc, newElementIds: [], groupId: null };
 
-  // decide which elements can be copied (references must stay inside the set)
-  const selectedIds = new Set(selected.map((e) => e.id));
-  const copyable = selected.filter((e) => {
-    if (e.type === 'pivot') return e.memberIds.filter((id) => selectedIds.has(id)).length >= 2;
-    if (e.type === 'slider') return selectedIds.has(e.alongElementId);
-    if (e.type === 'torsionCable') return selectedIds.has(e.pivotA) && selectedIds.has(e.pivotB);
-    return true;
-  });
-  // pivots that survive, for torsion-cable re-checking
-  const copyableIds = new Set(copyable.map((e) => e.id));
-  const finalElements = copyable.filter(
-    (e) => e.type !== 'torsionCable' || (copyableIds.has(e.pivotA) && copyableIds.has(e.pivotB)),
-  );
+  // which elements can travel with the selection — shared closure rules
+  // (cloneElements.ts, also the clipboard's)
+  const finalElements = copyableSubset(selected);
   if (finalElements.length === 0) return { doc, newElementIds: [], groupId: null };
 
   const reflectPoint = (p: Vec3): Vec3 => sub(p, scale(n, 2 * dot(sub(p, plane.origin), n)));
@@ -1297,128 +1289,16 @@ export function mirrorDuplicate(
     }
     return mapped;
   };
-  const usedNodeIds = new Set<string>();
-  for (const e of finalElements) {
-    switch (e.type) {
-      case 'link':
-      case 'telescope':
-      case 'elastic':
-        usedNodeIds.add(e.nodeA).add(e.nodeB);
-        break;
-      case 'bentLink':
-        for (const id of e.nodeIds) usedNodeIds.add(id);
-        break;
-      case 'pivot':
-      case 'slider':
-        usedNodeIds.add(e.nodeId);
-        break;
-      case 'rope':
-        for (const id of e.path) usedNodeIds.add(id);
-        break;
-      case 'bowden':
-        for (const id of [e.a1, e.a2, e.b1, e.b2]) usedNodeIds.add(id);
-        break;
-      case 'torsionCable':
-        break;
-    }
-  }
-
   const newNodes: Mechanism['nodes'] = [];
-  for (const nodeId of usedNodeIds) {
+  for (const nodeId of referencedNodeIds(finalElements)) {
     const src = m.nodes.find((nd) => nd.id === nodeId);
     if (!src) continue;
     newNodes.push({ ...src, id: mapNode(nodeId), position: reflectPoint(src.position) });
   }
 
-  const freshMasses = <T extends { id: string }>(masses: T[]): T[] =>
-    masses.map((pm) => ({ ...pm, id: uid() }));
-
-  const memberPairMap = (pair: [string, string]): [string, string] => [
-    elIdMap.get(pair[0])!,
-    elIdMap.get(pair[1])!,
-  ];
-
-  const copyElement = (e: MechanismElement): MechanismElement => {
-    const id = elIdMap.get(e.id)!;
-    switch (e.type) {
-      case 'link':
-        return {
-          ...e,
-          id,
-          nodeA: mapNode(e.nodeA),
-          nodeB: mapNode(e.nodeB),
-          pointMasses: freshMasses(e.pointMasses),
-        };
-      case 'telescope':
-        return {
-          ...e,
-          id,
-          nodeA: mapNode(e.nodeA),
-          nodeB: mapNode(e.nodeB),
-          pointMasses: freshMasses(e.pointMasses),
-        };
-      case 'elastic':
-        return { ...e, id, nodeA: mapNode(e.nodeA), nodeB: mapNode(e.nodeB) };
-      case 'bentLink':
-        return {
-          ...e,
-          id,
-          nodeIds: e.nodeIds.map(mapNode),
-          pointMasses: freshMasses(e.pointMasses),
-        };
-      case 'pivot': {
-        const members = e.memberIds.filter((mid) => elIdMap.has(mid));
-        const keptSet = new Set(members);
-        const bothKept = (a: string, b: string) => keptSet.has(a) && keptSet.has(b);
-        return {
-          ...e,
-          id,
-          nodeId: mapNode(e.nodeId),
-          joint:
-            e.joint.kind === 'hinge' ? { kind: 'hinge', axis: mirrorAxis(e.joint.axis) } : e.joint,
-          memberIds: members.map((mid) => elIdMap.get(mid)!),
-          welds: e.welds.filter(([a, b]) => bothKept(a, b)).map(memberPairMap),
-          angleLimit:
-            e.angleLimit && bothKept(e.angleLimit.memberA, e.angleLimit.memberB)
-              ? {
-                  ...e.angleLimit,
-                  memberA: elIdMap.get(e.angleLimit.memberA)!,
-                  memberB: elIdMap.get(e.angleLimit.memberB)!,
-                }
-              : undefined,
-          torsionSpring:
-            e.torsionSpring && bothKept(e.torsionSpring.memberA, e.torsionSpring.memberB)
-              ? {
-                  ...e.torsionSpring,
-                  memberA: elIdMap.get(e.torsionSpring.memberA)!,
-                  memberB: elIdMap.get(e.torsionSpring.memberB)!,
-                }
-              : undefined,
-        };
-      }
-      case 'slider':
-        return {
-          ...e,
-          id,
-          nodeId: mapNode(e.nodeId),
-          alongElementId: elIdMap.get(e.alongElementId)!,
-        };
-      case 'rope':
-        return { ...e, id, path: e.path.map(mapNode) };
-      case 'bowden':
-        return {
-          ...e,
-          id,
-          a1: mapNode(e.a1),
-          a2: mapNode(e.a2),
-          b1: mapNode(e.b1),
-          b2: mapNode(e.b2),
-        };
-      case 'torsionCable':
-        return { ...e, id, pivotA: elIdMap.get(e.pivotA)!, pivotB: elIdMap.get(e.pivotB)! };
-    }
-  };
-  const copies = finalElements.map(copyElement);
+  const copies = finalElements.map((e) =>
+    cloneElement(e, { elIdMap, mapNode, mapAxis: mirrorAxis }),
+  );
 
   const newElementIds = finalElements.map((e) => elIdMap.get(e.id)!);
   const sourceGroup = doc.groups.find((g) => elementIds.every((id) => g.elementIds.includes(id)));

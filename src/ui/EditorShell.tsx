@@ -18,6 +18,7 @@ import { computeSkeleton, REST_POSE } from '../wearer';
 import { buildPipeModel } from './assembly/pipeModel';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
+import { copySelection, pasteClipboard } from './editor/clipboardActions';
 import { DofPill } from './editor/DofPill';
 import { EmptyState } from './editor/EmptyState';
 import { pickRenderPositions } from './editor/forces';
@@ -104,6 +105,16 @@ export function EditorShell() {
         ed.setOpenPopover(null);
         ed.setPendingConnect(null);
         ed.clearSelection();
+        return;
+      }
+      // clipboard (PLANFILE-quad-panel-controls C): paste works with an
+      // empty selection, so both run before the selection guard below
+      if (mod && key === 'c') {
+        if (copySelection()) e.preventDefault();
+        return;
+      }
+      if (mod && key === 'v') {
+        if (pasteClipboard().length > 0) e.preventDefault();
         return;
       }
       // delete / duplicate act on the global selection

@@ -54,11 +54,7 @@ export function PanelToggleChip() {
             type="button"
             data-testid={`panel-toggle-${id}`}
             aria-pressed={on}
-            title={
-              on
-                ? `hide the ${SHORT_TITLES[id]} panel`
-                : `show the ${SHORT_TITLES[id]} panel`
-            }
+            title={on ? `hide the ${SHORT_TITLES[id]} panel` : `show the ${SHORT_TITLES[id]} panel`}
             onClick={() => togglePanelVisible(id)}
             style={{
               ...toggleChipStyle(on),

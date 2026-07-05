@@ -3,6 +3,7 @@ import type { ProposedChange } from '../design/autoResolve';
 import { getQuadLayoutPref, setQuadLayoutPref } from '../persistence/prefs';
 import type { Vec2, Vec3 } from '../schema';
 import { clampSplit, PANEL_ORDER, type QuadSplit } from '../ui/quad/quadLayout';
+import type { ClipboardPayload } from './clipboard';
 
 // workspace layout prefs (splitter fractions + panel visibility) restore at
 // module load and re-persist on every change — like the night pref
@@ -196,6 +197,12 @@ export interface EditorState {
   activePanel: QuadPanelId;
   /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
   controlsOpen: boolean;
+  /** selection clipboard (PLANFILE-quad-panel-controls C) — a full snapshot
+   * of copied elements + referenced nodes. Transient app state, never in the
+   * file format; cleared on project switch (its ids/materials/channels are
+   * document-scoped) */
+  clipboard: ClipboardPayload | null;
+  setClipboard(payload: ClipboardPayload | null): void;
 
   /** onboarding empty-state dismissed for the current document ("Start
    * drawing" must actually clear the overlay so the canvas gets the pointer) */
@@ -285,6 +292,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   panelDepths: { top: 0, front: 0, side: 0 },
   activePanel: 'side',
   controlsOpen: false,
+  clipboard: null,
+  setClipboard: (clipboard) => set({ clipboard }),
   onboardingDismissed: false,
   dismissOnboarding: () => set({ onboardingDismissed: true }),
 
@@ -298,6 +307,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       openPopover: null,
       lengthEdit: null,
       autoProposal: null,
+      clipboard: null,
       panelDepths: { top: 0, front: 0, side: 0 },
       onboardingDismissed: false,
     }),
