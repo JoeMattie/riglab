@@ -1940,3 +1940,51 @@ median (min 3.66, max 5.08) on the full creature; four-bar planarity
 improved to |z| ≤ 8.4e-10. The perf acceptance asserts the MEDIAN of 60
 per-frame timings < 16 ms — robust to GC pauses and test-worker
 parallelism, unlike the old mean.
+
+### DECISION: five complete-costume bundled examples (2026-07-05)
+Joe asked for "like 5 fun sample projects" (a dancing giant, strange
+animals) and steered mid-kickoff that they be **complete costumes** —
+full wearable rigs (suspension harness + body structure + several
+articulated subsystems), not single-gadget demos. Governed by
+`PLANFILE-fun-costume-samples.md`; §9's bundled set grows 7 → 12
+(towering figure, winged, pincer, serpent, tall quadruped), same
+builder→JSON pipeline, per-costume tests in their own files. Notable
+in-envelope deviations from the costume specs, found during
+implementation (details in each builder's header comments):
+- **Eyelet re-routing beats straight ties**: the specced towering-figure
+  rope path and winged-costume hand→spar tie both transmit ~zero motion
+  (attachment on/near the hinge axis, or hand orbiting at spar height);
+  both rigs gained off-axis eyelets (raked horn posts / frame-corner
+  eyelet) to turn wearer motion into drive stroke.
+- **Antagonists corrected**: the winged costume's mast-elastic return
+  provably collapses at deep droop (line wraps under the hinge axis;
+  wing one-way-ratchets down) — replaced as depth-return torsion spring
+  + gravity-assist elastic. Bobble nests on tall masts need pretension
+  (0.88× drawn) and axisymmetric crowns to survive the settle transient.
+- **Extra rigging is load-bearing, not decoration**: serpent body hoop
+  needed a guyed ridge truss (stays landing on the pan axes, so
+  pan-invariant); pincer lift masts needed diagonal stays; the anti-roll
+  keel generalizes to per-segment "horns" on the serpent's 4-deep chain.
+- **Honest-solve calibration**: pincer, serpent, tall-quadruped rest
+  solves floor at residual ≈ 1–2e-4 (tension-only members at active
+  boundaries / sub-µm creep below the quiescence gate) and never report
+  `converged: true`; their tests use the sanctioned residual < 1e-3 +
+  behavior form (full-creature precedent), never residual-only.
+- **Pincer grip travel capped at 26 mm** (< full close): above ~29 mm
+  the equilibrium warm start deterministically throws the moving jaw
+  across its mirror branch. Verified by sweep; claw still closes
+  0.150 → 0.055 m.
+- **Perf finding, no new perf assertion**: the tall quadruped is now the
+  heaviest example on the walk drag path — isolated median 13.6 ms/frame
+  (min 4.7, max 20.5) vs full-creature's ~4.25, i.e. ~85% of the 16 ms
+  §11 budget. It honestly meets the budget, but a perf.test.ts case for
+  it cannot be made CI-stable: under parallel-test-worker contention the
+  median lands at ~16.1 ms even taking the best of three 60-frame
+  windows (measured 3/3 failures on `vitest run src/examples`). Rather
+  than ship a flaky gate or a weakened statistic, perf.test.ts keeps its
+  original full-creature assertion; open review item for Joe — isolate
+  perf tests in their own vitest pool, lighten the costume, or accept
+  the documented measurement as the record.
+Conflict flag: the unmerged `3d-raptor-samples` branch independently
+grows the registry 7 → 10; whichever branch merges second rebases the
+registry lists/counts.

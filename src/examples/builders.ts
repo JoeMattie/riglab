@@ -68,6 +68,20 @@ export function buildTailProject(): Project {
   );
 }
 
+// Complete-costume examples C1–C5 (PLANFILE-fun-costume-samples.md): each is
+// a self-contained project builder in its own module.
+export { buildPincerCostumeProject } from './pincerCostume';
+export { buildSerpentCostumeProject } from './serpentCostume';
+export { buildTallQuadrupedProject } from './tallQuadruped';
+export { buildToweringFigureProject } from './toweringFigure';
+export { buildWingedCostumeProject } from './wingedCostume';
+
+import { buildPincerCostumeProject } from './pincerCostume';
+import { buildSerpentCostumeProject } from './serpentCostume';
+import { buildTallQuadrupedProject } from './tallQuadruped';
+import { buildToweringFigureProject } from './toweringFigure';
+import { buildWingedCostumeProject } from './wingedCostume';
+
 /** Filename → builder map consumed by the artifact generator. */
 export const ARTIFACT_BUILDERS: Record<string, () => Project> = {
   'seesaw-spine.json': buildSeesawSpineProject,
@@ -77,4 +91,9 @@ export const ARTIFACT_BUILDERS: Record<string, () => Project> = {
   'leg-exoskeleton.json': buildLegExoProject,
   'tail.json': buildTailProject,
   'full-creature.json': buildFullCreatureProject,
+  'towering-figure.json': buildToweringFigureProject,
+  'winged-costume.json': buildWingedCostumeProject,
+  'pincer-costume.json': buildPincerCostumeProject,
+  'serpent-costume.json': buildSerpentCostumeProject,
+  'tall-quadruped.json': buildTallQuadrupedProject,
 };

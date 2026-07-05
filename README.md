@@ -36,7 +36,8 @@ All five original phases (0–5, incl. 4.5 controls) shipped before the
 conversion: sketch & play, forces (ropes/elastics/bowden/torsion +
 equilibrium readouts), the design face (materials DB, nesting matrix,
 resolution checklist, BOM + CSV + printable view), controls & control
-clips, the seven bundled §9 examples, movement-clip library
+clips, the twelve bundled examples (seven §9 items + five complete-costume
+samples, PLANFILE-fun-costume-samples.md), movement-clip library
 ([docs/movement-clips.md](docs/movement-clips.md)), onboarding, and the
 floating-glass interface overhaul.
 
@@ -87,7 +88,7 @@ src/persistence/   Dexie store, autosave, revisions, JSON export/import
 src/state/         Zustand app store + document operations
 src/ui/            React UI (quad workspace, panel editors, perspective view, docks)
 src/wearer/        mannequin, panel-basis silhouette projection, movement clips
-src/examples/      bundled example content (all seven §9 examples, builder-generated)
+src/examples/      bundled example content (all twelve examples, builder-generated)
 e2e/               Playwright smoke suite
 ```
 

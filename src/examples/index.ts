@@ -9,9 +9,14 @@ import fullCreatureJson from './full-creature.json';
 import jawBowdenJson from './jaw-bowden.json';
 import legExoskeletonJson from './leg-exoskeleton.json';
 import neckTrussJson from './neck-truss.json';
+import pincerCostumeJson from './pincer-costume.json';
 import seesawSpineJson from './seesaw-spine.json';
+import serpentCostumeJson from './serpent-costume.json';
 import steerMirrorJson from './steer-mirror.json';
 import tailJson from './tail.json';
+import tallQuadrupedJson from './tall-quadruped.json';
+import toweringFigureJson from './towering-figure.json';
+import wingedCostumeJson from './winged-costume.json';
 
 export {
   ARTIFACT_BUILDERS,
@@ -19,9 +24,14 @@ export {
   buildJawBowdenProject,
   buildLegExoProject,
   buildNeckTrussProject,
+  buildPincerCostumeProject,
   buildSeesawSpineProject,
+  buildSerpentCostumeProject,
   buildSteerMirrorProject,
   buildTailProject,
+  buildTallQuadrupedProject,
+  buildToweringFigureProject,
+  buildWingedCostumeProject,
 } from './builders';
 
 export interface BundledExample {
@@ -36,7 +46,8 @@ export interface BundledExample {
 
 const load = (json: unknown) => (): Project => projectSchema.parse(structuredClone(json));
 
-/** All seven §9 examples, in planfile order. */
+/** All twelve bundled examples: the seven §9 items in planfile order, then
+ * the five complete-costume samples (PLANFILE-fun-costume-samples.md). */
 export const EXAMPLES: BundledExample[] = [
   {
     id: 'example-seesaw-spine',
@@ -80,6 +91,43 @@ export const EXAMPLES: BundledExample[] = [
     description:
       'One compound mechanism: pan × pitch neck joints, mirrored legs, global weight and cut list.',
     load: load(fullCreatureJson),
+  },
+  // Complete-costume examples C1–C5 (PLANFILE-fun-costume-samples.md): full
+  // wearable rigs — suspension harness + body structure + several subsystems.
+  {
+    id: 'example-towering-figure',
+    name: 'Towering figure (dance mirror)',
+    description:
+      '9 ft backpack figure whose marionette arms mirror your hands through the dance clip.',
+    load: load(toweringFigureJson),
+  },
+  {
+    id: 'example-winged-costume',
+    name: 'Winged costume (arm-flap wings)',
+    description:
+      'Bent-spar wings flap ~4× your arm swing; trigger-fired jaw, sprung tail, hung body frame.',
+    load: load(wingedCostumeJson),
+  },
+  {
+    id: 'example-pincer-costume',
+    name: 'Pincer costume (twin trigger claws)',
+    description:
+      'Wide shell hoop with two Bowden-trigger claws that wave with your arms; sprung eye stalks.',
+    load: load(pincerCostumeJson),
+  },
+  {
+    id: 'example-serpent-costume',
+    name: 'Serpent costume (pan head, wave tail)',
+    description:
+      'Steerable pan head + jaw, and a torsion-cable tail chain that whips a wave down four joints.',
+    load: load(serpentCostumeJson),
+  },
+  {
+    id: 'example-tall-quadruped',
+    name: 'Tall quadruped (gait legs, sky neck)',
+    description:
+      '10 ft sprung neck with bobble head, walk-driven front legs, counterweight tail for balance.',
+    load: load(tallQuadrupedJson),
   },
 ];
 
