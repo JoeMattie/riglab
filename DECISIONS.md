@@ -1779,3 +1779,15 @@ jaw-bowden example moved up to head height (`JAW_PIVOT_Y`) — mechanism space
 is the wearer's world frame (§7), so geometry authored around a local y=0
 origin was living underground; its heel-rotation cable sizing was fixed to
 rotate about the jaw pivot rather than the origin in the process.
+
+## Process rule change (2026-07-04)
+
+### DECISION: tests-first requirement dropped (Joe's direction)
+The "write acceptance tests before implementation" rule for solver and BOM
+math is removed from CLAUDE.md, planfile §11/§12, and the README. Joe's
+reasoning: tests are useful, but mandatory TDD is a crutch. The invariant
+that survives: solver and BOM math must still be covered by the phase's
+acceptance tests, and a phase (or feature slice) isn't done until they
+pass — only the required ordering (tests before code) is gone. The
+skip-marked future-phase-test convention above remains valid history but is
+no longer mandated going forward.

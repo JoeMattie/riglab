@@ -98,10 +98,10 @@ npm run build      # production build to dist/
 ```
 
 CI (GitHub Actions) runs typecheck, lint, tests, build, and the Playwright
-smoke on every push. Solver and BOM math are developed test-first:
-acceptance tests for future phases are committed skip-marked and un-skipped
-at the start of their phase. UI logic is tested in Vitest (Testing Library);
-the Playwright suite stays smoke-level.
+smoke on every push. Solver and BOM math are covered by acceptance tests
+keyed to the planfile phases; each phase must pass its tests before it
+counts as done. UI logic is tested in Vitest (Testing Library); the
+Playwright suite stays smoke-level.
 
 ## Layout
 

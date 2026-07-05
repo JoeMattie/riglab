@@ -5,7 +5,7 @@
 
 ## Process rules
 - Work strictly phase-by-phase (planfile §11). Do not begin phase N+1 until phase N's acceptance criteria pass as automated tests. **Pause for human review at the end of Phase 0 (DECISIONS.md) and Phase 2 (solver correctness)** — these are the two decisions everything downstream depends on.
-- **Tests first for solver and BOM math**: write the phase's acceptance tests before implementation. UI logic is tested in Vitest (+ Testing Library) — if a behavior can be asserted against a component or `solve()`, it must not become an e2e spec. Playwright stays a small smoke suite kept green; it is not the development verification loop.
+- **Solver and BOM math must be covered by the phase's acceptance tests** before the phase counts as done — write the tests whenever it helps (test-first is not required). UI logic is tested in Vitest (+ Testing Library) — if a behavior can be asserted against a component or `solve()`, it must not become an e2e spec. Playwright stays a small smoke suite kept green; it is not the development verification loop.
 - Log every architectural or library decision, and every deliberate deviation from the planfile, in `DECISIONS.md` with one-paragraph reasoning. Deviations must also be called out to me in your summary, not buried.
 - No scope beyond the planfile without asking. No speculative abstractions, no extra features, no "while I was in there" additions. Stretch goals (§10) are off-limits until all five phases pass.
 - Keep the checked-in planfile in sync: if we agree to change scope, update the planfile in the same commit.
