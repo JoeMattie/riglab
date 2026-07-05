@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { exportProjectJson, suggestedFileName } from '../persistence/exportImport';
+import { setUnitsPref } from '../persistence/prefs';
+import type { UnitsPreference } from '../schema';
 import { useAppStore } from '../state/appStore';
 import { type Face, useEditorStore } from '../state/editorStore';
 import { Badge } from './components/badge';
@@ -136,6 +138,29 @@ export function EditorShell() {
           </ToggleGroupItem>
         </ToggleGroup>
         <span style={{ flex: 1 }} />
+        {/* units toggle (§8.3): stored on the project (display-only — all
+            quantities stay SI internally), mirrored to the localStorage pref
+            that seeds NEW projects */}
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={current.unitsPreference}
+          onValueChange={(v) => {
+            if (!v) return;
+            const units = v as UnitsPreference;
+            updateCurrent((doc) => ({ ...doc, unitsPreference: units }));
+            setUnitsPref(units);
+          }}
+          data-testid="units-toggle"
+        >
+          <ToggleGroupItem value="imperial" data-testid="units-imperial">
+            in/lb
+          </ToggleGroupItem>
+          <ToggleGroupItem value="metric" data-testid="units-metric">
+            m/kg
+          </ToggleGroupItem>
+        </ToggleGroup>
         <Button
           type="button"
           variant="outline"

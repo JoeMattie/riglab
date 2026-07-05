@@ -1,4 +1,4 @@
-import { createEmptyProject, migrateToLatest, type Project } from '../schema';
+import { createEmptyProject, migrateToLatest, type Project, type UnitsPreference } from '../schema';
 import { REVISION_LIMIT, RigLabDb } from './db';
 
 export interface ProjectSummary {
@@ -18,8 +18,13 @@ export class ProjectStore {
     return rows.map(({ id, name, updatedAt }) => ({ id, name, updatedAt }));
   }
 
-  async createProject(name: string, id: string = crypto.randomUUID()): Promise<Project> {
+  async createProject(
+    name: string,
+    id: string = crypto.randomUUID(),
+    units?: UnitsPreference,
+  ): Promise<Project> {
     const doc = createEmptyProject(id, name);
+    if (units) doc.unitsPreference = units;
     await this.saveProject(doc);
     return doc;
   }

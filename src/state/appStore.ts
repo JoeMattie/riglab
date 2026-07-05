@@ -2,7 +2,7 @@ import { temporal } from 'zundo';
 import { create } from 'zustand';
 import { createAutosaver } from '../persistence/autosave';
 import { importProjectJson } from '../persistence/exportImport';
-import { setLastProjectId } from '../persistence/prefs';
+import { getUnitsPref, setLastProjectId } from '../persistence/prefs';
 import { ProjectStore, type ProjectSummary } from '../persistence/projectStore';
 import type { Project } from '../schema';
 
@@ -58,7 +58,8 @@ export function createAppStore(store: ProjectStore = new ProjectStore()) {
           },
 
           async createProject(name) {
-            const doc = await store.createProject(name);
+            // new projects inherit the last units choice (localStorage UI pref)
+            const doc = await store.createProject(name, undefined, getUnitsPref());
             setLastProjectId(doc.id);
             set({ current: doc, saveState: 'saved' });
             useStore.temporal.getState().clear();

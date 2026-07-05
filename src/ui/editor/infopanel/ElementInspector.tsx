@@ -16,6 +16,7 @@ import type {
   Mechanism,
   MechanismElement,
   Project,
+  UnitsPreference,
 } from '../../../schema';
 import type { SolveDiagnostics } from '../../../solver';
 import { useAppStore } from '../../../state/appStore';
@@ -32,11 +33,13 @@ import { type Face, useEditorStore } from '../../../state/editorStore';
 import { Badge } from '../../components/badge';
 import { Button } from '../../components/button';
 import { Checkbox } from '../../components/checkbox';
+import { lengthUnit } from '../../units';
 import { formatForce } from '../forces';
 import {
   AssignSelect,
   degrees,
   kilograms,
+  LengthField,
   metres,
   NumberField,
   REALIZATION_OPTIONS,
@@ -73,6 +76,7 @@ export function ElementInspector({
   const channels = boundChannelNames(el, mech);
   const connections = connectedElements(el, mech);
   const design = face === 'design';
+  const units = doc.unitsPreference;
 
   const patch = <K extends MechanismElement['type']>(
     type: K,
@@ -98,18 +102,19 @@ export function ElementInspector({
 
       <Section title="Geometry">
         {(el.type === 'link' || el.type === 'telescope') && geom.lengthM !== undefined && (
-          <Row label="length (m)">
-            <NumberField
-              value={geom.lengthM}
-              min={1e-3}
+          <Row label={`length (${lengthUnit(units)})`}>
+            <LengthField
+              valueM={geom.lengthM}
+              minM={1e-3}
+              units={units}
               testId="length-field"
-              onCommit={(v) => updateCurrent((cur) => setLinkLength(cur, mech.id, el.id, v))}
+              onCommitM={(v) => updateCurrent((cur) => setLinkLength(cur, mech.id, el.id, v))}
             />
           </Row>
         )}
         {el.type === 'bentLink' && (
           <>
-            <Row label="developed length">{metres(geom.developedLengthM ?? 0)}</Row>
+            <Row label="developed length">{metres(geom.developedLengthM ?? 0, units)}</Row>
             {geom.vertexAnglesRad?.map((a, i) => (
               <Row key={el.nodeIds[i + 1]} label={`bend ${i + 1}`}>
                 {degrees(a)}
@@ -118,7 +123,7 @@ export function ElementInspector({
           </>
         )}
         {(el.type === 'rope' || el.type === 'elastic') && geom.lengthM !== undefined && (
-          <Row label="drawn path">{metres(geom.lengthM)}</Row>
+          <Row label="drawn path">{metres(geom.lengthM, units)}</Row>
         )}
         {el.type !== 'bentLink' &&
           elementNodeIds(el, mech)
@@ -135,7 +140,7 @@ export function ElementInspector({
             })}
       </Section>
 
-      <BehaviorSection el={el} patch={patch} />
+      <BehaviorSection el={el} patch={patch} units={units} />
 
       {channels.length > 0 && (
         <Section title="Channels">
@@ -184,13 +189,16 @@ export function ElementInspector({
 function BehaviorSection({
   el,
   patch,
+  units,
 }: {
   el: MechanismElement;
   patch: <K extends MechanismElement['type']>(
     type: K,
     p: Partial<Extract<MechanismElement, { type: K }>>,
   ) => void;
+  units: UnitsPreference;
 }) {
+  const lu = lengthUnit(units);
   switch (el.type) {
     case 'pivot':
       return (
@@ -270,12 +278,13 @@ function BehaviorSection({
     case 'rope':
       return (
         <Section title="Rope">
-          <Row label="L₀ (m)">
-            <NumberField
-              value={el.lengthM}
-              min={1e-3}
+          <Row label={`L₀ (${lu})`}>
+            <LengthField
+              valueM={el.lengthM}
+              minM={1e-3}
+              units={units}
               testId="rope-l0-field"
-              onCommit={(v) => patch('rope', { lengthM: v })}
+              onCommitM={(v) => patch('rope', { lengthM: v })}
             />
           </Row>
           <Row label="eyelets">{Math.max(0, el.path.length - 2)}</Row>
@@ -292,11 +301,12 @@ function BehaviorSection({
               onCommit={(v) => patch('elastic', { stiffnessNPerM: v })}
             />
           </Row>
-          <Row label="rest length (m)">
-            <NumberField
-              value={el.restLengthM}
-              min={1e-3}
-              onCommit={(v) => patch('elastic', { restLengthM: v })}
+          <Row label={`rest length (${lu})`}>
+            <LengthField
+              valueM={el.restLengthM}
+              minM={1e-3}
+              units={units}
+              onCommitM={(v) => patch('elastic', { restLengthM: v })}
             />
           </Row>
           <Row label="pretension (N)">
@@ -317,18 +327,20 @@ function BehaviorSection({
     case 'telescope':
       return (
         <Section title="Telescope">
-          <Row label="min length (m)">
-            <NumberField
-              value={el.minLengthM}
-              min={1e-3}
-              onCommit={(v) => patch('telescope', { minLengthM: v })}
+          <Row label={`min length (${lu})`}>
+            <LengthField
+              valueM={el.minLengthM}
+              minM={1e-3}
+              units={units}
+              onCommitM={(v) => patch('telescope', { minLengthM: v })}
             />
           </Row>
-          <Row label="max length (m)">
-            <NumberField
-              value={el.maxLengthM}
-              min={1e-3}
-              onCommit={(v) => patch('telescope', { maxLengthM: v })}
+          <Row label={`max length (${lu})`}>
+            <LengthField
+              valueM={el.maxLengthM}
+              minM={1e-3}
+              units={units}
+              onCommitM={(v) => patch('telescope', { maxLengthM: v })}
             />
           </Row>
           <Row label="sliding joint">
@@ -342,18 +354,20 @@ function BehaviorSection({
     case 'bowden':
       return (
         <Section title="Bowden">
-          <Row label="rest A (m)">
-            <NumberField
-              value={el.restLengthAM}
-              min={1e-3}
-              onCommit={(v) => patch('bowden', { restLengthAM: v })}
+          <Row label={`rest A (${lu})`}>
+            <LengthField
+              valueM={el.restLengthAM}
+              minM={1e-3}
+              units={units}
+              onCommitM={(v) => patch('bowden', { restLengthAM: v })}
             />
           </Row>
-          <Row label="rest B (m)">
-            <NumberField
-              value={el.restLengthBM}
-              min={1e-3}
-              onCommit={(v) => patch('bowden', { restLengthBM: v })}
+          <Row label={`rest B (${lu})`}>
+            <LengthField
+              valueM={el.restLengthBM}
+              minM={1e-3}
+              units={units}
+              onCommitM={(v) => patch('bowden', { restLengthBM: v })}
             />
           </Row>
         </Section>
@@ -526,7 +540,7 @@ function DesignSections({
         <Section title="Computed">
           {massKg !== undefined && (
             <Row label="mass">
-              <span data-testid="element-mass">{kilograms(massKg)}</span>
+              <span data-testid="element-mass">{kilograms(massKg, doc.unitsPreference)}</span>
             </Row>
           )}
           {forceN !== undefined && (

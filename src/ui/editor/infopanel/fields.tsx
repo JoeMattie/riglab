@@ -1,7 +1,8 @@
 // Small building blocks shared by the info-panel sections (§8.2a): labelled
-// rows, a commit-on-blur/Enter numeric field, and assignment Selects.
+// rows, a commit-on-blur/Enter numeric field (plus a unit-aware length
+// variant), and assignment Selects.
 import { useEffect, useState } from 'react';
-import type { JointRealization } from '../../../schema';
+import type { JointRealization, UnitsPreference } from '../../../schema';
 import { jointRealizationSchema } from '../../../schema';
 import { Input } from '../../components/input';
 import {
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/select';
+import { formatLength, formatMass, lengthFromDisplay, lengthToDisplay } from '../../units';
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -67,6 +69,31 @@ export function NumberField({
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         if (e.key === 'Escape') setText(fmt(value));
       }}
+    />
+  );
+}
+
+/** NumberField for a length stored in SI metres: displays and edits in the
+ * project's preferred unit, commits back in metres. */
+export function LengthField({
+  valueM,
+  onCommitM,
+  units,
+  minM,
+  testId,
+}: {
+  valueM: number;
+  onCommitM: (m: number) => void;
+  units: UnitsPreference;
+  minM?: number;
+  testId?: string;
+}) {
+  return (
+    <NumberField
+      value={lengthToDisplay(valueM, units)}
+      min={minM === undefined ? undefined : lengthToDisplay(minM, units)}
+      testId={testId}
+      onCommit={(v) => onCommitM(lengthFromDisplay(v, units))}
     />
   );
 }
@@ -129,5 +156,7 @@ export const REALIZATION_OPTIONS: SelectOption[] = jointRealizationSchema.option
 }));
 
 export const degrees = (rad: number): string => `${((rad * 180) / Math.PI).toFixed(1)}°`;
-export const metres = (m: number): string => `${Number(m.toFixed(4))} m`;
-export const kilograms = (kg: number): string => `${Number(kg.toFixed(3))} kg`;
+/** Length/mass display in the project's preferred units (§3 conversion at the
+ * UI boundary only). Thin re-exports keep call sites terse. */
+export const metres = formatLength;
+export const kilograms = formatMass;

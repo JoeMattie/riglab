@@ -72,7 +72,10 @@ export function MechanismSummary({
         <Section title="Design progress">
           <Row label="weight">
             <span data-testid="summary-weight">
-              {kilograms(computeBom([mech], doc.materials, doc.bomSettings).weights.grandTotalKg)}
+              {kilograms(
+                computeBom([mech], doc.materials, doc.bomSettings).weights.grandTotalKg,
+                doc.unitsPreference,
+              )}
             </span>
           </Row>
           <Row label="resolved">

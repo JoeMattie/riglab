@@ -50,6 +50,9 @@ function project(): Project {
   const p = createEmptyProject('p1', 'test');
   return {
     ...p,
+    // metric so the assertions below read in the stored SI values; the
+    // imperial display path is asserted separately at the end of this file
+    unitsPreference: 'metric',
     materials: testMaterials(),
     mechanisms: [
       mech([L1, L2, P1, R1], [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 4)], {
@@ -185,6 +188,30 @@ describe('multi-selection', () => {
     render(<InfoPanel />);
     expect(screen.getByTestId('multi-inspector')).toBeTruthy();
     expect(screen.queryByTestId('bulk-material-select')).toBeNull();
+  });
+});
+
+describe('units preference (§3: conversion at the display boundary only)', () => {
+  it('imperial projects display and edit lengths in inches, storing metres', () => {
+    useAppStore.setState({ current: { ...project(), unitsPreference: 'imperial' } });
+    useEditorStore.setState({ selectedElementIds: ['L1'] });
+    render(<InfoPanel />);
+    // 5 m link (0,0)–(3,4) displays as inches
+    const field = screen.getByTestId('length-field') as HTMLInputElement;
+    expect(Number(field.value)).toBeCloseTo(5 / 0.0254, 3);
+    // typing 100 in commits 2.54 m to the document
+    fireEvent.change(field, { target: { value: '100' } });
+    fireEvent.blur(field);
+    const n2 = mech0().nodes.find((n) => n.id === 'n2')!;
+    expect(Math.hypot(n2.position.x, n2.position.y)).toBeCloseTo(2.54, 9);
+  });
+
+  it('imperial projects show mass in pounds', () => {
+    useAppStore.setState({ current: { ...project(), unitsPreference: 'imperial' } });
+    useEditorStore.setState({ selectedElementIds: ['L2'], face: 'design' });
+    render(<InfoPanel />);
+    // 1.5 kg = 3.31 lb
+    expect(screen.getByTestId('element-mass').textContent).toBe('3.31 lb');
   });
 });
 
