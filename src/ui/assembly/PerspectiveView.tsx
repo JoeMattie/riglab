@@ -409,7 +409,10 @@ export function PerspectiveView() {
         <Scene3D scene={scene} />
       </Canvas>
 
-      <RenderTogglePill style={{ top: 8, left: 8 }} />
+      {/* docked below the actions-chip band like the sidebar: at narrow
+          viewports the app-level chip reaches into this quadrant's top edge
+          and would swallow the toggle's clicks */}
+      <RenderTogglePill style={{ top: 44, left: 8 }} />
 
       {/* analysis sidebar (src/analysis): mass, CG, seesaw balance. Docked
           below the floating actions chip (which overlays this quadrant's
