@@ -1576,3 +1576,23 @@ world-space module (`src/design/marquee.ts`) run against the posed render
 positions, so what you box on screen is what gets selected. A guard ref
 swallows the Konva `click` that fires when a marquee's down/up pair lands on
 one shape, which would otherwise replace the fresh multi-selection.
+
+### DECISION: auto-resolve heuristic (parts-minimizing, greedy, deterministic)
+`src/design/autoResolve.ts` proposes materials/realizations for unresolved
+slots. Preference order: **nested slip fit ≻ heat-wrap ≻ existing hardware** —
+nesting and heat-wrap both cost zero purchased parts; nesting wins where
+diameters allow (Joe's explicit ask: complementary pipes slip together). Size
+palette prefers in-use sizes (use-count desc, then DB order), falling back to
+the full DB only when a nesting partner demands it; with no assignments at all
+the fill size is the stock pipe with the most slip partners. Fill-gaps is the
+default; `resolveAssigned` (an explicit UI checkbox) opts into resizing one
+member of a joint to unlock a slip fit and upgrading fitting/boltThrough
+realizations to nested ones — it never churns hardware into heat-wrap (that is
+a labor tradeoff, not a parts count). Greedy single pass, no backtracking;
+members committed to a fit are locked for the rest of the run. End
+realizations follow the joint so BOM allowances come out right: the inner
+member carries the nesting overlap, exactly one (smaller-OD) member carries a
+heat-wrap connector, every socketed end gets `fitting`; zero-allowance ends
+(boltThrough/conduitBox/ropeLashing) are not proposed — noise, not parts. No
+structural/strength reasoning — stated in the preview UI. Proposals are
+transient (no schema change, no schemaVersion bump).
