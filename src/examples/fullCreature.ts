@@ -81,7 +81,9 @@ export function buildArmsMechanism(): Mechanism {
       },
     ],
     pointMasses: [{ id: 'armClawMass', name: 'arm claw', massKg: 0.12, nodeId: 'armHand' }],
-    skeletonBindings: [],
+    // the puppet hand rides the wearer's right hand, so the walk clip's arm
+    // swing animates the arm in 2D and in the 3D assembly (§7.3, Phase 4).
+    skeletonBindings: [{ id: 'bindArmHand', point: 'handR', nodeId: 'armHand' }],
     inputs: [],
     namedStates: [],
   };
@@ -99,8 +101,94 @@ export function buildFullCreatureProject(): Project {
     buildArmsMechanism(),
   ];
 
+  // Instance placement (§4.3/§5.4). Sagittal (side-*) mechanisms lift local
+  // (x,y) straight into the world x-y plane (identity, z=0) since their 2D
+  // coordinates are already true-scale about the wearer. The right leg reuses
+  // the same body plane but its mechanism is authored in the side-right view
+  // (x flips), so `mirror` restores world +x while position.z drops it onto the
+  // right hip. The plan-view steer mechanism rotates +90° about x so its 2D y
+  // becomes world z (a horizontal deck at shoulder height).
+  const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
+  const YAW_X_90 = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
+  const hipHalf = 0.18; // ≈ DEFAULT_WEARER.hipWidthM / 2
+  const shoulderHalf = 0.23; // ≈ DEFAULT_WEARER.shoulderWidthM / 2
+  const shoulderY = 1.43; // ≈ shoulder height for the plan-view deck
+
   const assembly: Assembly = {
-    instances: [],
+    instances: [
+      {
+        id: 'inst-spine',
+        name: 'Seesaw spine',
+        mechanismId: 'seesaw-spine',
+        position: { x: 0, y: 0, z: 0 },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-neck',
+        name: 'Neck truss',
+        mechanismId: 'neck-truss',
+        position: { x: 0, y: 0, z: 0 },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-jaw',
+        name: 'Jaw + Bowden',
+        mechanismId: 'jaw-bowden',
+        position: { x: 0, y: 0, z: 0 },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-steer',
+        name: 'Steer mirror',
+        mechanismId: 'steer-mirror',
+        position: { x: 0, y: shoulderY, z: 0 },
+        quaternion: YAW_X_90,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-tail',
+        name: 'Tail',
+        mechanismId: 'tail-boom',
+        position: { x: 0, y: 0, z: 0 },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-leg-left',
+        name: 'Leg (left)',
+        mechanismId: 'leg-exo-left',
+        position: { x: 0, y: 0, z: hipHalf },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-leg-right',
+        name: 'Leg (right)',
+        mechanismId: 'leg-exo-right',
+        position: { x: 0, y: 0, z: -hipHalf },
+        quaternion: IDENTITY,
+        mirror: true,
+        transformDrive: { kind: 'fixed' },
+      },
+      {
+        id: 'inst-arm',
+        name: 'Arm',
+        mechanismId: 'arms',
+        position: { x: 0, y: 0, z: -shoulderHalf },
+        quaternion: IDENTITY,
+        mirror: false,
+        transformDrive: { kind: 'fixed' },
+      },
+    ],
     bindings: [],
     pointMasses: [
       {
@@ -114,6 +202,18 @@ export function buildFullCreatureProject(): Project {
         name: 'battery pack',
         massKg: 0.55,
         attach: { kind: 'wearerAnchor', anchor: 'beltBack' },
+      },
+      {
+        id: 'headMass',
+        name: 'head + foam',
+        massKg: 0.6,
+        attach: { kind: 'instanceNode', instanceId: 'inst-spine', nodeId: 'head' },
+      },
+      {
+        id: 'tailMass',
+        name: 'tail counterweight',
+        massKg: 0.5,
+        attach: { kind: 'instanceNode', instanceId: 'inst-spine', nodeId: 'tail' },
       },
     ],
     foamPlates: [],

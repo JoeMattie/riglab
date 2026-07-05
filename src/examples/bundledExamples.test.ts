@@ -185,10 +185,10 @@ describe('example 6 — tail', () => {
   });
 });
 
-describe('example 7 — full creature (§9 item 7, 2D scope)', () => {
+describe('example 7 — full creature (§9 item 7)', () => {
   const project = loadExample('example-full-creature')!;
 
-  it('bundles all eight mechanisms plus speaker/battery masses', () => {
+  it('bundles all eight mechanisms with 3D instances and body masses', () => {
     expect(project.mechanisms.map((m) => m.id)).toEqual([
       'seesaw-spine',
       'neck-truss',
@@ -199,9 +199,15 @@ describe('example 7 — full creature (§9 item 7, 2D scope)', () => {
       'tail-boom',
       'arms',
     ]);
+    // Phase 4: every mechanism is placed as a 3D assembly instance
+    expect(project.assembly.instances.map((i) => i.mechanismId).sort()).toEqual(
+      project.mechanisms.map((m) => m.id).sort(),
+    );
     expect(project.assembly.pointMasses.map((m) => m.name).sort()).toEqual([
       'battery pack',
+      'head + foam',
       'speaker',
+      'tail counterweight',
     ]);
   });
 

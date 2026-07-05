@@ -2449,13 +2449,180 @@
           "nodeId": "armHand"
         }
       ],
-      "skeletonBindings": [],
+      "skeletonBindings": [
+        {
+          "id": "bindArmHand",
+          "point": "handR",
+          "nodeId": "armHand"
+        }
+      ],
       "inputs": [],
       "namedStates": []
     }
   ],
   "assembly": {
-    "instances": [],
+    "instances": [
+      {
+        "id": "inst-spine",
+        "name": "Seesaw spine",
+        "mechanismId": "seesaw-spine",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-neck",
+        "name": "Neck truss",
+        "mechanismId": "neck-truss",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-jaw",
+        "name": "Jaw + Bowden",
+        "mechanismId": "jaw-bowden",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-steer",
+        "name": "Steer mirror",
+        "mechanismId": "steer-mirror",
+        "position": {
+          "x": 0,
+          "y": 1.43,
+          "z": 0
+        },
+        "quaternion": {
+          "x": 0.7071067811865476,
+          "y": 0,
+          "z": 0,
+          "w": 0.7071067811865476
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-tail",
+        "name": "Tail",
+        "mechanismId": "tail-boom",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-leg-left",
+        "name": "Leg (left)",
+        "mechanismId": "leg-exo-left",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0.18
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-leg-right",
+        "name": "Leg (right)",
+        "mechanismId": "leg-exo-right",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.18
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": true,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      },
+      {
+        "id": "inst-arm",
+        "name": "Arm",
+        "mechanismId": "arms",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.23
+        },
+        "quaternion": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 1
+        },
+        "mirror": false,
+        "transformDrive": {
+          "kind": "fixed"
+        }
+      }
+    ],
     "bindings": [],
     "pointMasses": [
       {
@@ -2474,6 +2641,26 @@
         "attach": {
           "kind": "wearerAnchor",
           "anchor": "beltBack"
+        }
+      },
+      {
+        "id": "headMass",
+        "name": "head + foam",
+        "massKg": 0.6,
+        "attach": {
+          "kind": "instanceNode",
+          "instanceId": "inst-spine",
+          "nodeId": "head"
+        }
+      },
+      {
+        "id": "tailMass",
+        "name": "tail counterweight",
+        "massKg": 0.5,
+        "attach": {
+          "kind": "instanceNode",
+          "instanceId": "inst-spine",
+          "nodeId": "tail"
         }
       }
     ],

@@ -1467,3 +1467,50 @@ needed — only the drag wiring. Pure coverage: `findSnap` skeleton-snap tests
 against the production build via the scripted `__riglab` hook (dragging the
 example's pivot onto `handL` produced one skeletonBinding), per the "browser
 verification is scripted" rule for drag/snap feel.
+
+## Phase 4 — 3D assembly composition (§5.4)
+
+### DECISION: composition is a separate pure module (`src/assembly/`), not part of solve()
+§5.4 composition is explicitly *not* a 3D solver — it is kinematic layering over
+per-mechanism `solve()` results. Keeping it out of the solver preserves the
+`solve(mechanism, inputs, mode)` contract (§12: no assembly types in the solver
+interface) while still being pure and framework-free. `compose.ts` consumes plain
+`solve()` output + a wearer `SkeletonFrame` and returns plain records; `math3.ts`
+provides dependency-free vec3/quaternion helpers (no three.js) so the layer is
+fast to unit-test. `orchestrate.ts` (`composeProject`) ties `solve()` + skeleton
+bindings + `composeAssembly` into the driver the 3D viewport reads each frame.
+The r3f UI converts these plain records to three objects only at the boundary.
+
+### DECISION: instance lift + mirror convention
+An instance lifts a solved 2D node `(x,y)` to world via
+`origin + rot·(mirror ? −x : x, y, 0)`. `mirror` reflects the *local x axis*
+(not world z), which composes cleanly with the side-left/side-right view
+projection: the right leg reuses the same body plane but its mechanism is
+authored in `side-right` (x already flips), so `mirror:true` restores world +x
+while `position.z` drops it onto the right hip. The unit tests pin this; the
+full-creature acceptance confirms left/right shoes end up mirror-imaged.
+
+### DECISION: transform-drive frame for `instanceNodes` (pan × pitch)
+When an instance is driven by two of a parent instance's solved nodes, the base
+frame is: origin = origin-node world; local +x → the origin→axis heading; local
++y → world up (kept upright so a rope-pitched head plane driven by a pan
+mechanism stands vertical). Degenerate heading∥up falls back to a fixed z axis.
+Authored `position`/`quaternion` then compose on top as a local offset. This
+captures the §5.4 neck pan×pitch layering without a general 3D solver.
+
+### DECISION: full-creature example placed in 3D (Phase 4 promotes it out of "2D scope")
+The example (§9 item 7) now places all eight mechanisms as assembly instances:
+sagittal mechanisms lift with identity at z=0 (their 2D coords are already true
+scale about the wearer); the plan-view steer mechanism rotates +90° about x into
+a horizontal deck; legs offset to ±hipWidth/2 with the right leg mirrored. Body
+masses (speaker, battery, head+foam, tail counterweight) attach to wearer
+anchors / seesaw instance nodes so the CG and seesaw balance report have clear
+front/back arms. The yoke control + control clip (§4.4) still await Phase 4.5.
+
+### Balance report: horizontal-arm formulation
+`balanceReport` sums `m·g·|arm|` where `arm` is the mass's projection on the
+horizontal `frontDir` (⊥ the pivot axis). Moment about a horizontal axis under
+gravity depends only on horizontal distance, so vertical offsets contribute
+nothing — pinned by a unit test. Counterweight suggestion returns the mass at a
+chosen light-side point that zeroes the imbalance. The §11 ±2% acceptance checks
+the report against an independent hand sum of the composed masses' world x.
