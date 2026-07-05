@@ -4,7 +4,7 @@ import { exportProjectJson, suggestedFileName } from '../../persistence/exportIm
 import { setUnitsPref } from '../../persistence/prefs';
 import type { UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { type Face, useEditorStore } from '../../state/editorStore';
+import { type Face, type Mode, useEditorStore } from '../../state/editorStore';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
 
 export function ActionsChip() {
@@ -14,6 +14,8 @@ export function ActionsChip() {
   const redo = useAppStore((s) => s.redo);
   const face = useEditorStore((s) => s.face);
   const setFace = useEditorStore((s) => s.setFace);
+  const mode = useEditorStore((s) => s.mode);
+  const setMode = useEditorStore((s) => s.setMode);
 
   if (!doc) return null;
 
@@ -33,29 +35,40 @@ export function ActionsChip() {
     setUnitsPref(units);
   };
 
-  const segment = (value: Face, label: string) => {
-    const active = face === value;
-    return (
-      <button
-        type="button"
-        data-testid={`face-${value}`}
-        aria-pressed={active}
-        onClick={() => setFace(value)}
-        style={{
-          border: 'none',
-          background: active ? '#fff' : 'none',
-          borderRadius: 6,
-          padding: '3px 12px',
-          font: `${active ? 500 : 400} 12.5px ${T.sans}`,
-          color: active ? T.text : T.muted,
-          cursor: 'pointer',
-          boxShadow: active ? '0 1px 3px rgba(20,24,40,.12)' : 'none',
-        }}
-      >
-        {label}
-      </button>
-    );
-  };
+  const segStyle = (active: boolean): React.CSSProperties => ({
+    border: 'none',
+    background: active ? '#fff' : 'none',
+    borderRadius: 6,
+    padding: '3px 12px',
+    font: `${active ? 500 : 400} 12.5px ${T.sans}`,
+    color: active ? T.text : T.muted,
+    cursor: 'pointer',
+    boxShadow: active ? '0 1px 3px rgba(20,24,40,.12)' : 'none',
+  });
+
+  const segment = (value: Face, label: string) => (
+    <button
+      type="button"
+      data-testid={`face-${value}`}
+      aria-pressed={face === value}
+      onClick={() => setFace(value)}
+      style={segStyle(face === value)}
+    >
+      {label}
+    </button>
+  );
+
+  const modeSegment = (value: Mode, label: string) => (
+    <button
+      type="button"
+      data-testid={`mode-${value}`}
+      aria-pressed={mode === value}
+      onClick={() => setMode(value)}
+      style={segStyle(mode === value)}
+    >
+      {label}
+    </button>
+  );
 
   const iconButton: React.CSSProperties = {
     border: 'none',
@@ -88,12 +101,21 @@ export function ActionsChip() {
       </button>
       <span style={dividerStyle} />
       <span
-        data-testid="face-toggle"
+        data-testid="mode-toggle"
         style={{ display: 'inline-flex', background: '#f4f4f5', borderRadius: 8, padding: 2 }}
       >
-        {segment('sketch', 'Sketch')}
-        {segment('design', 'Design')}
+        {modeSegment('2d', '2D')}
+        {modeSegment('3d', '3D')}
       </span>
+      {mode === '2d' && (
+        <span
+          data-testid="face-toggle"
+          style={{ display: 'inline-flex', background: '#f4f4f5', borderRadius: 8, padding: 2 }}
+        >
+          {segment('sketch', 'Sketch')}
+          {segment('design', 'Design')}
+        </span>
+      )}
       <span style={dividerStyle} />
       <button
         type="button"

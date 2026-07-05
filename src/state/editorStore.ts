@@ -19,6 +19,10 @@ export type Tool =
  * mechanisms or faces never destroys data. */
 export type Face = 'sketch' | 'design';
 
+/** Top-level editor mode (§8): the 2D per-mechanism editor (with sketch/design
+ * faces) vs. the global 3D Assembly viewport. Transient, never persisted. */
+export type Mode = '2d' | '3d';
+
 /** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
  * alongside, materials (incl. nesting matrix) and BOM as siblings. */
 export type RightTab = 'inspector' | 'checklist' | 'materials' | 'bom';
@@ -95,6 +99,7 @@ export interface PlaybackState {
 export interface EditorState {
   activeMechanismId: string | null;
   tool: Tool;
+  mode: Mode;
   face: Face;
   rightTab: RightTab;
   focusHint: FocusHint | null;
@@ -121,6 +126,7 @@ export interface EditorState {
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
+  setMode(mode: Mode): void;
   setFace(face: Face): void;
   setRightTab(tab: RightTab): void;
   setFocusHint(hint: FocusHint | null): void;
@@ -146,6 +152,7 @@ export interface EditorState {
 export const useEditorStore = create<EditorState>()((set) => ({
   activeMechanismId: null,
   tool: 'select',
+  mode: '2d',
   face: 'sketch',
   rightTab: 'inspector',
   focusHint: null,
@@ -175,6 +182,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
       lengthEdit: null,
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
+  setMode: (mode) => set({ mode, openPopover: null, lengthEdit: null, pendingConnect: null }),
   setFace: (face) => set({ face }),
   setRightTab: (rightTab) => set({ rightTab }),
   setFocusHint: (focusHint) => set({ focusHint }),

@@ -9,6 +9,7 @@ import type {
   JointRealization,
   Mechanism,
   MechanismElement,
+  MechanismInstance,
   PivotElement,
   Project,
   RopeElement,
@@ -939,4 +940,37 @@ export function patchElement<K extends MechanismElement['type']>(
       ? withMaturity({ ...el, ...patch } as MechanismElement)
       : el,
   );
+}
+
+// ── Assembly (3D) edits (§4.3/§8.3) ────────────────────────────────────────
+
+/** Patch a mechanism instance's placement transform (gizmo drag, mirror
+ * toggle). Pure Project→Project like every other edit, so undo/autosave see
+ * one path. */
+export function setInstanceTransform(
+  doc: Project,
+  instanceId: string,
+  patch: Partial<Pick<MechanismInstance, 'position' | 'quaternion' | 'mirror'>>,
+): Project {
+  return {
+    ...doc,
+    assembly: {
+      ...doc.assembly,
+      instances: doc.assembly.instances.map((i) => (i.id === instanceId ? { ...i, ...patch } : i)),
+    },
+  };
+}
+
+/** Set an assembly point mass's mass (kg) — drives the live CG/balance
+ * readout in the Assembly analysis sidebar. */
+export function setPointMassKg(doc: Project, pointMassId: string, massKg: number): Project {
+  return {
+    ...doc,
+    assembly: {
+      ...doc.assembly,
+      pointMasses: doc.assembly.pointMasses.map((m) =>
+        m.id === pointMassId ? { ...m, massKg: Math.max(0, massKg) } : m,
+      ),
+    },
+  };
 }

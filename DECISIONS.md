@@ -1514,3 +1514,52 @@ gravity depends only on horizontal distance, so vertical offsets contribute
 nothing — pinned by a unit test. Counterweight suggestion returns the mass at a
 chosen light-side point that zeroes the imbalance. The §11 ±2% acceptance checks
 the report against an independent hand sum of the composed masses' world x.
+
+## Phase 4 — 3D Assembly viewport (§8.3)
+
+### DECISION: `mode: '2d' | '3d'` is transient editor state orthogonal to face
+The global 3D Assembly mode (§8) is a top-level `mode` on the editor store,
+independent of the sketch/design `face` (faces are 2D-only lenses). The
+ActionsChip carries a 2D/3D segmented toggle; the face toggle hides in 3D. The
+shell swaps SketchCanvas for AssemblyView and drops the 2D-only chrome (tool
+pill, DOF pill, design dock). The clip transport stays mounted in both modes —
+its raf loop advances `playback.tS` in the store, so a movement clip animates
+the 2D canvas and the 3D assembly from one timeline with no second loop.
+
+### DECISION: r3f viewport reads the pure composition each frame
+`useAssemblyScene` samples the current clip pose, runs `composeProject`, and
+derives world-space line segments (mechanism elements + mannequin bones), the
+mass markers, and the balance report — all from the pure assembly layer. The
+composition is computed once in AssemblyView and passed into the in-Canvas
+Scene3D (not recomputed there) to avoid double-solving per frame. Instances draw
+as `lineSegments`; the CG is a sphere with a drop line to the ground grid.
+
+### DECISION: 3D CG/mass includes engineered-pipe self-weight
+`composeProject` feeds per-instance distributed pipe masses (each drawn segment
+= developed-length × the same material linear density the equilibrium solver and
+BOM use, at its midpoint) into the composition, so the 3D CG reflects the PVC
+rather than only bolt-on point/foam masses (the full creature reads ~6.3 kg, in
+line with its BOM). Toggleable via `includePipeMass` (default on). The §11 ±2%
+moment acceptance stays valid — it compares the report against a hand sum over
+whatever masses compose produces.
+
+### [deviation] Placement gizmo + binding editor scope for Phase 4
+§8.3 lists "placement gizmos + mirroring" and a "binding editor". Delivered:
+mirroring (per-instance checkbox), a translate gizmo (drei TransformControls)
+for fixed-drive instances committing through the `setInstanceTransform` docOp,
+a scene tree, editable point-mass masses, a pivot-axis picker, and the live
+mass/CG/seesaw analysis sidebar. **Deferred:** the rotate gizmo, gizmos for
+driven (`wearerAnchor`/`instanceNodes`) instances whose transform is computed
+rather than authored, and an in-3D attachment/skeleton **binding editor** —
+instance placement and bindings are authored in the example builders and the 2D
+sketch face for now. This does not affect the §11 Phase-4 acceptance (which is
+green as automated tests); it trims §8.3 chrome polish, to be revisited in the
+Phase 5 finishing slice alongside the visual pass. Called out per CLAUDE.md.
+
+### Scripted verification: `__riglab.loadExample` seam + assembly e2e smoke
+A dev-only `__riglab.loadExample(id)` seam (sibling of the existing
+`setEquilibrium` seam) loads a bundled example as the live document so the
+Phase-4 UI is verifiable before the Phase-5 "New from example" menu exists.
+`e2e/assembly.spec.ts` loads the full creature, switches to 3D, and asserts the
+WebGL viewport mounts, the mass readout is a plausible creature weight, and the
+seesaw readout renders with no page errors.
