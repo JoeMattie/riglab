@@ -104,6 +104,10 @@ export interface AutoProposalState {
   changes: ProposedChange[];
 }
 
+/** Movement clip pre-selected on launch and started by the global spacebar
+ * toggle when the rest pose is active. A test pins this to a bundled clip. */
+export const DEFAULT_CLIP_NAME = 'walk';
+
 export interface PlaybackState {
   /** active movement clip (§7.2) */
   clipName: string | null;
@@ -210,7 +214,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   selectedElementIds: [],
   posePositions: null,
   playback: {
-    clipName: null,
+    clipName: DEFAULT_CLIP_NAME,
     controlClipName: null,
     playing: false,
     tS: 0,

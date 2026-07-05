@@ -1780,6 +1780,18 @@ is the wearer's world frame (§7), so geometry authored around a local y=0
 origin was living underground; its heel-rotation cable sizing was fixed to
 rotate about the jaw pivot rather than the origin in the process.
 
+### DECISION: walk clip is the transport default; spacebar always drives it
+Joe asked (2026-07-04) for the walk pose to be selected by default and for
+spacebar to toggle it from everywhere. `playback.clipName` now initializes to
+`DEFAULT_CLIP_NAME` (`'walk'`, exported from `editorStore` and pinned to a
+bundled clip by a test) instead of `null`/rest pose. The existing window-level
+space shortcut in `EditorShell` already fired in every mode, but was a no-op
+until a clip was chosen; it now (a) starts the default clip from the rest pose
+rather than toggling `playing` on nothing, and (b) ignores `e.repeat`, because
+space is also the hold-to-pan modifier and OS key-repeat previously flipped
+play/pause continuously while panning. The typing guard is unchanged — space
+in a text field still types a space. Covered by `src/ui/transportKeys.test.tsx`.
+
 ## Process rule change (2026-07-04)
 
 ### DECISION: tests-first requirement dropped (Joe's direction)
