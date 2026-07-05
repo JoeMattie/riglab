@@ -5,7 +5,7 @@
 // the drawn node positions so the JSON artifacts can never drift from the
 // coordinates.
 
-import type { Assembly, Mechanism, Project, Vec2 } from '../schema';
+import type { Assembly, Control, ControlClip, Mechanism, Project, Vec2 } from '../schema';
 import {
   DEFAULT_BOM_SETTINGS,
   DEFAULT_WEARER,
@@ -19,6 +19,7 @@ export function exampleProject(
   name: string,
   mechanisms: Mechanism[],
   assembly: Assembly = emptyAssembly(),
+  extras: { controls?: Control[]; controlClips?: ControlClip[] } = {},
 ): Project {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -28,6 +29,8 @@ export function exampleProject(
     materials: seedMaterialsDb(),
     mechanisms,
     assembly,
+    controls: extras.controls ?? [],
+    controlClips: extras.controlClips ?? [],
     wearer: { ...DEFAULT_WEARER },
     wearerAnchorOverrides: {},
     bomSettings: { ...DEFAULT_BOM_SETTINGS },

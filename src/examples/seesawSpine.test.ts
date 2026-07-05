@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeBom } from '../bom';
 import type { JointRealization, Mechanism } from '../schema';
+import { SCHEMA_VERSION } from '../schema';
 import { buildSeesawSpineProject, loadSeesawSpine } from '.';
 
 const HEATWRAP = new Set<JointRealization>(['heatWrapPivot', 'heatWrapRigid']);
@@ -10,7 +11,7 @@ describe('bundled seesaw-spine example', () => {
   it('the JSON artifact validates and matches the builder (no drift)', () => {
     const loaded = loadSeesawSpine();
     expect(loaded).toEqual(buildSeesawSpineProject());
-    expect(loaded.schemaVersion).toBe(4);
+    expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
   });
 
   it('is a dimensionally plausible elevation truss with tagged pipes and masses', () => {

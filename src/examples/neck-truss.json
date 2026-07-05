@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "id": "example-neck-truss",
   "name": "Example — neck truss (pitch)",
   "unitsPreference": "imperial",
@@ -853,6 +853,8 @@
     "pointMasses": [],
     "foamPlates": []
   },
+  "controls": [],
+  "controlClips": [],
   "wearer": {
     "heightM": 1.75,
     "shoulderWidthM": 0.46,

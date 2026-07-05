@@ -265,6 +265,11 @@ export function fixtureProject(): Project {
         },
       ],
     },
+    // Controls/controlClips (§4.4) are exercised with populated data in
+    // controls.test.ts; the fixture keeps them empty so the migration-chain
+    // equality tests (which produce empty arrays for old docs) hold.
+    controls: [],
+    controlClips: [],
     wearer: { heightM: 1.8, shoulderWidthM: 0.48, hipWidthM: 0.37 },
     wearerAnchorOverrides: {
       shoulderL: { x: 0.02, y: 1.45, z: 0.19 },
@@ -278,7 +283,7 @@ export function fixtureProject(): Project {
  * against real old data. */
 export function fixtureProjectV1(): Record<string, unknown> {
   const p = fixtureProject() as unknown as Record<string, unknown>;
-  const { wearer: _wearer, bomSettings: _bom, ...rest } = p;
+  const { wearer: _wearer, bomSettings: _bom, controls: _c, controlClips: _cc, ...rest } = p;
   return {
     ...rest,
     schemaVersion: 1,
@@ -293,13 +298,22 @@ export function fixtureProjectV1(): Record<string, unknown> {
  * bomSettings) — exercises the 2→3 migration in isolation. */
 export function fixtureProjectV2(): Record<string, unknown> {
   const p = fixtureProject() as unknown as Record<string, unknown>;
-  const { bomSettings: _bom, ...rest } = p;
+  const { bomSettings: _bom, controls: _c, controlClips: _cc, ...rest } = p;
   return { ...rest, schemaVersion: 2 };
 }
 
-/** A version-3 document — identical to v4 except the stamp (lengthLocked is
- * optional and absent) — exercises the stamp-only 3→4 migration. */
+/** A version-3 document — like v4 minus the stamp (lengthLocked optional/absent)
+ * and the v5 controls fields — exercises the stamp-only 3→4 migration. */
 export function fixtureProjectV3(): Record<string, unknown> {
   const p = fixtureProject() as unknown as Record<string, unknown>;
-  return { ...p, schemaVersion: 3 };
+  const { controls: _c, controlClips: _cc, ...rest } = p;
+  return { ...rest, schemaVersion: 3 };
+}
+
+/** A version-4 document (no controls/controlClips yet) — exercises the 4→5
+ * migration that adds the empty control arrays (§4.4). */
+export function fixtureProjectV4(): Record<string, unknown> {
+  const p = fixtureProject() as unknown as Record<string, unknown>;
+  const { controls: _c, controlClips: _cc, ...rest } = p;
+  return { ...rest, schemaVersion: 4 };
 }

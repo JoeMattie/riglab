@@ -1,5 +1,6 @@
 export * from './assembly';
 export * from './common';
+export * from './controls';
 export * from './materials';
 export * from './mechanism';
 export * from './migrations';

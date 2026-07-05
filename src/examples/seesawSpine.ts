@@ -208,6 +208,8 @@ export function buildSeesawSpineProject(): Project {
     materials: seedMaterialsDb(),
     mechanisms: [mechanism],
     assembly: emptyAssembly(),
+    controls: [],
+    controlClips: [],
     wearer: { ...DEFAULT_WEARER },
     wearerAnchorOverrides: {},
     bomSettings: { ...DEFAULT_BOM_SETTINGS },

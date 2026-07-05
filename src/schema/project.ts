@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { assemblySchema, emptyAssembly } from './assembly';
 import { idSchema, unitsPreferenceSchema, vec3Schema, wearerAnchorSchema } from './common';
+import { controlClipSchema, controlSchema } from './controls';
 import { materialsDbSchema } from './materials';
 import { mechanismSchema } from './mechanism';
 import { seedMaterialsDb } from './seedMaterials';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Parametric mannequin dimensions (§7); segment lengths derive from height
  * via standard anthropometry in src/wearer/. */
@@ -44,7 +45,8 @@ export const DEFAULT_BOM_SETTINGS: BomSettings = {
  * Every schema change bumps SCHEMA_VERSION and adds a migration (§3).
  * v2: mechanisms gained skeletonBindings; project gained wearer params.
  * v3: project gained bomSettings; materials DB seeded on creation (§6.1).
- * v4: link/telescope gained optional lengthLocked (interface overhaul). */
+ * v4: link/telescope gained optional lengthLocked (interface overhaul).
+ * v5: project gained controls + controlClips (§4.4). */
 export const projectSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   id: idSchema,
@@ -53,6 +55,10 @@ export const projectSchema = z.object({
   materials: materialsDbSchema,
   mechanisms: z.array(mechanismSchema),
   assembly: assemblySchema,
+  /** virtual input devices over the channel machinery (§4.4) */
+  controls: z.array(controlSchema),
+  /** channel-animation clips (§4.4), composable with movement clips */
+  controlClips: z.array(controlClipSchema),
   wearer: wearerParamsSchema,
   /** overrides of the parametric mannequin's anchor positions (§4.1) */
   wearerAnchorOverrides: z.partialRecord(wearerAnchorSchema, vec3Schema),
@@ -72,6 +78,8 @@ export function createEmptyProject(id: string, name: string): Project {
     materials: seedMaterialsDb(),
     mechanisms: [],
     assembly: emptyAssembly(),
+    controls: [],
+    controlClips: [],
     wearer: { ...DEFAULT_WEARER },
     wearerAnchorOverrides: {},
     bomSettings: { ...DEFAULT_BOM_SETTINGS },

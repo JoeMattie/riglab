@@ -27,6 +27,9 @@ export const migrations: Record<number, Migration> = {
   // v3 → v4: link/telescope gained OPTIONAL lengthLocked (absent = unlocked),
   // so v3 documents are already valid v4 documents — stamp only.
   3: (doc) => doc,
+  // v4 → v5: project gained controls + controlClips (§4.4); old docs get empty
+  // arrays.
+  4: (doc) => ({ ...doc, controls: [], controlClips: [] }),
 };
 
 export class MigrationError extends Error {}

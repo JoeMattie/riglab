@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "id": "example-full-creature",
   "name": "Example — Raptor (full creature)",
   "unitsPreference": "imperial",
@@ -2666,6 +2666,8 @@
     ],
     "foamPlates": []
   },
+  "controls": [],
+  "controlClips": [],
   "wearer": {
     "heightM": 1.75,
     "shoulderWidthM": 0.46,
