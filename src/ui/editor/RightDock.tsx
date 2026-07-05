@@ -4,6 +4,7 @@
 // and the BOM view (§6.2) as sibling tabs.
 import { type RightTab, useEditorStore } from '../../state/editorStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/tabs';
+import { BomPanel } from './BomPanel';
 import { ChecklistPanel } from './ChecklistPanel';
 import { InfoPanel } from './infopanel/InfoPanel';
 import { MaterialsPanel } from './MaterialsPanel';
@@ -12,6 +13,7 @@ const TABS: Array<{ id: RightTab; label: string }> = [
   { id: 'inspector', label: 'Inspector' },
   { id: 'checklist', label: 'Checklist' },
   { id: 'materials', label: 'Materials' },
+  { id: 'bom', label: 'BOM' },
 ];
 
 export function RightDock() {
@@ -50,6 +52,9 @@ export function RightDock() {
         </TabsContent>
         <TabsContent value="materials" className="min-h-0 flex-1 overflow-y-auto">
           <MaterialsPanel />
+        </TabsContent>
+        <TabsContent value="bom" className="min-h-0 flex-1 overflow-y-auto">
+          <BomPanel />
         </TabsContent>
       </Tabs>
     </div>
