@@ -9,6 +9,7 @@ import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { deleteElement, duplicateElement } from '../state/docOps';
 import { useEditorStore } from '../state/editorStore';
+import { useThemeStore } from '../state/themeStore';
 import { AssemblyView } from './assembly/AssemblyView';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
@@ -126,6 +127,7 @@ export function EditorShell() {
         selectedElementIds: s.selectedElementIds,
         rightTab: s.rightTab,
         openPopover: s.openPopover,
+        night: useThemeStore.getState().night,
       };
     };
     // seam for exercising the equilibrium force-overlay plumbing while the

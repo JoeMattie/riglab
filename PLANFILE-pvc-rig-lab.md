@@ -215,7 +215,7 @@ A toggle on the same canvas that overlays engineering state and opens the right 
 - Dimension labels editable inline (type a length, geometry updates).
 
 ### 8.3 Global chrome
-- **Top bar**: project name + project switcher (Dexie-backed list), 2D/3D mode, mechanism tabs (in 2D), Sketch/Design face toggle, units toggle, undo/redo, save state indicator, export/import.
+- **Top bar**: project name + project switcher (Dexie-backed list), 2D/3D mode, mechanism tabs (in 2D), Sketch/Design face toggle, units toggle, day/night view toggle (localStorage UI pref), undo/redo, save state indicator, export/import.
 - **Bottom panel**: playback transport + clip picker, input channel sliders (with lock toggles), control widgets (§4.4) grouped per control, control-clip record/play, gravity toggle, solver status.
 - **Right panel**: the info panel (§8.2a); in the design face the resolution checklist (§8.2) docks alongside it.
 - **3D Assembly mode**: viewport with orbit controls; scene tree (wearer, mechanism instances, point masses, foam); placement gizmos + mirroring (view orientation provides the default plane); binding editor; playback transport drives the full creature; analysis sidebar (mass, CG marker, seesaw balance report); BOM tab with the printable view.

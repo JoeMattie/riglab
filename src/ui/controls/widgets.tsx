@@ -80,7 +80,7 @@ export function AxisDial({ axis, h }: { axis: ControlAxis; h: AxisHandlers }) {
           height: 54,
           borderRadius: '50%',
           border: `2px solid ${T.border}`,
-          background: '#fff',
+          background: T.soft,
           cursor: axis.locked ? 'not-allowed' : 'grab',
           touchAction: 'none',
         }}
@@ -149,7 +149,7 @@ export function Axis2DPad({
           padding: 0,
           borderRadius: 10,
           border: `1px solid ${T.border}`,
-          background: 'linear-gradient(#fafafa,#f0f0f2)',
+          background: `linear-gradient(${T.soft}, ${T.chip})`,
           cursor: locked ? 'not-allowed' : 'crosshair',
           touchAction: 'none',
         }}

@@ -11,7 +11,8 @@ import type { BalanceQuery } from '../../assembly';
 import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { setInstanceTransform, setPointMassKg } from '../../state/docOps';
-import { EDGE, panelStyle, T } from '../editor/theme';
+import { useThemeStore } from '../../state/themeStore';
+import { EDGE, panelStyle, scenePalette, T } from '../editor/theme';
 import type { Segment } from './scene';
 import { useAssemblyScene } from './useAssemblyScene';
 
@@ -72,6 +73,9 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const instances = useAppStore((s) => s.current?.assembly.instances);
   const gizmoRef = useRef<Group>(null);
+  // three.js materials take literal colors (no CSS variables), so the scene
+  // palette re-renders off the night flag
+  const C = scenePalette(useThemeStore((s) => s.night));
 
   const { bones, instanceLines, composition, controlMounts } = scene;
   const cg = composition.cg;
@@ -98,17 +102,17 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
     <>
       <ambientLight intensity={0.9} />
       <directionalLight position={[2, 4, 3]} intensity={0.6} />
-      <gridHelper args={[6, 24, T.border, T.hairline]} />
+      <gridHelper args={[6, 24, C.grid3dCenter, C.grid3d]} />
 
       {/* wearer mannequin */}
-      <Segments data={bones} color="#c8ccd4" width={1} />
+      <Segments data={bones} color={C.mannequin} width={1} />
 
       {/* mechanism instances */}
       {instanceLines.map((inst) => (
         <Segments
           key={inst.id}
           data={inst.segments}
-          color={inst.id === selectedInstanceId ? T.accent : '#5b6472'}
+          color={inst.id === selectedInstanceId ? C.accent : C.instance}
           width={inst.id === selectedInstanceId ? 3 : 2}
         />
       ))}
@@ -134,9 +138,9 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
         <>
           <mesh position={tuple(cg)}>
             <sphereGeometry args={[0.05, 16, 16]} />
-            <meshStandardMaterial color={T.accent} />
+            <meshStandardMaterial color={C.accent} />
           </mesh>
-          <Segments data={[[cg, { x: cg.x, y: 0, z: cg.z }]]} color={T.accent} width={1} />
+          <Segments data={[[cg, { x: cg.x, y: 0, z: cg.z }]]} color={C.accent} width={1} />
         </>
       )}
 
@@ -177,7 +181,7 @@ export function AssemblyView() {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#f6f7f9' }}>
+    <div style={{ position: 'absolute', inset: 0, background: T.viewport }}>
       <Canvas
         camera={{ position: [2.4, 1.6, 2.6], fov: 45 }}
         style={{ position: 'absolute', inset: 0 }}
@@ -230,7 +234,7 @@ export function AssemblyView() {
                   borderRadius: 8,
                   padding: '5px 0',
                   cursor: 'pointer',
-                  background: pivotKey === p.key ? T.accentTint : '#f4f4f5',
+                  background: pivotKey === p.key ? T.accentTint : T.chip,
                   color: pivotKey === p.key ? T.accentText : T.muted,
                   fontSize: 12,
                 }}

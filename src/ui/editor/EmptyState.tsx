@@ -95,7 +95,7 @@ export function EmptyState() {
                   textAlign: 'left',
                   border: `1px solid ${T.border}`,
                   borderRadius: 8,
-                  background: '#fff',
+                  background: T.raised,
                   padding: '8px 10px',
                   cursor: 'pointer',
                   font: `500 12.5px ${T.sans}`,

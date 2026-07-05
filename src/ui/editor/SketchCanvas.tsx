@@ -19,6 +19,7 @@ import {
   setNodeKind,
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
+import { useThemeStore } from '../../state/themeStore';
 import { bindingTargets, computeSilhouette, getClip, REST_POSE, samplePose } from '../../wearer';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
@@ -33,6 +34,7 @@ import { pinchStep, wheelGesture } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
 import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
+import { scenePalette, T } from './theme';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
@@ -136,6 +138,10 @@ export function SketchCanvas() {
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
   const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
+  // Konva shapes take literal colors (no CSS variables), so the drawing
+  // palette re-renders off the night flag
+  const night = useThemeStore((s) => s.night);
+  const C = scenePalette(night);
   const tool = useEditorStore((s) => s.tool);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const select = useEditorStore((s) => s.select);
@@ -888,7 +894,7 @@ export function SketchCanvas() {
     return (
       <div
         ref={containerRef}
-        style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#888' }}
+        style={{ flex: 1, display: 'grid', placeItems: 'center', color: T.muted }}
       >
         <p>Create a mechanism to start sketching.</p>
       </div>
@@ -947,7 +953,7 @@ export function SketchCanvas() {
 
   const selectedSet = new Set(selectedElementIds);
   const strokeFor = (id: string): string =>
-    violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : '#324';
+    violated.includes(id) ? '#d22' : selectedSet.has(id) ? '#d80' : C.ink;
   const pipeWidth = (id: string): number => (selectedSet.has(id) ? 5.5 : 5);
 
   // white endpoint handles on selected pipes (drag = length edit)
@@ -1008,7 +1014,7 @@ export function SketchCanvas() {
               // biome-ignore lint/suspicious/noArrayIndexKey: grid lines are positional, regenerated wholesale, and never reorder
               key={i}
               points={g.pts}
-              stroke={g.strong ? '#c8c8d4' : '#ededf2'}
+              stroke={g.strong ? C.gridStrong : C.gridWeak}
               strokeWidth={1}
             />
           ))}
@@ -1017,7 +1023,7 @@ export function SketchCanvas() {
               // biome-ignore lint/suspicious/noArrayIndexKey: silhouette outlines are a fixed projection, regenerated wholesale, never reordered
               key={`s${i}`}
               points={flat(poly)}
-              stroke="#b9c0cc"
+              stroke={C.silhouette}
               strokeWidth={2}
               lineJoin="round"
             />
@@ -1088,7 +1094,7 @@ export function SketchCanvas() {
                 <Line
                   key={el.id}
                   points={flat(el.path.map(nodePos))}
-                  stroke={cordStroke(el.id, '#557')}
+                  stroke={cordStroke(el.id, C.rope)}
                   strokeWidth={2}
                   dash={[4, 4]}
                   lineCap="round"
@@ -1194,7 +1200,7 @@ export function SketchCanvas() {
           {endpointDrag && (
             <Line
               points={flat(endpointDrag.ghost)}
-              stroke="#ccc"
+              stroke={C.dim}
               strokeWidth={3}
               dash={[6, 5]}
               lineCap="round"
@@ -1282,8 +1288,8 @@ export function SketchCanvas() {
                   y={p.y - 6}
                   text={label}
                   fontSize={11}
-                  fill={compression ? '#c00' : '#036'}
-                  shadowColor="#fff"
+                  fill={compression ? '#c00' : C.tension}
+                  shadowColor={C.halo}
                   shadowBlur={2}
                   shadowOpacity={1}
                   listening={false}
@@ -1316,7 +1322,7 @@ export function SketchCanvas() {
                   offsetX={6.5}
                   offsetY={6.5}
                   rotation={45}
-                  fill="#222"
+                  fill={C.ink}
                 />
               );
             }
@@ -1327,7 +1333,7 @@ export function SketchCanvas() {
                   x={p.x}
                   y={p.y}
                   radius={7.5}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke="#2a2"
                   strokeWidth={3}
                 />
@@ -1353,7 +1359,7 @@ export function SketchCanvas() {
                   offsetY={8}
                   rotation={rotation}
                   cornerRadius={8}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke="#28d"
                   strokeWidth={3}
                 />
@@ -1373,7 +1379,7 @@ export function SketchCanvas() {
                   y={p.y - 7}
                   width={14}
                   height={14}
-                  fill={bindFrom === n.id ? '#d80' : '#324'}
+                  fill={bindFrom === n.id ? '#d80' : C.ink}
                 />
               );
             }
@@ -1384,7 +1390,7 @@ export function SketchCanvas() {
                   x={p.x}
                   y={p.y}
                   radius={7.5}
-                  fill="#fff"
+                  fill={C.nodeFill}
                   stroke={bindFrom === n.id ? '#d80' : '#28d'}
                   strokeWidth={3}
                 />
@@ -1410,7 +1416,7 @@ export function SketchCanvas() {
                 x={p.x}
                 y={p.y}
                 radius={9}
-                fill="#fff"
+                fill={C.nodeFill}
                 stroke="#d80"
                 strokeWidth={3}
                 opacity={locked ? 0.55 : 1}
@@ -1424,7 +1430,7 @@ export function SketchCanvas() {
               x={S(hoverSnap.pos).x}
               y={S(hoverSnap.pos).y}
               radius={8}
-              stroke={hoverSnap.kind === 'grid' ? '#bbb' : '#e33'}
+              stroke={hoverSnap.kind === 'grid' ? C.snap : '#e33'}
               strokeWidth={1.5}
               listening={false}
             />

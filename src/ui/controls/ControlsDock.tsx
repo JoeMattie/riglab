@@ -226,8 +226,8 @@ export function ControlsDock({ left = EDGE }: { left?: number }) {
             onClick={onRecord}
             style={{
               ...addBtn,
-              background: recording ? '#fde8e8' : '#f4f4f5',
-              color: recording ? '#c0392b' : T.text,
+              background: recording ? T.dangerTint : T.chip,
+              color: recording ? T.dangerText : T.text,
             }}
           >
             {recording ? '■ stop' : '● record'}
@@ -248,7 +248,7 @@ export function ControlsDock({ left = EDGE }: { left?: number }) {
           )}
         </div>
         {recording && (
-          <div style={{ fontSize: 11, color: '#c0392b' }}>
+          <div style={{ fontSize: 11, color: T.dangerText }}>
             Recording — work the widgets
             {playback.clipName ? ` while ${playback.clipName} plays` : ''}.
           </div>
@@ -469,7 +469,7 @@ function ControlWidget({ control, h }: { control: Control; h: AxisHandlers }) {
 
 const addBtn: React.CSSProperties = {
   border: 'none',
-  background: '#f4f4f5',
+  background: T.chip,
   borderRadius: 7,
   padding: '4px 10px',
   font: `500 12px ${T.sans}`,
@@ -491,6 +491,6 @@ const selectStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: '3px 6px',
   fontSize: 12,
-  background: '#fff',
+  background: T.panel,
   color: T.text,
 };

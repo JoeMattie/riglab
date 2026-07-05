@@ -125,7 +125,7 @@ export function ToolPill() {
           placeItems: 'center',
           padding: '1px 0 3px',
           cursor: 'grab',
-          color: '#d4d4d8',
+          color: T.ghost,
           touchAction: 'none',
         }}
       >
@@ -191,7 +191,7 @@ export function ToolPill() {
                   style={{
                     marginLeft: 'auto',
                     font: `500 10.5px ${T.mono}`,
-                    color: active ? '#7ba4d6' : '#c4c4cc',
+                    color: active ? T.focus : T.ghost,
                   }}
                 >
                   {t.kbd}

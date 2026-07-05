@@ -70,6 +70,21 @@ export function ToolIcon({ name }: { name: ToolIconName }): ReactElement {
   }
 }
 
+/** Day/night toggle glyph: shows the view you would switch to — a moon in
+ * day view, a sun in night view. */
+export function ThemeIcon({ night }: { night: boolean }): ReactElement {
+  return night
+    ? wrap([
+        <circle key="a" cx={8} cy={8} r={3.2} {...stroke} />,
+        <path
+          key="b"
+          d="M8 1.6 V3 M8 13 V14.4 M1.6 8 H3 M13 8 H14.4 M3.5 3.5 L4.5 4.5 M11.5 11.5 L12.5 12.5 M12.5 3.5 L11.5 4.5 M4.5 11.5 L3.5 12.5"
+          {...stroke}
+        />,
+      ])
+    : wrap(<path d="M13.4 9.6 A5.9 5.9 0 1 1 6.4 2.6 A4.7 4.7 0 0 0 13.4 9.6 Z" {...stroke} />);
+}
+
 export type JointGlyphName = 'pivot' | 'weld' | 'slider' | 'anchor' | 'bound' | 'detach';
 
 /** 14×14 joint glyph matching the canvas glyph language: pivot = ring,
@@ -83,9 +98,9 @@ export function JointGlyph({ name }: { name: JointGlyphName }): ReactElement {
   );
   switch (name) {
     case 'pivot':
-      return svg(<circle cx={7} cy={7} r={4.5} fill="#fff" stroke="#28d" strokeWidth={2.4} />);
+      return svg(<circle cx={7} cy={7} r={4.5} fill={T.panel} stroke="#28d" strokeWidth={2.4} />);
     case 'weld':
-      return svg(<rect x={3} y={3} width={8} height={8} fill="#324" />);
+      return svg(<rect x={3} y={3} width={8} height={8} fill={T.ink} />);
     case 'slider':
       return svg(
         <rect
@@ -94,17 +109,17 @@ export function JointGlyph({ name }: { name: JointGlyphName }): ReactElement {
           width={11}
           height={5}
           rx={2.5}
-          fill="#fff"
+          fill={T.panel}
           stroke="#28d"
           strokeWidth={1.8}
         />,
       );
     case 'anchor':
       return svg(
-        <rect x={3.6} y={3.6} width={6.8} height={6.8} fill="#222" transform="rotate(45 7 7)" />,
+        <rect x={3.6} y={3.6} width={6.8} height={6.8} fill={T.ink} transform="rotate(45 7 7)" />,
       );
     case 'bound':
-      return svg(<circle cx={7} cy={7} r={4.5} fill="#fff" stroke="#2a2" strokeWidth={2.4} />);
+      return svg(<circle cx={7} cy={7} r={4.5} fill={T.panel} stroke="#2a2" strokeWidth={2.4} />);
     case 'detach':
       return svg(<path d="M4 4 L10 10 M10 4 L4 10" stroke={T.faint} strokeWidth={1.8} />);
   }

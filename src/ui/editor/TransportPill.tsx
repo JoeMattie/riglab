@@ -328,7 +328,7 @@ export function TransportPill() {
                   {equilibriumOn && required !== undefined && (
                     <span
                       data-testid="required-input"
-                      style={{ color: '#036', whiteSpace: 'nowrap', fontSize: 11.5 }}
+                      style={{ color: T.tension, whiteSpace: 'nowrap', fontSize: 11.5 }}
                     >
                       needs {formatRequiredInput(required, ch, units)}
                     </span>
@@ -342,7 +342,7 @@ export function TransportPill() {
                       border: 'none',
                       background: 'none',
                       cursor: 'pointer',
-                      color: '#a55',
+                      color: T.dangerText,
                       marginLeft: 'auto',
                       padding: 0,
                     }}
@@ -410,12 +410,12 @@ export function TransportPill() {
           >
             {playback.playing ? (
               <svg width={9} height={11} viewBox="0 0 9 11" aria-hidden="true">
-                <rect x={0.5} y={0.5} width={2.8} height={10} fill="#fff" />
-                <rect x={5.7} y={0.5} width={2.8} height={10} fill="#fff" />
+                <rect x={0.5} y={0.5} width={2.8} height={10} fill={T.panel} />
+                <rect x={5.7} y={0.5} width={2.8} height={10} fill={T.panel} />
               </svg>
             ) : (
               <svg width={10} height={12} viewBox="0 0 10 12" aria-hidden="true">
-                <path d="M1 1 L9 6 L1 11 Z" fill="#fff" />
+                <path d="M1 1 L9 6 L1 11 Z" fill={T.panel} />
               </svg>
             )}
           </button>
@@ -440,7 +440,7 @@ export function TransportPill() {
               opacity: clip ? 1 : 0.5,
             }}
           >
-            <span style={{ width: '100%', height: 4, borderRadius: 2, background: '#e9e9ee' }} />
+            <span style={{ width: '100%', height: 4, borderRadius: 2, background: T.track }} />
             <span
               style={{
                 position: 'absolute',
@@ -526,7 +526,7 @@ export function TransportPill() {
           {equilibriumOn && compressionCount > 0 && (
             <span
               data-testid="compression-warning"
-              style={{ color: '#c00', fontSize: 11.5, whiteSpace: 'nowrap' }}
+              style={{ color: T.danger, fontSize: 11.5, whiteSpace: 'nowrap' }}
             >
               ⚠ {compressionCount} rope{compressionCount > 1 ? 's' : ''}{' '}
               {compressionCount > 1 ? 'require' : 'requires'} compression

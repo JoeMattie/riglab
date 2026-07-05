@@ -1648,3 +1648,19 @@ ProjectList landing page — onto the same tokens (IBM Plex ramp, panel/accent
 colors, example-card grid), and the onboarding/controls panels use the shared
 `panelStyle`. The design language is now consistent from landing → sketch →
 design → 3D.
+### Night view: CSS-variable chrome tokens + literal scene palettes
+User-requested addition (outside the planfile UI spec; scope approved in
+session, 2026-07-04). The `T` chrome tokens in `src/ui/editor/theme.ts` now
+resolve to `--rl-*` CSS custom properties; `applyTheme('day'|'night')` writes
+the active palette onto the root element and toggles the shadcn `.dark` class,
+so every inline-styled panel/chip and all vendored shadcn components flip with
+zero component churn. Konva shapes and three.js materials cannot read CSS
+variables, so legibility-critical drawing colors (grid, default element ink,
+node fills, force labels, 3D mannequin/instances) come from a paired `SCENE`
+literal palette selected by the persisted `night` flag (`useThemeStore`,
+`rig-lab.night` in localStorage, applied before first paint in `main.tsx`).
+Bright semantic colors (selection orange, actuator purple, elastic green)
+stay literal — they read fine on both grounds. The toggle is a moon/sun icon
+button on the actions chip. Night-pref storage goes through a guarded
+accessor with an in-memory fallback because Node 22+'s experimental
+`localStorage` global shadows jsdom's in Vitest.
