@@ -645,6 +645,24 @@
         }
       },
       {
+        "id": "guideA2",
+        "kind": "anchor",
+        "position": {
+          "x": 0.05,
+          "y": 1.44,
+          "z": 0
+        }
+      },
+      {
+        "id": "guideB2",
+        "kind": "anchor",
+        "position": {
+          "x": 0.23,
+          "y": 1.53,
+          "z": 0
+        }
+      },
+      {
         "id": "mastTop",
         "kind": "anchor",
         "position": {
@@ -690,6 +708,15 @@
         }
       },
       {
+        "id": "keel",
+        "kind": "free",
+        "position": {
+          "x": 0.185,
+          "y": 1.5075,
+          "z": 0
+        }
+      },
+      {
         "id": "head",
         "kind": "free",
         "position": {
@@ -717,6 +744,18 @@
         "subsystemTag": "frame",
         "nodeA": "guideA",
         "nodeB": "guideB",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "fitting",
+        "pointMasses": []
+      },
+      {
+        "id": "bGuide",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "frame",
+        "nodeA": "guideA2",
+        "nodeB": "guideB2",
         "pipeMaterialId": "pipe-nps-sch40-075",
         "endRealizationA": "fitting",
         "endRealizationB": "fitting",
@@ -762,6 +801,18 @@
         "pointMasses": []
       },
       {
+        "id": "keelPost",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "neckBase",
+        "nodeB": "keel",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "conduitBox",
+        "pointMasses": []
+      },
+      {
         "id": "boxSliderBack",
         "type": "slider",
         "maturity": "engineered",
@@ -784,6 +835,17 @@
         "realization": "conduitBox"
       },
       {
+        "id": "boxSliderKeel",
+        "type": "slider",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeId": "keel",
+        "alongElementId": "bGuide",
+        "travelMin": 0.71,
+        "travelMax": 0.81,
+        "realization": "conduitBox"
+      },
+      {
         "id": "boxPivot",
         "type": "pivot",
         "maturity": "engineered",
@@ -797,10 +859,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "bundleCore",
-          "neckBoom"
-        ],
+        "memberIds": ["bundleCore", "neckBoom", "keelPost"],
         "welds": [],
         "angleLimit": {
           "memberA": "bundleCore",
@@ -827,11 +886,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "pull",
-          "chinGuide",
-          "head"
-        ],
+        "path": ["pull", "chinGuide", "head"],
         "lengthM": 1.0722,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -840,12 +895,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "pull",
-          "handleBase",
-          "mastTop",
-          "head"
-        ],
+        "path": ["pull", "handleBase", "mastTop", "head"],
         "lengthM": 1.7959,
         "cordageMaterialId": "cord-paracord550"
       }
@@ -879,11 +929,14 @@
       "name": "Neck truss (pitch)",
       "elementIds": [
         "aGuide",
+        "bGuide",
         "bundleCore",
         "neckBoom",
         "zHandle",
+        "keelPost",
         "boxSliderBack",
         "boxSliderFront",
+        "boxSliderKeel",
         "boxPivot",
         "counterElastic",
         "pitchRopeDown",

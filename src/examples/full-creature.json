@@ -762,6 +762,15 @@
         }
       },
       {
+        "id": "neck.keel",
+        "kind": "free",
+        "position": {
+          "x": 0.4,
+          "y": 1.63,
+          "z": 0
+        }
+      },
+      {
         "id": "neck.head",
         "kind": "free",
         "position": {
@@ -1398,10 +1407,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "spine.tTail",
-          "spine.hipBackBot"
-        ],
+        "path": ["spine.tTail", "spine.hipBackBot"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1410,10 +1416,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "spine.bTail",
-          "spine.hipBackTop"
-        ],
+        "path": ["spine.bTail", "spine.hipBackTop"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1422,10 +1425,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "spine.hipFrontTop",
-          "spine.bNeck"
-        ],
+        "path": ["spine.hipFrontTop", "spine.bNeck"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1434,10 +1434,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "spine.hipFrontBot",
-          "spine.tNeck"
-        ],
+        "path": ["spine.hipFrontBot", "spine.tNeck"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1502,6 +1499,42 @@
         "pointMasses": []
       },
       {
+        "id": "neck.keelPost",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "neck.pitchBase",
+        "nodeB": "neck.keel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "neck.braceL",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "neck.barL",
+        "nodeB": "neck.keel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "neck.braceR",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "neck.barR",
+        "nodeB": "neck.keel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
         "id": "neck.panPivot",
         "type": "pivot",
         "maturity": "engineered",
@@ -1515,22 +1548,8 @@
             "z": 0
           }
         },
-        "memberIds": [
-          "neck.carrier",
-          "neck.bundleCore",
-          "neck.barLBar",
-          "neck.barRBar"
-        ],
-        "welds": [
-          [
-            "neck.bundleCore",
-            "neck.barLBar"
-          ],
-          [
-            "neck.bundleCore",
-            "neck.barRBar"
-          ]
-        ],
+        "memberIds": ["neck.carrier", "neck.bundleCore", "neck.barLBar", "neck.barRBar"],
+        "welds": [["neck.bundleCore", "neck.barLBar"], ["neck.bundleCore", "neck.barRBar"]],
         "angleLimit": {
           "memberA": "neck.carrier",
           "memberB": "neck.bundleCore",
@@ -1553,10 +1572,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "neck.bundleCore",
-          "neck.boom"
-        ],
+        "memberIds": ["neck.bundleCore", "neck.boom", "neck.keelPost"],
         "welds": [],
         "angleLimit": {
           "memberA": "neck.bundleCore",
@@ -1598,11 +1614,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "neck.pull",
-          "neck.chinGuide",
-          "neck.head"
-        ],
+        "path": ["neck.pull", "neck.chinGuide", "neck.head"],
         "lengthM": 1.0722,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1611,12 +1623,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "neck.pull",
-          "neck.handleBase",
-          "neck.mastTop",
-          "neck.head"
-        ],
+        "path": ["neck.pull", "neck.handleBase", "neck.mastTop", "neck.head"],
         "lengthM": 1.7959,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1682,22 +1689,8 @@
             "z": 0
           }
         },
-        "memberIds": [
-          "steer.sCarrier",
-          "steer.sArm",
-          "steer.sBarL",
-          "steer.sBarR"
-        ],
-        "welds": [
-          [
-            "steer.sArm",
-            "steer.sBarL"
-          ],
-          [
-            "steer.sArm",
-            "steer.sBarR"
-          ]
-        ],
+        "memberIds": ["steer.sCarrier", "steer.sArm", "steer.sBarL", "steer.sBarR"],
+        "welds": [["steer.sArm", "steer.sBarL"], ["steer.sArm", "steer.sBarR"]],
         "angleLimit": {
           "memberA": "steer.sCarrier",
           "memberB": "steer.sArm",
@@ -1711,10 +1704,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "steer",
-        "path": [
-          "steer.sL",
-          "neck.barR"
-        ],
+        "path": ["steer.sL", "neck.barR"],
         "lengthM": 0.4314,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1723,10 +1713,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "steer",
-        "path": [
-          "steer.sR",
-          "neck.barL"
-        ],
+        "path": ["steer.sR", "neck.barL"],
         "lengthM": 0.4314,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -1795,17 +1782,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "jaw.skullBar",
-          "jaw.jawMain",
-          "jaw.jawHeelSpur"
-        ],
-        "welds": [
-          [
-            "jaw.jawMain",
-            "jaw.jawHeelSpur"
-          ]
-        ],
+        "memberIds": ["jaw.skullBar", "jaw.jawMain", "jaw.jawHeelSpur"],
+        "welds": [["jaw.jawMain", "jaw.jawHeelSpur"]],
         "angleLimit": {
           "memberA": "jaw.skullBar",
           "memberB": "jaw.jawMain",
@@ -1949,11 +1927,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legL.exoFemur",
-          "legL.exoTibia",
-          "legL.tieKnee"
-        ],
+        "memberIds": ["legL.exoFemur", "legL.exoTibia", "legL.tieKnee"],
         "welds": [],
         "angleLimit": {
           "memberA": "legL.exoFemur",
@@ -1977,18 +1951,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legL.exoTibia",
-          "legL.exoFootMain",
-          "legL.exoHeelSpur",
-          "legL.tieShoe"
-        ],
-        "welds": [
-          [
-            "legL.exoFootMain",
-            "legL.exoHeelSpur"
-          ]
-        ],
+        "memberIds": ["legL.exoTibia", "legL.exoFootMain", "legL.exoHeelSpur", "legL.tieShoe"],
+        "welds": [["legL.exoFootMain", "legL.exoHeelSpur"]],
         "angleLimit": {
           "memberA": "legL.exoTibia",
           "memberB": "legL.exoFootMain",
@@ -2011,17 +1975,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legL.exoFootMain",
-          "legL.exoToe",
-          "legL.exoToePadBar"
-        ],
-        "welds": [
-          [
-            "legL.exoFootMain",
-            "legL.exoToePadBar"
-          ]
-        ],
+        "memberIds": ["legL.exoFootMain", "legL.exoToe", "legL.exoToePadBar"],
+        "welds": [["legL.exoFootMain", "legL.exoToePadBar"]],
         "angleLimit": {
           "memberA": "legL.exoFootMain",
           "memberB": "legL.exoToe",
@@ -2047,10 +2002,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "leg",
-        "path": [
-          "legL.eToe",
-          "legL.eToePad"
-        ],
+        "path": ["legL.eToe", "legL.eToePad"],
         "lengthM": 0.15,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -2176,11 +2128,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legR.exoFemur",
-          "legR.exoTibia",
-          "legR.tieKnee"
-        ],
+        "memberIds": ["legR.exoFemur", "legR.exoTibia", "legR.tieKnee"],
         "welds": [],
         "angleLimit": {
           "memberA": "legR.exoFemur",
@@ -2204,18 +2152,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legR.exoTibia",
-          "legR.exoFootMain",
-          "legR.exoHeelSpur",
-          "legR.tieShoe"
-        ],
-        "welds": [
-          [
-            "legR.exoFootMain",
-            "legR.exoHeelSpur"
-          ]
-        ],
+        "memberIds": ["legR.exoTibia", "legR.exoFootMain", "legR.exoHeelSpur", "legR.tieShoe"],
+        "welds": [["legR.exoFootMain", "legR.exoHeelSpur"]],
         "angleLimit": {
           "memberA": "legR.exoTibia",
           "memberB": "legR.exoFootMain",
@@ -2238,17 +2176,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "legR.exoFootMain",
-          "legR.exoToe",
-          "legR.exoToePadBar"
-        ],
-        "welds": [
-          [
-            "legR.exoFootMain",
-            "legR.exoToePadBar"
-          ]
-        ],
+        "memberIds": ["legR.exoFootMain", "legR.exoToe", "legR.exoToePadBar"],
+        "welds": [["legR.exoFootMain", "legR.exoToePadBar"]],
         "angleLimit": {
           "memberA": "legR.exoFootMain",
           "memberB": "legR.exoToe",
@@ -2274,10 +2203,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "leg",
-        "path": [
-          "legR.eToe",
-          "legR.eToePad"
-        ],
+        "path": ["legR.eToe", "legR.eToePad"],
         "lengthM": 0.15,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -2343,10 +2269,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "tail.tailBoom1",
-          "tail.tailBoom2"
-        ],
+        "memberIds": ["tail.tailBoom1", "tail.tailBoom2"],
         "welds": [],
         "angleLimit": {
           "memberA": "tail.tailBoom1",
@@ -2376,10 +2299,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "tail.tailBoom2",
-          "tail.tailBoom3"
-        ],
+        "memberIds": ["tail.tailBoom2", "tail.tailBoom3"],
         "welds": [],
         "angleLimit": {
           "memberA": "tail.tailBoom2",
@@ -2400,10 +2320,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "tail.spineTopA",
-          "tail.j1"
-        ],
+        "path": ["tail.spineTopA", "tail.j1"],
         "lengthM": 0.6083,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -2452,10 +2369,7 @@
         "joint": {
           "kind": "spherical"
         },
-        "memberIds": [
-          "arm.armStub",
-          "arm.armUpper"
-        ],
+        "memberIds": ["arm.armStub", "arm.armUpper"],
         "welds": [],
         "realization": "ropeLashing"
       },
@@ -2473,10 +2387,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "arm.armUpper",
-          "arm.armFore"
-        ],
+        "memberIds": ["arm.armUpper", "arm.armFore"],
         "welds": [],
         "angleLimit": {
           "memberA": "arm.armUpper",
@@ -2491,10 +2402,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "arm",
-        "path": [
-          "arm.armHand",
-          "arm.reelMount"
-        ],
+        "path": ["arm.armHand", "arm.reelMount"],
         "lengthM": 0.9922,
         "cordageMaterialId": "cord-paracord550"
       }
@@ -2646,6 +2554,9 @@
         "neck.barLBar",
         "neck.barRBar",
         "neck.boom",
+        "neck.keelPost",
+        "neck.braceL",
+        "neck.braceR",
         "neck.panPivot",
         "neck.pitchPivot",
         "neck.counterElastic",
@@ -2840,36 +2751,12 @@
       "loop": true,
       "tracks": {
         "steer pan": {
-          "timesS": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
-          "values": [
-            0,
-            0.5,
-            0,
-            -0.5,
-            0
-          ]
+          "timesS": [0, 1, 2, 3, 4],
+          "values": [0, 0.5, 0, -0.5, 0]
         },
         "jaw trigger": {
-          "timesS": [
-            0,
-            1,
-            2,
-            3,
-            4
-          ],
-          "values": [
-            0,
-            0.038,
-            0,
-            0.038,
-            0
-          ]
+          "timesS": [0, 1, 2, 3, 4],
+          "values": [0, 0.038, 0, 0.038, 0]
         }
       }
     }

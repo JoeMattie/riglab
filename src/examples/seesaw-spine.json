@@ -891,10 +891,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "tTail",
-          "hipBackBot"
-        ],
+        "path": ["tTail", "hipBackBot"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -903,10 +900,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "bTail",
-          "hipBackTop"
-        ],
+        "path": ["bTail", "hipBackTop"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -915,10 +909,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "hipFrontTop",
-          "bNeck"
-        ],
+        "path": ["hipFrontTop", "bNeck"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -927,10 +918,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "neck",
-        "path": [
-          "hipFrontBot",
-          "tNeck"
-        ],
+        "path": ["hipFrontBot", "tNeck"],
         "lengthM": 0.856,
         "cordageMaterialId": "cord-paracord550"
       }

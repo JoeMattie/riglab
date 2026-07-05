@@ -9,6 +9,15 @@
 // head mass so the rest pose is neck-up; the "steer pitch" input channel
 // pulls a rope routed through a chin-level eyelet BELOW the boom axis (the
 // offset is what gives the rope a lever arm) to pitch the head down.
+//
+// 3D roll keeper: a hinge carried by a 2-node bar keeps a "bracket spin" DOF
+// about the bar's own line (the particle model cannot represent a bar's
+// torsion), so the boom — an inverted pendulum over the rail — would fall
+// sideways. The real conduit box cannot roll on the mast, so the model says
+// so: the box carries a short keel post riding a second, parallel rail (the
+// box straddles twin rails). The keel is a member of the lashing pivot, which
+// ties the hinge axis to an off-rail point and kills the roll while leaving
+// the slide (both sliders translate together) and the pitch free.
 import type { MechanismElement, Vec3 } from '../schema';
 import {
   BUNGEE_8,
@@ -25,8 +34,13 @@ import {
 const P: Record<string, Vec3> = {
   guideA: v3(0.05, 1.32, 0),
   guideB: v3(0.23, 1.41, 0),
+  // second rail: the guide translated straight up by the keel height, so the
+  // keel node rides it at the same parameter as neckBase rides the guide
+  guideA2: v3(0.05, 1.44, 0),
+  guideB2: v3(0.23, 1.53, 0),
   boxBack: v3(0.104, 1.347, 0),
   neckBase: v3(0.185, 1.3875, 0),
+  keel: v3(0.185, 1.5075, 0),
   head: v3(0.95, 1.72, 0),
   mastTop: v3(0.05, 1.55, 0),
   chinGuide: v3(0.28, 1.25, 0),
@@ -44,6 +58,18 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
       subsystemTag: 'frame',
       nodeA: n('guideA'),
       nodeB: n('guideB'),
+      pipeMaterialId: PIPE_075,
+      endRealizationA: 'fitting',
+      endRealizationB: 'fitting',
+      pointMasses: [],
+    },
+    {
+      id: n('bGuide'),
+      type: 'link',
+      maturity: 'engineered',
+      subsystemTag: 'frame',
+      nodeA: n('guideA2'),
+      nodeB: n('guideB2'),
       pipeMaterialId: PIPE_075,
       endRealizationA: 'fitting',
       endRealizationB: 'fitting',
@@ -90,6 +116,19 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
       innerPipeMaterialId: PIPE_CTS_075,
       pointMasses: [],
     },
+    // the keel post: rigidly part of the conduit box, riding the second rail
+    {
+      id: n('keelPost'),
+      type: 'link',
+      maturity: 'engineered',
+      subsystemTag: 'neck',
+      nodeA: n('neckBase'),
+      nodeB: n('keel'),
+      pipeMaterialId: PIPE_075,
+      endRealizationA: 'ropeLashing',
+      endRealizationB: 'conduitBox',
+      pointMasses: [],
+    },
     // conduit box = two point-on-line sliders on the guide axis
     {
       id: n('boxSliderBack'),
@@ -113,8 +152,23 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
       travelMax: 0.81,
       realization: 'conduitBox',
     },
+    // the keel's slider on the second rail — the box's wide, roll-proof
+    // footprint on the mast
+    {
+      id: n('boxSliderKeel'),
+      type: 'slider',
+      maturity: 'engineered',
+      subsystemTag: 'neck',
+      nodeId: n('keel'),
+      alongElementId: n('bGuide'),
+      travelMin: 0.71,
+      travelMax: 0.81,
+      realization: 'conduitBox',
+    },
     // lashing compliance: boom deviates from the bundle axis within ±20°,
-    // hinged about the sketch plane's normal (side-left elevation → +z)
+    // hinged about the sketch plane's normal (side-left elevation → +z).
+    // keelPost is a member so the hinge axis is tied to the off-rail keel —
+    // that tie is what kills the bracket-spin roll (see header comment).
     {
       id: n('boxPivot'),
       type: 'pivot',
@@ -122,7 +176,7 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
       subsystemTag: 'neck',
       nodeId: n('neckBase'),
       joint: { kind: 'hinge', axis: HINGE_SAGITTAL },
-      memberIds: [n('bundleCore'), n('neckBoom')],
+      memberIds: [n('bundleCore'), n('neckBoom'), n('keelPost')],
       welds: [],
       angleLimit: {
         memberA: n('bundleCore'),
@@ -176,11 +230,14 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
     nodes: [
       { id: n('guideA'), kind: 'anchor', position: P.guideA! },
       { id: n('guideB'), kind: 'anchor', position: P.guideB! },
+      { id: n('guideA2'), kind: 'anchor', position: P.guideA2! },
+      { id: n('guideB2'), kind: 'anchor', position: P.guideB2! },
       { id: n('mastTop'), kind: 'anchor', position: P.mastTop! },
       { id: n('chinGuide'), kind: 'anchor', position: P.chinGuide! },
       { id: n('handleBase'), kind: 'anchor', position: P.handleBase! },
       { id: n('boxBack'), kind: 'free', position: P.boxBack! },
       { id: n('neckBase'), kind: 'free', position: P.neckBase! },
+      { id: n('keel'), kind: 'free', position: P.keel! },
       { id: n('head'), kind: 'free', position: P.head! },
       { id: n('pull'), kind: 'driven', position: P.pull!, channelId: 'chSteerPitch' },
     ],

@@ -723,10 +723,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "tailBoom1",
-          "tailBoom2"
-        ],
+        "memberIds": ["tailBoom1", "tailBoom2"],
         "welds": [],
         "angleLimit": {
           "memberA": "tailBoom1",
@@ -756,10 +753,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "tailBoom2",
-          "tailBoom3"
-        ],
+        "memberIds": ["tailBoom2", "tailBoom3"],
         "welds": [],
         "angleLimit": {
           "memberA": "tailBoom2",
@@ -780,10 +774,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "tail",
-        "path": [
-          "spineTopA",
-          "j1"
-        ],
+        "path": ["spineTopA", "j1"],
         "lengthM": 0.6083,
         "cordageMaterialId": "cord-paracord550"
       }

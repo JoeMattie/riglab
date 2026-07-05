@@ -781,22 +781,8 @@
             "z": 0
           }
         },
-        "memberIds": [
-          "sCarrier",
-          "sArm",
-          "sBarL",
-          "sBarR"
-        ],
-        "welds": [
-          [
-            "sArm",
-            "sBarL"
-          ],
-          [
-            "sArm",
-            "sBarR"
-          ]
-        ],
+        "memberIds": ["sCarrier", "sArm", "sBarL", "sBarR"],
+        "welds": [["sArm", "sBarL"], ["sArm", "sBarR"]],
         "angleLimit": {
           "memberA": "sCarrier",
           "memberB": "sArm",
@@ -867,22 +853,8 @@
             "z": 0
           }
         },
-        "memberIds": [
-          "hCarrier",
-          "hArm",
-          "hBarL",
-          "hBarR"
-        ],
-        "welds": [
-          [
-            "hArm",
-            "hBarL"
-          ],
-          [
-            "hArm",
-            "hBarR"
-          ]
-        ],
+        "memberIds": ["hCarrier", "hArm", "hBarL", "hBarR"],
+        "welds": [["hArm", "hBarL"], ["hArm", "hBarR"]],
         "angleLimit": {
           "memberA": "hCarrier",
           "memberB": "hArm",
@@ -896,10 +868,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "steer",
-        "path": [
-          "sL",
-          "hR"
-        ],
+        "path": ["sL", "hR"],
         "lengthM": 0.7531,
         "cordageMaterialId": "cord-paracord550"
       },
@@ -908,10 +877,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "steer",
-        "path": [
-          "sR",
-          "hL"
-        ],
+        "path": ["sR", "hL"],
         "lengthM": 0.7531,
         "cordageMaterialId": "cord-paracord550"
       }

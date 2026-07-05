@@ -53,6 +53,13 @@ const N = {
   barL: v3(0.19, 1.43, 0.07),
   barR: v3(0.19, 1.43, -0.07),
   pitchBase: v3(0.4, 1.43, 0), // bundle front = pitch lashing
+  // keel post over the lashing: an off-axis point of the pan-side cluster.
+  // The pitch hinge on the 2-node bundle would otherwise keep a "bracket
+  // spin" DOF about the bundle's own line (a particle bar carries no
+  // torsion) and the boom would roll off sideways; the keel — braced to the
+  // cross-bar tips, so rigid to the PAN cluster, not the world — gives the
+  // pitch axis its off-line tie while still riding the pan joint.
+  keel: v3(0.4, 1.63, 0),
   head: v3(0.95, 1.72, 0),
   mastTop: v3(0.05, 1.55, 0),
   chinGuide: v3(0.28, 1.25, 0),
@@ -74,6 +81,7 @@ export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
       { id: n('barL'), kind: 'free', position: N.barL },
       { id: n('barR'), kind: 'free', position: N.barR },
       { id: n('pitchBase'), kind: 'free', position: N.pitchBase },
+      { id: n('keel'), kind: 'free', position: N.keel },
       { id: n('head'), kind: 'free', position: N.head },
       { id: n('mastTop'), kind: 'anchor', position: N.mastTop },
       { id: n('chinGuide'), kind: 'anchor', position: N.chinGuide },
@@ -142,6 +150,44 @@ export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
         endRealizationB: 'boltThrough',
         pointMasses: [],
       },
+      // roll keeper: keel post over the lashing + battens to the bar tips —
+      // rigid to the pan cluster (see the N.keel note)
+      {
+        id: n('keelPost'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('pitchBase'),
+        nodeB: n('keel'),
+        pipeMaterialId: PIPE_050,
+        endRealizationA: 'ropeLashing',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      {
+        id: n('braceL'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('barL'),
+        nodeB: n('keel'),
+        pipeMaterialId: PIPE_050,
+        endRealizationA: 'boltThrough',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      {
+        id: n('braceR'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('barR'),
+        nodeB: n('keel'),
+        pipeMaterialId: PIPE_050,
+        endRealizationA: 'boltThrough',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
       // PAN: vertical-axis hinge at the conduit-box base; the bundle and its
       // welded cross-bars rotate against the anchored carrier spar
       {
@@ -161,7 +207,8 @@ export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
       },
       // PITCH: horizontal-axis hinge carried by the pan-side bundle — the
       // rope-lashed compliance joint; rotates with pan because its carrying
-      // member is pan-side geometry
+      // member is pan-side geometry. keelPost is a member so the hinge axis
+      // is tied to the off-line keel (roll keeper).
       {
         id: n('pitchPivot'),
         type: 'pivot',
@@ -169,7 +216,7 @@ export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
         subsystemTag: 'neck',
         nodeId: n('pitchBase'),
         joint: { kind: 'hinge', axis: HINGE_SAGITTAL },
-        memberIds: [n('bundleCore'), n('boom')],
+        memberIds: [n('bundleCore'), n('boom'), n('keelPost')],
         welds: [],
         angleLimit: {
           memberA: n('bundleCore'),

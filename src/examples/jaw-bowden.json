@@ -775,17 +775,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "skullBar",
-          "jawMain",
-          "jawHeelSpur"
-        ],
-        "welds": [
-          [
-            "jawMain",
-            "jawHeelSpur"
-          ]
-        ],
+        "memberIds": ["skullBar", "jawMain", "jawHeelSpur"],
+        "welds": [["jawMain", "jawHeelSpur"]],
         "angleLimit": {
           "memberA": "skullBar",
           "memberB": "jawMain",

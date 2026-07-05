@@ -837,11 +837,7 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "exoFemur",
-          "exoTibia",
-          "tieKnee"
-        ],
+        "memberIds": ["exoFemur", "exoTibia", "tieKnee"],
         "welds": [],
         "angleLimit": {
           "memberA": "exoFemur",
@@ -865,18 +861,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "exoTibia",
-          "exoFootMain",
-          "exoHeelSpur",
-          "tieShoe"
-        ],
-        "welds": [
-          [
-            "exoFootMain",
-            "exoHeelSpur"
-          ]
-        ],
+        "memberIds": ["exoTibia", "exoFootMain", "exoHeelSpur", "tieShoe"],
+        "welds": [["exoFootMain", "exoHeelSpur"]],
         "angleLimit": {
           "memberA": "exoTibia",
           "memberB": "exoFootMain",
@@ -899,17 +885,8 @@
             "z": 1
           }
         },
-        "memberIds": [
-          "exoFootMain",
-          "exoToe",
-          "exoToePadBar"
-        ],
-        "welds": [
-          [
-            "exoFootMain",
-            "exoToePadBar"
-          ]
-        ],
+        "memberIds": ["exoFootMain", "exoToe", "exoToePadBar"],
+        "welds": [["exoFootMain", "exoToePadBar"]],
         "angleLimit": {
           "memberA": "exoFootMain",
           "memberB": "exoToe",
@@ -935,10 +912,7 @@
         "type": "rope",
         "maturity": "engineered",
         "subsystemTag": "leg",
-        "path": [
-          "eToe",
-          "eToePad"
-        ],
+        "path": ["eToe", "eToePad"],
         "lengthM": 0.15,
         "cordageMaterialId": "cord-paracord550"
       },
