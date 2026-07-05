@@ -18,6 +18,7 @@ import { computeSkeleton, REST_POSE } from '../wearer';
 import { buildPipeModel } from './assembly/pipeModel';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
+import { copySelection, pasteClipboard } from './editor/clipboardActions';
 import { DofPill } from './editor/DofPill';
 import { EmptyState } from './editor/EmptyState';
 import { pickRenderPositions } from './editor/forces';
@@ -28,6 +29,7 @@ import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
 import { EDGE, panelStyle, T } from './editor/theme';
 import { useGlobalSolve } from './editor/useGlobalSolve';
+import { PanelToggleChip } from './quad/PanelToggleChip';
 import { QuadView } from './quad/QuadView';
 
 /** Document render positions (drawn geometry / playback pose / settled sag)
@@ -105,6 +107,16 @@ export function EditorShell() {
         ed.clearSelection();
         return;
       }
+      // clipboard (PLANFILE-quad-panel-controls C): paste works with an
+      // empty selection, so both run before the selection guard below
+      if (mod && key === 'c') {
+        if (copySelection()) e.preventDefault();
+        return;
+      }
+      if (mod && key === 'v') {
+        if (pasteClipboard().length > 0) e.preventDefault();
+        return;
+      }
       // delete / duplicate act on the global selection
       if (ed.selectedElementIds.length === 0) return;
       if (key === 'delete' || key === 'backspace') {
@@ -156,6 +168,8 @@ export function EditorShell() {
         playback: s.playback,
         activePanel: s.activePanel,
         quadMaximized: s.quadMaximized,
+        quadSplit: s.quadSplit,
+        panelsVisible: s.panelsVisible,
         panelDepths: s.panelDepths,
         night: useThemeStore.getState().night,
       };
@@ -163,6 +177,9 @@ export function EditorShell() {
     // seam for exercising the equilibrium force-overlay plumbing (§5.2)
     hook.setEquilibrium = (readout: unknown) =>
       useEditorStore.getState().setEquilibrium(readout as never);
+    // scripted-verification seam: drive the global selection so clipboard
+    // copy/paste can be exercised without pointer picking
+    hook.setSelection = (ids: string[]) => useEditorStore.getState().setSelection(ids);
     // scripted-verification seam: loads a bundled example as the live
     // document without persisting it
     hook.loadExample = (id: string) => {
@@ -229,6 +246,7 @@ export function EditorShell() {
       {!hasElements && !onboardingDismissed && <EmptyState />}
 
       <ProjectChip />
+      <PanelToggleChip />
       <ActionsChip />
       <ToolPill />
       <TransportPill />

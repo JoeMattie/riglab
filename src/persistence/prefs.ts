@@ -45,6 +45,53 @@ export function setNightPref(night: boolean): void {
   }
 }
 
+// ── Quad workspace layout (PLANFILE-quad-panel-controls.md) ────────────────
+// Splitter fractions + per-panel visibility are workspace preferences (like
+// units/night), not document state: they survive reloads and project
+// switches and never enter undo history. Read at editor-store module load,
+// so they use the guarded accessor like the night pref.
+
+const QUAD_LAYOUT_KEY = 'rig-lab.quadLayout';
+
+/** Kept literal (not imported from state/) so prefs stays dependency-free. */
+export type QuadPanelPrefId = 'top' | 'persp' | 'front' | 'side';
+
+export interface QuadLayoutPref {
+  /** fraction of the workspace given to the left column / top row */
+  split: { x: number; y: number };
+  visible: Record<QuadPanelPrefId, boolean>;
+}
+
+const PANEL_PREF_IDS: QuadPanelPrefId[] = ['top', 'persp', 'front', 'side'];
+
+export function getQuadLayoutPref(): QuadLayoutPref | null {
+  const s = safeStorage();
+  const raw = s instanceof Map ? (s.get(QUAD_LAYOUT_KEY) ?? null) : s.getItem(QUAD_LAYOUT_KEY);
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw) as Partial<QuadLayoutPref>;
+    const frac = (v: unknown): number =>
+      typeof v === 'number' && Number.isFinite(v) ? Math.min(0.85, Math.max(0.15, v)) : 0.5;
+    const visible = Object.fromEntries(
+      PANEL_PREF_IDS.map((id) => [id, p.visible?.[id] !== false]),
+    ) as Record<QuadPanelPrefId, boolean>;
+    // a corrupt pref must never produce an all-hidden workspace
+    if (!PANEL_PREF_IDS.some((id) => visible[id])) {
+      for (const id of PANEL_PREF_IDS) visible[id] = true;
+    }
+    return { split: { x: frac(p.split?.x), y: frac(p.split?.y) }, visible };
+  } catch {
+    return null;
+  }
+}
+
+export function setQuadLayoutPref(pref: QuadLayoutPref): void {
+  const s = safeStorage();
+  const raw = JSON.stringify(pref);
+  if (s instanceof Map) s.set(QUAD_LAYOUT_KEY, raw);
+  else s.setItem(QUAD_LAYOUT_KEY, raw);
+}
+
 export function getLastProjectId(): string | null {
   return localStorage.getItem(LAST_PROJECT_KEY);
 }

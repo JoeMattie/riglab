@@ -1,12 +1,15 @@
-// Actions chip (design handoff §4, v7): undo/redo · Sketch/Design segmented
-// control · units · Export. The 2D/3D/Quad mode toggle is gone — the quad
-// workspace IS the app (PLANFILE-3d-conversion.md decision 3).
+// Actions chip (design handoff §4, v7): undo/redo · copy/paste ·
+// Sketch/Design segmented control · units · Export. The 2D/3D/Quad mode
+// toggle is gone — the quad workspace IS the app (PLANFILE-3d-conversion.md
+// decision 3).
+import { ClipboardPasteIcon, CopyIcon } from 'lucide-react';
 import { exportProjectJson, suggestedFileName } from '../../persistence/exportImport';
 import { setUnitsPref } from '../../persistence/prefs';
 import type { UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { type Face, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
+import { copySelection, pasteClipboard } from './clipboardActions';
 import { ThemeIcon } from './icons';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
 
@@ -17,6 +20,8 @@ export function ActionsChip() {
   const redo = useAppStore((s) => s.redo);
   const face = useEditorStore((s) => s.face);
   const setFace = useEditorStore((s) => s.setFace);
+  const hasSelection = useEditorStore((s) => s.selectedElementIds.length > 0);
+  const hasClipboard = useEditorStore((s) => s.clipboard !== null);
   const night = useThemeStore((s) => s.night);
   const toggleNight = useThemeStore((s) => s.toggleNight);
 
@@ -89,6 +94,27 @@ export function ActionsChip() {
       </button>
       <button type="button" data-testid="redo" title="redo ⇧⌘Z" onClick={redo} style={iconButton}>
         ↷
+      </button>
+      <span style={dividerStyle} />
+      <button
+        type="button"
+        data-testid="copy-selection"
+        title="copy selection ⌘C"
+        disabled={!hasSelection}
+        onClick={() => copySelection()}
+        style={{ ...iconButton, opacity: hasSelection ? 1 : 0.4, display: 'grid' }}
+      >
+        <CopyIcon size={14} />
+      </button>
+      <button
+        type="button"
+        data-testid="paste-clipboard"
+        title="paste ⌘V"
+        disabled={!hasClipboard}
+        onClick={() => pasteClipboard()}
+        style={{ ...iconButton, opacity: hasClipboard ? 1 : 0.4, display: 'grid' }}
+      >
+        <ClipboardPasteIcon size={14} />
       </button>
       <span style={dividerStyle} />
       <span
