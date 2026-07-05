@@ -721,7 +721,17 @@ export function SketchCanvas() {
   return (
     <div
       ref={containerRef}
-      style={{ flex: 1, minHeight: 0, position: 'relative', touchAction: 'none' }}
+      style={{
+        flex: 1,
+        // minWidth 0 + hidden overflow let this flex item shrink below the
+        // Konva stage's fixed pixel width, so the info panel docks on-screen
+        // instead of pushing the row wide (flexbox min-width:auto)
+        minWidth: 0,
+        minHeight: 0,
+        overflow: 'hidden',
+        position: 'relative',
+        touchAction: 'none',
+      }}
       data-testid="sketch-canvas"
     >
       <Stage

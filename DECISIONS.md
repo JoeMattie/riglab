@@ -945,3 +945,96 @@ appears in any identifier or string (asserted in a test). The §11 headline test
 computes the expected cut-list total **independently** (reimplementing the
 allowance arithmetic from geometry + realizations, not by calling `computeBom`)
 and asserts it equals the summed structural-pipe cut parts exactly.
+
+## Phase 3 — design face UI (stage 2a)
+
+Face toggle, multi-select, the info panel (§8.2a), and the pure resolution
+module. The docked checklist PANEL, materials editor, nesting matrix view,
+BOM panel/CSV button, and units toggle land in the next slice.
+
+### DECISION: face is transient editor state, not a document property
+
+`editorStore.face: 'sketch' | 'design'` (default sketch), toggled from the
+top bar (§8.3), kept across mechanism switches and never persisted — the two
+faces are lenses on one model (§8 "switching never destroys data"), so a
+document field would be wrong and a per-mechanism field would make the
+toggle feel modal. `window.__riglab.getEditor()` exposes it for scripted
+verification.
+
+### DECISION: multi-select semantics
+
+`selectedElementIds: string[]` replaces the single id. Plain click replaces
+the selection; shift/⌘/ctrl-click toggles membership (click order kept);
+a stationary click on empty canvas clears (modifier-clicks don't, so
+accumulation survives a missed shift-click); Delete/Backspace deletes the
+whole selection as ONE `updateCurrent` = one undo entry. Since pivots and
+sliders have no clickable stroke of their own, a stationary click on a node
+selects the joint element living there — that plus the info panel's
+clickable connections list makes joints reachable for realization
+assignment. The single-select path behaves exactly as before (sketch e2e
+spec unchanged and green).
+
+### DECISION: resolution-item taxonomy (src/design/resolution.ts)
+
+Pure, framework-free, shared by the info panel now and the checklist panel
+next slice. Kinds (per §8.2's checklist list):
+`missingMaterial` (link/bentLink without pipe material; telescope emits one
+item per missing member), `missingRealization` (explicit pivot/slider
+without realization), `telescopeNestingIncompatible` (both members assigned
+but not a slip fit, via validateTelescopePair), `ropeRequiresCompression`
+(from solve diagnostics when available), `overconstrained` (diagnostics
+classification), `unboundChannel` (input channel with no driven node whose
+`channelId` references it). Severity: `todo` = an assignment the user must
+make (counts toward the "K of N resolved" progress, where N = material +
+realization + channel-binding slots); `warning` = a computed problem with
+no slot. Both kinds must clear for "buildable" (§8.2 checklist-zero).
+Two scoping decisions: **link END realizations are optional refinements**
+(a butt cut is valid; the joint's requirement lives on the pivot/slider
+element) and do not create items; **implicit shared-node pivots** (plain
+pivot connections create no PivotElement) carry no realization slot,
+matching computeBom. Open question carried to the checklist slice: should
+the checklist offer "materialize a pivot element at this junction" so those
+joints can get realizations/BOM mass?
+
+### DECISION: maturity auto-flips with assignments (derivedMaturity)
+
+link/bentLink → engineered when a pipe material is assigned; telescope →
+both members assigned; pivot/slider → realization assigned; rope/elastic/
+bowden/torsionCable → cordage material assigned. Symmetric: unassigning
+drops back to sketch. Applied inside every assignment docOp so maturity can
+never disagree with the data. End realizations don't participate (optional,
+above). Assigning a cordage with a stiffness preset to an elastic adopts
+the preset k (§4.2 "materials with presets").
+
+### DECISION: setLinkLength convention (§11 "editing a link length moves the geometry")
+
+Endpoint A stays fixed; B moves along the current A→B direction to the new
+length (degenerate zero-length links extend along +x). Telescopes clamp to
+[min, max] and update their `lengthM` parameter too. Only node B is
+written; connected geometry is NOT propagated by the op — the next
+kinematic solve reconciles the mechanism onto the constraint manifold,
+which is the same convention node-dragging already uses. Each field commit
+(blur/Enter) is a single `updateCurrent` = one undo entry.
+
+### Info panel notes (§8.2a)
+
+- One right-docked collapsible panel for both faces; sketch face shows
+  identity/geometry/behavior/connections only (zero engineering fields,
+  §8.1); design face adds materials, realizations, computed mass (telescope
+  overlap counts both members, matching the BOM split), nesting badge,
+  force readout (element force from the equilibrium overlay state), and the
+  element's unresolved items. Multi-select is the §8.2 bulk-assignment
+  surface (bulk pipe/cordage/realization; "apply to similar" assigns the
+  current material to all same-type elements without one).
+- Elements have no `name` in the schema; identity shows type + short id.
+  No schema bump for a name field in this slice (planfile §8.2a lists
+  "name" — deferred until something needs it; flagged to the user).
+- Panel shows SI metres/kg; the §8.3 units toggle (and imperial conversion
+  at the UI boundary) is next-slice scope, matching the rest of the app.
+- Resolution warnings consume a diagnostics view assembled from readouts
+  the UI already has (DOF badge + equilibrium overlay) — no extra solve.
+- Component tests (Testing Library + jsdom, per the test-pyramid decision)
+  assert selection→fields, edit→document, multi-select→bulk surface, and
+  connection navigation. Radix Select dropdown interaction is deliberately
+  not driven in jsdom (portal/pointer-capture friction for no coverage
+  gain); the assignment ops are unit-tested in docOps.design.test.ts.
