@@ -1803,3 +1803,140 @@ acceptance tests, and a phase (or feature slice) isn't done until they
 pass — only the required ordering (tests before code) is gone. The
 skip-marked future-phase-test convention above remains valid history but is
 no longer mandated going forward.
+
+## Fully-3D conversion (2026-07-04)
+
+### DECISION: convert to fully-3D — single compound mechanism, hinge-default joints, quad-only workspace
+Joe concluded the strict-2D mechanism model was a mistake: real rigs joint in
+more than one plane, and §5.4's layered composition can't express multi-plane
+connections or force coupling. Agreed direction (plan-mode Q&A, all four
+options Joe-confirmed): (1) the project becomes ONE 3D compound mechanism —
+mechanisms demoted to named groups, the instance/binding/transform-drive layer
+deleted, mirroring becomes a duplicate-at-creation command; (2) pivots default
+to hinges whose axis is the sketch panel's normal (2D intuition carries over),
+with spherical as a per-joint option; (3) the quad workspace becomes the only
+mode (maximized ortho panel = old 2D feel, perspective panel = old assembly
+mode); (4) gravity is global −Y (the plan-view gravity-off hack dies). Full
+spec in PLANFILE-3d-conversion.md, which governs where it overlaps the main
+planfile. Sizing: ~60–70% of the original build; solver (~1.9k lines) and
+editor (~3.5k lines) rewritten; wearer skeleton, quad/3D render stack, BOM
+math survive. The custom-XPBD solver decision pays off: constraints generalize
+to Vec3 mechanically and a hinge is the classic two-shared-points particle
+trick — an engine wrapper would have forced a full re-integration.
+
+### DECISION: review gates waived for the initial autonomous conversion run
+CLAUDE.md pauses for human review after the planfile and solver phases. Joe
+(2026-07-04, heading out): "Use subagents to just gobble up all this shit.
+Don't stop until you run out of token usage or you are done." The run executes
+all phases end-to-end on worktree branch `worktree-3d-conversion`. Joe later
+directed (same night): merge to main and push to GitHub when done, so the
+branch-review step is waived too; he reviews on main. Per-commit CI green applies to main;
+this branch may carry WIP checkpoints but ends green. Implementation is
+parallelized across subagents with disjoint file ownership; decisions made by
+agents land under this heading's sub-entries.
+
+### DECISION (editor agent): one global solve loop; panels only project
+With three editable ortho panels hosting the same SketchCanvas, the v6
+pattern (each canvas runs the diagnostics/pose/equilibrium solve effects)
+would triple every solve. The solve loop is hoisted to the shell as
+`useGlobalSolve()` (src/ui/editor/useGlobalSolve.ts): one kinematic solve per
+edit/scrub feeds diagnostics + playback pose, one equilibrium solve feeds the
+force overlay, both into the editor store; panels project the stored Vec3
+pose through their frame and draw. Drag gestures still solve locally per
+pointermove (one panel at a time); a new transient `dragNodeId` in the editor
+store tells the global loop to stand back during a gesture. All solver calls
+are wrapped in try/catch while the 3D solver lands in a parallel worktree —
+a throw degrades to drawn geometry instead of breaking the shell.
+
+### DECISION (editor agent): work-plane depth adoption is a panel-state write
+The planfile says clicking existing geometry sets the panel's work-plane
+depth. Implemented as: any draw-tool press (and select-tool node grab) whose
+snap resolves to existing geometry writes that geometry's depth into the
+panel's `panelDepths` store entry, and the whole stroke drafts at the depth
+captured at gesture start. Endpoints landing on node/onPipe/skeleton/anchor
+snaps always take the snapped target's true 3D position regardless of the
+work plane, so connections land exactly; only grid-snapped points lift at the
+work-plane depth. Node drags are panel-plane-constrained: the drag target
+keeps the node's own out-of-plane depth (captured at mousedown), which is the
+planfile's "UI supplies panel-plane-constrained targets".
+
+### DECISION (editor agent): pipe-model + scene extraction relocated to src/ui/assembly
+src/assembly dissolves at integration, so the pure pipe-model builder moved
+to src/ui/assembly/pipeModel.ts, reworked for the compound world:
+`buildPipeModel(mechanism, nodeWorld, materials)` (no per-instance items; the
+ghost flag now means sketch-maturity only). The wireframe extraction
+(scene.ts) became `mechanismPrimitives`, and tubes/cables now carry their
+owning `elementId` so the perspective panel supports click-to-select.
+Perspective node dragging renders small node-handle spheres and drags on the
+camera-parallel plane through the node (raycast against a THREE.Plane),
+feeding the same solve-then-moveNodes loop as the 2D panels; OrbitControls
+disable while a drag is live.
+
+### DECISION: 3D solver design (hinge = pinned-or-free virtual axis particle)
+A hinge is one solver-internal virtual particle per pivot (`<pivotId>#axis`,
+never in schema or results) at pivot + axis·h, distance-tied to the pivot
+node and each member's pivot-adjacent node(s); bentLinks tie two chain
+neighbors (a two-particle bar cannot represent twist). The virtual is pinned
+(frame-fixed axis) when the pivot node is held; free otherwise, so a mobile
+hinge's axis rides its bodies. Signed angles are measured about the live
+axis with the same 0-=-straight convention as 2D and reduce exactly to the
+2D formula on planar/+z rigs; angle limits, torsion springs, and torsion
+cables act only on hinge joints. DOF = 3·(mobile nodes incl. free virtuals)
+− independent equalities (slider now counts 2; bentLink caps 3k−6).
+Kinematic release-settle runs adaptive 100-sweep blocks (≤10) because
+out-of-plane rigid-body relaxation converges ~30× slower than in-plane;
+extreme unreachable drags may still report converged:false honestly. Floor
+y ≥ 0 is global (virtuals exempt). Drag-solve measured 6–8 ms at ~230
+particles (16 ms budget).
+
+### DECISION: anchoring materializes a ground hinge
+Integration e2e caught a planarity leak: with bare spherical anchors a
+panel-drawn four-bar has cone DOF and drifted ~6 cm out of plane in one
+drag gesture (hinge-tie projections inject z; feed-forward accumulates).
+Double-click anchoring now materializes a single-member pivot (schema:
+memberIds.min(1)) with a hinge ⊥ the panel; with the pivot node anchored
+the solver pins the axis, giving the classic frame-fixed pin joint — the
+drawn four-bar is DOF 1 again and sketches stay strictly planar. Spherical
+remains selectable per joint afterward.
+
+### DECISION: examples rebuilt natively (not migrated); spherical showcase on the arm
+All seven examples are authored directly in 3D world coordinates from their
+v6 builders' dimensional data (ids namespaced per subsystem). Full-creature
+merges everything into one document: neck pan (vertical-axis hinge at the
+conduit base) carries pitch (horizontal-axis hinge) because the conduit
+bundle is a member of both pivots — real shared geometry replacing §5.4
+transform-drive. The spherical-joint showcase moved from the conduit (which
+must transmit pan torque — spherical transmits none) to the arm's
+rope-lashed hang, which is genuinely multi-DOF in the reference build.
+Steer-mirror's plan geometry now lies physically horizontal (gravity has no
+moment about vertical pan axes — the gravity-off hack is gone); the leg
+example sits at z = hipWidth/2 to meet true 3D skeleton points.
+
+### DECISION: bend-schedule dihedral convention
+`bendDihedralsRad` (src/geometry/pipe.ts): first real bend = 0 (it defines
+the reference plane); bend i = signed dihedral from the previous bend's
+plane about the shared segment, right-hand rule about the direction of
+travel; degenerate (collinear) vertices report 0 and keep the reference
+plane. Exported in the BOM/CSV as a "twist°" column beside "angle°" — the
+amount to rotate the pipe in the bender between bends. Cut lengths are
+transform-invariant, so migrated documents' BOM totals equal their v6
+values (asserted in tests).
+
+### DECISION: kinematic solver throughput — island decomposition + convergence controls
+The compound single-solve initially cost ~16–26 ms/frame on the full
+creature (2D+compose was ~1.4 ms). Fixes, all in kinematic.ts and all
+determinism-preserving: (1) constraint-graph ISLAND decomposition — Gauss–
+Seidel corrections cannot cross held particles (anchors, driven nodes,
+pinned axis virtuals), so the graph splits at them into exactly-independent
+islands (union-find, constraint order preserved within each); the full
+creature yields 11 islands and a slow subsystem no longer drags the rest
+through its sweeps; (2) drag-loop fixed-point exit (every 25 iterations,
+stop when max displacement < 1e-9 m); (3) settle stagnation exit (stop when
+a whole block improves violation < 3% — the floating-point floor sits above
+the exit tolerance); (4) SOR ω = 1.7 on settle equality-distance
+projections only (identical fixed point — a satisfied constraint steps zero
+for any ω; inequalities stay ω = 1 for clamp stability). Result: 4.25 ms
+median (min 3.66, max 5.08) on the full creature; four-bar planarity
+improved to |z| ≤ 8.4e-10. The perf acceptance asserts the MEDIAN of 60
+per-frame timings < 16 ms — robust to GC pauses and test-worker
+parallelism, unlike the old mean.

@@ -1,8 +1,8 @@
-// Phase 2 forces UI plumbing: draw two pipes, route a rope between them, toggle
-// equilibrium, add + lock an input channel, then inject an equilibrium readout
-// to confirm the force-overlay plumbing renders. Physical numbers are NOT
-// asserted here — the equilibrium solver lands in a parallel branch; the
-// solver-math acceptance tests live in src/solver/acceptance/.
+// Phase 2 forces UI plumbing, 3D-conversion edition: draw two pipes in the
+// Side panel, route a rope between them, toggle equilibrium, add + lock an
+// input channel, then inject an equilibrium readout to confirm the
+// force-overlay plumbing renders. Physical numbers are NOT asserted here —
+// the solver-math acceptance tests live in src/solver/acceptance/.
 import { expect, type Page, test } from '@playwright/test';
 
 // A second e2e spec must not re-declare the global Window.__riglab type (the
@@ -10,9 +10,8 @@ import { expect, type Page, test } from '@playwright/test';
 // through a local cast instead.
 interface RigLabHook {
   getDoc(): {
-    mechanisms: Array<{ id: string; elements: Array<{ id: string; type: string }> }>;
+    mechanism: { elements: Array<{ id: string; type: string }> };
   };
-  getEditor(): { activeMechanismId: string | null };
   setEquilibrium(readout: {
     status: string;
     elementForces: Record<string, number>;
@@ -21,24 +20,20 @@ interface RigLabHook {
   }): void;
 }
 
-async function activeMech(page: Page) {
-  return page.evaluate(() => {
-    const hook = (window as unknown as { __riglab: RigLabHook }).__riglab;
-    const id = hook.getEditor().activeMechanismId;
-    return hook.getDoc().mechanisms.find((m) => m.id === id)!;
-  });
+async function mech(page: Page) {
+  return page.evaluate(
+    () => (window as unknown as { __riglab: RigLabHook }).__riglab.getDoc().mechanism,
+  );
 }
 
 test('draw a rope, toggle equilibrium, lock an input, render force plumbing', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('new-project-name').fill('Forces Smoke');
   await page.getByTestId('create-project').click();
-  // the mechanism switcher lives in the project chip's menu (overhaul chrome)
-  await page.getByTestId('mechanism-menu-button').click();
-  await page.getByTestId('add-mechanism').click();
-  await page.getByTestId('view-side-left').click();
+  // the empty-state lands us in the maximized Side panel with the pipe tool
+  await page.getByTestId('empty-start-drawing').click();
 
-  const canvas = page.getByTestId('sketch-canvas');
+  const canvas = page.getByTestId('sketch-canvas-side');
   const box = (await canvas.boundingBox())!;
   const at = (x: number, y: number): [number, number] => [box.x + x, box.y + y];
 
@@ -50,7 +45,6 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
     await page.mouse.move(...at(x2, y2), { steps: 3 });
     await page.mouse.up();
   };
-  await page.getByTestId('tool-pipe').click();
   await drawPipe(250, 420, 250, 320);
   await drawPipe(430, 420, 430, 320);
 
@@ -59,8 +53,8 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
   await page.mouse.click(...at(250, 320));
   await page.mouse.dblclick(...at(430, 320));
 
-  let mech = await activeMech(page);
-  const rope = mech.elements.find((e) => e.type === 'rope');
+  let m = await mech(page);
+  const rope = m.elements.find((e) => e.type === 'rope');
   expect(rope, 'a rope element was created').toBeTruthy();
 
   // draw an elastic between the two bottoms too (click-drag tool)
@@ -69,15 +63,15 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
   await page.mouse.down();
   await page.mouse.move(...at(430, 420), { steps: 4 });
   await page.mouse.up();
-  mech = await activeMech(page);
-  expect(mech.elements.some((e) => e.type === 'elastic')).toBe(true);
+  m = await mech(page);
+  expect(m.elements.some((e) => e.type === 'elastic')).toBe(true);
 
   // equilibrium ("forces") chip → solver status appears in the transport pill
   await page.getByTestId('equilibrium-toggle').click();
   await expect(page.getByTestId('solver-status')).toBeVisible();
 
-  // input channels live in the transport pill's inputs popover (overhaul):
-  // add a channel and lock it — the slider freezes
+  // input channels live in the transport pill's inputs popover: add a channel
+  // and lock it — the slider freezes
   await page.getByTestId('inputs-toggle').click();
   await page.getByTestId('add-input').click();
   await expect(page.getByTestId('input-channel')).toHaveCount(1);

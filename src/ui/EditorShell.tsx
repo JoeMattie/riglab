@@ -1,46 +1,69 @@
-// The editor shell (interface overhaul): a full-bleed canvas with floating
-// chrome — project chip (top-left), actions chip (top-right), tool pill
-// (left), transport pill (bottom-center), DOF pill (bottom-right). Element
-// properties live on the canvas (dimension chips, joint popover, selection
-// card, all rendered inside SketchCanvas); the design face additionally docks
-// the tabbed inspector/checklist/materials/BOM panel as a floating column.
+// The editor shell (interface overhaul + v7 quad-only conversion): the quad
+// workspace IS the app — a full-bleed 2×2 Top/Perspective/Front/Side grid
+// with floating chrome above it: project chip (top-left), actions chip
+// (top-right), tool pill (left), transport pill (bottom-center), DOF pill
+// (bottom-right). Element properties live on the panels (dimension chips,
+// joint popover, selection card, all rendered inside each SketchCanvas); the
+// design face additionally docks the tabbed inspector/checklist/materials/
+// BOM panel as a floating column. One global solve loop feeds diagnostics,
+// playback pose and equilibrium for every panel.
 import { useEffect } from 'react';
-import { buildPipeModel, composeProject, type PipeModelItem } from '../assembly';
+import { massInventory } from '../analysis';
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { deleteElement, duplicateElement } from '../state/docOps';
 import { DEFAULT_CLIP_NAME, useEditorStore } from '../state/editorStore';
 import { useThemeStore } from '../state/themeStore';
-import { AssemblyView } from './assembly/AssemblyView';
+import { computeSkeleton, REST_POSE } from '../wearer';
+import { buildPipeModel } from './assembly/pipeModel';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
 import { DofPill } from './editor/DofPill';
 import { EmptyState } from './editor/EmptyState';
+import { pickRenderPositions } from './editor/forces';
 import { ProjectChip } from './editor/ProjectChip';
 import { RightDock } from './editor/RightDock';
-import { SketchCanvas } from './editor/SketchCanvas';
+import { publishedViews } from './editor/SketchCanvas';
 import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
 import { EDGE, panelStyle, T } from './editor/theme';
+import { useGlobalSolve } from './editor/useGlobalSolve';
 import { QuadView } from './quad/QuadView';
+
+/** Document render positions (drawn geometry / playback pose / settled sag)
+ * — the same choice every panel makes, for the debug hook. */
+function currentRenderPositions() {
+  const doc = useAppStore.getState().current;
+  const ed = useEditorStore.getState();
+  const docPositions: Record<string, { x: number; y: number; z: number }> = {};
+  for (const n of doc?.mechanism.nodes ?? []) docPositions[n.id] = n.position;
+  return pickRenderPositions({
+    docPositions,
+    posePositions: ed.posePositions,
+    settledPositions: ed.equilibriumOn ? ed.equilibrium.positions : null,
+    dragging: ed.dragNodeId !== null,
+  });
+}
 
 export function EditorShell() {
   const current = useAppStore((s) => s.current);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
-  const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
   const face = useEditorStore((s) => s.face);
-  const mode = useEditorStore((s) => s.mode);
   const controlsOpen = useEditorStore((s) => s.controlsOpen);
   const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
+  const onboardingDismissed = useEditorStore((s) => s.onboardingDismissed);
 
-  // keep an active mechanism selected whenever one exists
+  // one global solve loop: diagnostics + playback pose + equilibrium overlay
+  useGlobalSolve();
+
+  // opening a different project clears document-scoped transient state
+  // (selection, pose, trace, popovers, work-plane depths) — replaces the v6
+  // keep-an-active-mechanism effect
+  const projectId = current?.id;
   useEffect(() => {
-    if (!current) return;
-    const exists = current.mechanisms.some((m) => m.id === activeMechanismId);
-    if (!exists) setActiveMechanism(current.mechanisms[0]?.id ?? null);
-  }, [current, activeMechanismId, setActiveMechanism]);
+    if (projectId) useEditorStore.getState().resetTransient();
+  }, [projectId]);
 
   // keyboard shortcuts (§5): undo/redo, delete, duplicate, esc, space=play/pause
   useEffect(() => {
@@ -82,16 +105,14 @@ export function EditorShell() {
         ed.clearSelection();
         return;
       }
-      // delete / duplicate act on the 2D selection
-      if (ed.mode !== '2d' || ed.selectedElementIds.length === 0) return;
-      const mechId = ed.activeMechanismId;
-      if (!mechId) return;
+      // delete / duplicate act on the global selection
+      if (ed.selectedElementIds.length === 0) return;
       if (key === 'delete' || key === 'backspace') {
         e.preventDefault();
         const ids = ed.selectedElementIds;
         useAppStore.getState().updateCurrent((d) => {
           let next = d;
-          for (const id of ids) next = deleteElement(next, mechId, id);
+          for (const id of ids) next = deleteElement(next, id);
           return next;
         });
         ed.clearSelection();
@@ -102,7 +123,7 @@ export function EditorShell() {
         useAppStore.getState().updateCurrent((d) => {
           let next = d;
           for (const id of ids) {
-            const r = duplicateElement(next, mechId, id);
+            const r = duplicateElement(next, id);
             next = r.doc;
             if (r.newElementId) newIds.push(r.newElementId);
           }
@@ -116,8 +137,8 @@ export function EditorShell() {
   }, [undo, redo]);
 
   // test/debug hook: lets Playwright assert on the live document. Merged (not
-  // replaced) so seams published by children — e.g. SketchCanvas's getView —
-  // survive this initializer regardless of effect ordering.
+  // replaced) so seams published by children survive this initializer
+  // regardless of effect ordering.
   useEffect(() => {
     const w = window as unknown as { __riglab?: Record<string, unknown> };
     if (!w.__riglab) w.__riglab = {};
@@ -126,47 +147,54 @@ export function EditorShell() {
     hook.getEditor = () => {
       const s = useEditorStore.getState();
       return {
-        activeMechanismId: s.activeMechanismId,
         dof: s.dof,
         tool: s.tool,
-        mode: s.mode,
         face: s.face,
         selectedElementIds: s.selectedElementIds,
         rightTab: s.rightTab,
         openPopover: s.openPopover,
         playback: s.playback,
+        activePanel: s.activePanel,
+        quadMaximized: s.quadMaximized,
+        panelDepths: s.panelDepths,
         night: useThemeStore.getState().night,
       };
     };
-    // seam for exercising the equilibrium force-overlay plumbing while the
-    // solver's equilibrium mode lands in a parallel branch (§5.2)
+    // seam for exercising the equilibrium force-overlay plumbing (§5.2)
     hook.setEquilibrium = (readout: unknown) =>
       useEditorStore.getState().setEquilibrium(readout as never);
-    // seam for scripted verification of a bundled example (the user-facing
-    // "New from example" menu lands in the Phase 5 finishing slice); loads the
-    // example as the live document without persisting it
+    // scripted-verification seam: loads a bundled example as the live
+    // document without persisting it
     hook.loadExample = (id: string) => {
       const ex = EXAMPLES.find((e) => e.id === id);
-      if (ex) useAppStore.setState({ current: ex.load(), saveState: 'saved' });
+      if (ex) {
+        useAppStore.setState({ current: ex.load(), saveState: 'saved' });
+        useEditorStore.getState().resetTransient();
+      }
     };
-    // scripted-verification seam for the 3D synthesis + pipe model
-    // (PLANFILE-quad-workspace): recomputes composition and pipe model from
-    // the live document, independent of what the viewport is drawing
+    // the pose every panel is rendering (drawn geometry, playback pose, or
+    // settled equilibrium sag) — Vec3 document space
+    hook.getRenderPositions = () => currentRenderPositions();
+    // per-panel view transforms published by the sketch canvases
+    hook.getView = (panel?: 'top' | 'front' | 'side') =>
+      publishedViews[
+        panel ?? (useEditorStore.getState().activePanel as 'top' | 'front' | 'side')
+      ] ?? publishedViews.side;
+    // scripted-verification seam for the compound 3D world: node/element
+    // counts, render mode, pipe model stats, total mass from src/analysis
     hook.getAssemblyStats = () => {
       const doc = useAppStore.getState().current;
       if (!doc) return null;
-      const composition = composeProject(doc);
-      const placed = new Set(doc.assembly.instances.map((i) => i.mechanismId));
-      const items: PipeModelItem[] = doc.assembly.instances.map((inst) => ({
-        mechanismId: inst.mechanismId,
-        nodeWorld: composition.instances[inst.id]?.nodeWorld ?? {},
-      }));
-      const model = buildPipeModel(doc.mechanisms, items, doc.materials);
+      const positions = currentRenderPositions();
+      const frame = computeSkeleton(doc.wearer, REST_POSE);
+      const inventory = massInventory(doc, positions, frame.anchors);
+      const model = buildPipeModel(doc.mechanism, positions, doc.materials);
       return {
         render: useEditorStore.getState().assemblyRender,
-        totalMassKg: composition.totalMassKg,
-        placedCount: doc.assembly.instances.length,
-        unplacedCount: doc.mechanisms.filter((m) => !placed.has(m.id)).length,
+        nodeCount: doc.mechanism.nodes.length,
+        elementCount: doc.mechanism.elements.length,
+        groupCount: doc.groups.length,
+        totalMassKg: inventory.totalMassKg,
         primCount: model.prims.length,
         pipeCount: model.pipeCount,
         fittingCount: model.fittingCount,
@@ -175,6 +203,8 @@ export function EditorShell() {
   }, []);
 
   if (!current) return null;
+
+  const hasElements = current.mechanism.elements.length > 0;
 
   return (
     <div
@@ -188,27 +218,26 @@ export function EditorShell() {
         color: T.text,
       }}
     >
-      {/* full-bleed canvas; all chrome floats above it. 3D Assembly mode
-          (§8.3) swaps the 2D sketch canvas for the orbit viewport; quad mode
-          (PLANFILE-quad-workspace) shows the 2×2 ortho/perspective workspace;
-          the clip transport stays mounted so playback drives all of them. */}
+      {/* full-bleed quad workspace; all chrome floats above it. The clip
+          transport stays mounted so playback drives every panel. */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-        {mode === '3d' ? <AssemblyView /> : mode === 'quad' ? <QuadView /> : <SketchCanvas />}
+        <QuadView />
       </div>
 
-      {/* onboarding: a brand-new project has no mechanism to draw on yet */}
-      {mode === '2d' && current.mechanisms.length === 0 && <EmptyState />}
+      {/* onboarding: a brand-new project has nothing drawn yet; "Start
+          drawing" dismisses the overlay so the canvas gets the pointer */}
+      {!hasElements && !onboardingDismissed && <EmptyState />}
 
       <ProjectChip />
       <ActionsChip />
-      {mode !== '3d' && current.mechanisms.length > 0 && <ToolPill />}
+      <ToolPill />
       <TransportPill />
-      {mode !== '3d' && <DofPill />}
+      <DofPill />
 
-      {/* controls dock (§4.4): a toggled bottom panel once a mechanism exists
-          (controls map onto input channels); in 2D it clears the left tool pill */}
-      {current.mechanisms.length === 0 ? null : controlsOpen ? (
-        <ControlsDock left={mode === '2d' ? 196 : EDGE} />
+      {/* controls dock (§4.4): a toggled bottom panel (controls map onto
+          input channels); it clears the left tool pill */}
+      {controlsOpen ? (
+        <ControlsDock left={196} />
       ) : (
         <button
           type="button"
@@ -217,7 +246,7 @@ export function EditorShell() {
           style={{
             ...panelStyle,
             position: 'absolute',
-            left: mode === '2d' ? 196 : EDGE,
+            left: 196,
             bottom: 76,
             padding: '7px 12px',
             font: `500 12.5px ${T.sans}`,
@@ -233,7 +262,7 @@ export function EditorShell() {
       {/* design face: the tabbed inspector/checklist/materials/BOM dock
           floats as a right-hand column (its feature scope is unchanged by
           the overhaul — see DECISIONS.md) */}
-      {mode === '2d' && face === 'design' && (
+      {face === 'design' && (
         <div
           style={{
             ...panelStyle,

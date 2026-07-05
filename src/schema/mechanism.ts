@@ -4,20 +4,21 @@ import {
   jointRealizationSchema,
   maturitySchema,
   skeletonPointSchema,
-  vec2Schema,
-  viewOrientationSchema,
+  vec3Schema,
   wearerAnchorSchema,
 } from './common';
 
-// Mechanism (2D planar linkage) — §4.2. Elements are a discriminated union;
-// each carries the maturity state driving progressive refinement.
+// Compound mechanism (fully 3D, PLANFILE-3d-conversion.md) — one per project.
+// Elements are a discriminated union; each carries the maturity state driving
+// progressive refinement. Positions are Vec3 in world/document space
+// (+y up, wearer front +x, wearer-left +z); gravity is global −y.
 
 export const nodeKindSchema = z.enum(['free', 'anchor', 'driven']);
 
 export const mechanismNodeSchema = z.object({
   id: idSchema,
   kind: nodeKindSchema,
-  position: vec2Schema,
+  position: vec3Schema,
   /** driven nodes: the input channel that prescribes them */
   channelId: idSchema.optional(),
 });
@@ -97,15 +98,31 @@ export const telescopeElementSchema = z.object({
   pointMasses: z.array(attachedPointMassSchema),
 });
 
+/** How a pivot constrains rotation in 3D (PLANFILE-3d-conversion.md):
+ * `hinge` — members rotate only about `axis` (unit vector, document space;
+ * defaults to the sketch panel's normal at creation, editable after);
+ * `spherical` — a shared point with full rotational freedom (models the
+ * rope-lashed conduit joint natively). Angle limits and torsion springs are
+ * hinge-only, measured about the axis. */
+export const pivotJointSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('hinge'), axis: vec3Schema }),
+  z.object({ kind: z.literal('spherical') }),
+]);
+
 /** Pin joint at a shared node. Multi-pivot: 3+ members share the pin; pairs
  * rotate freely unless welded. Optional limits/torsion spring between two
- * designated members model hose joints and fiberglass return rods (§4.2). */
+ * designated members model hose joints and fiberglass return rods (§4.2).
+ * A single-member pivot at an ANCHORED node is a ground hinge: the pin is
+ * fixed to the frame, so the member rotates only about the (frame-fixed)
+ * axis — what double-click anchoring in a panel creates, keeping panel
+ * sketches planar instead of coning about a bare spherical anchor. */
 export const pivotElementSchema = z.object({
   ...elementBase,
   type: z.literal('pivot'),
   nodeId: idSchema,
-  /** element ids joined at this pin */
-  memberIds: z.array(idSchema).min(2),
+  joint: pivotJointSchema,
+  /** element ids joined at this pin (1 = ground hinge at an anchored node) */
+  memberIds: z.array(idSchema).min(1),
   /** pairs of member element ids rigidly welded to each other */
   welds: z.array(z.tuple([idSchema, idSchema])),
   /** relative angle = signed deviation from the straight continuation of
@@ -235,16 +252,17 @@ export const anchorBindingSchema = z.object({
 
 export const namedStateSchema = z.object({
   name: z.string().min(1),
-  positions: z.record(idSchema, vec2Schema),
+  positions: z.record(idSchema, vec3Schema),
   channelValues: z.record(idSchema, z.number()),
 });
 
+/** The project's single compound mechanism (PLANFILE-3d-conversion.md).
+ * Gravity is global −y and always available (equilibrium remains an explicit
+ * solve mode); view orientation is a property of the quad panels, not the
+ * document. */
 export const mechanismSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
-  viewOrientation: viewOrientationSchema,
-  /** default from view orientation: off for `top`, on for elevations (§4.2) */
-  gravityOn: z.boolean(),
   nodes: z.array(mechanismNodeSchema),
   elements: z.array(mechanismElementSchema),
   pointMasses: z.array(nodePointMassSchema),
@@ -260,6 +278,7 @@ export type LinkElement = z.infer<typeof linkElementSchema>;
 export type BentLinkElement = z.infer<typeof bentLinkElementSchema>;
 export type TelescopeElement = z.infer<typeof telescopeElementSchema>;
 export type PivotElement = z.infer<typeof pivotElementSchema>;
+export type PivotJoint = z.infer<typeof pivotJointSchema>;
 export type SliderElement = z.infer<typeof sliderElementSchema>;
 export type RopeElement = z.infer<typeof ropeElementSchema>;
 export type ElasticElement = z.infer<typeof elasticElementSchema>;

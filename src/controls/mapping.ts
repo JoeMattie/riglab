@@ -1,14 +1,15 @@
 // Control → channel mapping (§4.4). Controls are a grouping-and-manipulation
 // layer over the existing global input channels: each axis maps its own range
 // onto one channel with an optional invert. Pure functions — the same values
-// flow into solve()/composeProject as channel inputs, so an axis drag, a
-// control clip, and a manual override all resolve through one path.
+// flow into solve() as channel inputs, so an axis drag, a control clip, and a
+// manual override all resolve through one path. Dimension-agnostic: axis and
+// channel values are scalars regardless of the mechanism being 2D or 3D.
 import type { Control, ControlAxis, ControlClip } from '../schema';
 
 /** Resolve a project's live control channel values for a solve at the current
  * transport time. Looks up the active control clip by name and composes it with
- * the live controls (held-channel override). Convenience wrapper the 2D solve
- * and the 3D composition both call so controls drive one code path. */
+ * the live controls (held-channel override). Convenience wrapper every solve
+ * call site uses so controls drive one code path. */
 export function projectControlChannels(opts: {
   controls: Control[];
   controlClips: ControlClip[];

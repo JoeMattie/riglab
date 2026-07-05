@@ -26,7 +26,7 @@ function project(): Project {
     ...createEmptyProject('p1', 'test'),
     unitsPreference: 'metric', // SI in the fields below
     materials: testMaterials(),
-    mechanisms: [mech([link], [node('n1', 0, 0), node('n2', 3, 4)])],
+    mechanism: mech([link], [node('n1', 0, 0), node('n2', 3, 4)]),
   };
 }
 

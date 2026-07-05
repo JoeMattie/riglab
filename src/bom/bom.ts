@@ -1,6 +1,9 @@
 // BOM computation (§6.2). Pure and framework-free, mirroring the solver's
-// purity: inputs are Mechanism[] + MaterialsDb + BomSettings (plain schema
-// data), outputs are plain data. No UI, no engine types.
+// purity: input is the Project (plain schema data — its single compound
+// mechanism, groups, materials DB and BOM settings), outputs are plain data.
+// No UI, no engine types. All cut-list math is length-based on the 3D node
+// positions and therefore transform-invariant: lifted/migrated geometry
+// yields identical totals (PLANFILE-3d-conversion.md).
 //
 // Sign conventions for cut-length allowances (per end, §6.2):
 //   fitting                              → −socket depth of the matching fitting
@@ -10,18 +13,23 @@
 //   boltThrough/ropeLashing/conduitBox   → 0
 // See DECISIONS.md "Phase 3 — materials + BOM math" for the full rationale,
 // the telescope member split, and the partial-BOM (unresolved) semantics.
-import { developedLengthM, polylineLengthM } from '../geometry/pipe';
+//
+// v7 rollup note: the former per-mechanism weight rollup becomes a per-GROUP
+// rollup (groups are named element sets; an element in several groups counts
+// in each — they are selection scopes, not a partition). Project-level point
+// masses and foam plates are NOT in the BOM (same as the old assembly-level
+// masses); the analysis module (src/analysis/) owns total rig mass and CG.
+import { bendDihedralsRad, developedLengthM, polylineLengthM } from '../geometry/pipe';
 import type {
-  BomSettings,
   FittingMaterial,
   FittingType,
   JointRealization,
-  MaterialsDb,
   Mechanism,
   MechanismElement,
   PipeMaterial,
   PipeSizingSystem,
-  Vec2,
+  Project,
+  Vec3,
 } from '../schema';
 import { validateTelescopePair } from './nesting';
 
@@ -54,7 +62,12 @@ export interface CutListPart {
 
 export interface BendScheduleVertex {
   nodeId: string;
+  /** deflection at the vertex (angle between segments, plane-independent) */
   angleRad: number;
+  /** bend-plane rotation relative to the previous bend, signed about the
+   * shared segment's travel direction; first bend 0 (see geometry/pipe.ts
+   * bendDihedralsRad convention note) — the "twist" column for the builder */
+  dihedralRad: number;
   radiusM: number;
 }
 
@@ -96,8 +109,8 @@ export interface Consumables {
   ropeTotalM: number;
   elasticTotalM: number;
   bowdenTotalM: number;
-  // Foam area is intentionally omitted here — it comes from assembly FoamPlates
-  // (Phase 4), which the BOM does not see yet. Noted in DECISIONS.md.
+  // Foam area is intentionally omitted here — foam plates are project-level
+  // masses handled by the analysis module, not BOM parts. Noted in DECISIONS.md.
 }
 
 export interface WeightBreakdown {
@@ -111,7 +124,11 @@ export interface WeightBreakdown {
 export interface WeightRollup {
   grandTotalKg: number;
   breakdown: WeightBreakdown;
-  perMechanismKg: Record<string, number>;
+  /** keyed by group id; every project group appears (0 when massless).
+   * Groups may overlap, so these do not sum to the grand total. */
+  perGroupKg: Record<string, number>;
+  /** group id → display name, so exports can label the rollup */
+  groupNames: Record<string, string>;
   /** keyed by subsystem tag; the empty string '' collects untagged mass */
   perSubsystemTagKg: Record<string, number>;
 }
@@ -169,11 +186,11 @@ function fittingTypeForPivot(memberCount: number): FittingType {
   return 'cross';
 }
 
-export function computeBom(
-  mechanisms: Mechanism[],
-  materials: MaterialsDb,
-  bomSettings: BomSettings,
-): Bom {
+export function computeBom(project: Project): Bom {
+  const mech = project.mechanism;
+  const materials = project.materials;
+  const bomSettings = project.bomSettings;
+
   const pipeById = new Map(materials.pipes.map((p) => [p.id, p]));
   const hardwareById = new Map(materials.hardware.map((h) => [h.id, h]));
   const cordageById = new Map(materials.cordage.map((c) => [c.id, c]));
@@ -183,6 +200,20 @@ export function computeBom(
     fittingByKey.set(`${f.sizingSystem}|${f.nominalSize}|${f.type}`, f);
     const sizeKey = `${f.sizingSystem}|${f.nominalSize}`;
     if (!fittingSocketBySize.has(sizeKey)) fittingSocketBySize.set(sizeKey, f.socketDepthM);
+  }
+
+  // element id → ids of the groups containing it (groups may overlap)
+  const groupsOfElement = new Map<string, string[]>();
+  const perGroupKg: Record<string, number> = {};
+  const groupNames: Record<string, string> = {};
+  for (const g of project.groups) {
+    perGroupKg[g.id] = 0;
+    groupNames[g.id] = g.name;
+    for (const elId of g.elementIds) {
+      const list = groupsOfElement.get(elId) ?? [];
+      list.push(g.id);
+      groupsOfElement.set(elId, list);
+    }
   }
 
   // ── accumulators ─────────────────────────────────────────────────────
@@ -199,7 +230,6 @@ export function computeBom(
     elasticTotalM: 0,
     bowdenTotalM: 0,
   };
-  const perMechanismKg: Record<string, number> = {};
   const perSubsystemTagKg: Record<string, number> = {};
   const breakdown: WeightBreakdown = {
     pipesKg: 0,
@@ -216,14 +246,18 @@ export function computeBom(
   const missingFittingKeys = new Set<string>();
   const unresolvedIds: string[] = [];
 
+  /** Attribute mass to the element's groups (undefined elementId — e.g. a
+   * node point mass — belongs to no group), its subsystem tag and category. */
   const addWeight = (
     massKg: number,
-    mechId: string,
+    elementId: string | undefined,
     tag: string,
     category: keyof WeightBreakdown,
   ): void => {
     if (massKg === 0) return;
-    perMechanismKg[mechId] = (perMechanismKg[mechId] ?? 0) + massKg;
+    for (const gid of elementId ? (groupsOfElement.get(elementId) ?? []) : []) {
+      perGroupKg[gid] = (perGroupKg[gid] ?? 0) + massKg;
+    }
     perSubsystemTagKg[tag] = (perSubsystemTagKg[tag] ?? 0) + massKg;
     breakdown[category] += massKg;
   };
@@ -239,7 +273,6 @@ export function computeBom(
     type: FittingType,
     system: PipeSizingSystem,
     size: string,
-    mechId: string,
     tag: string,
     elementId: string,
   ): void => {
@@ -249,7 +282,7 @@ export function computeBom(
     else fittingAccum.set(key, { type, sizingSystem: system, nominalSize: size, quantity: 1 });
     const f = fittingByKey.get(key);
     if (f) {
-      addWeight(f.massKg, mechId, tag, 'fittingsKg');
+      addWeight(f.massKg, elementId, tag, 'fittingsKg');
       fittingQtyByMaterial.set(f.id, (fittingQtyByMaterial.get(f.id) ?? 0) + 1);
     } else if (!missingFittingKeys.has(key)) {
       missingFittingKeys.add(key);
@@ -261,235 +294,230 @@ export function computeBom(
     }
   };
 
-  for (const mech of mechanisms) {
-    const posOf = new Map(mech.nodes.map((n) => [n.id, n.position]));
-    const pointsOf = (ids: string[]): Vec2[] => ids.map((id) => posOf.get(id)!);
+  const posOf = new Map(mech.nodes.map((n) => [n.id, n.position]));
+  const pointsOf = (ids: string[]): Vec3[] => ids.map((id) => posOf.get(id)!);
 
-    // node → structural elements with a resolved pipe OD present at that node
-    const odAtNode = new Map<string, Array<{ elementId: string; odM: number }>>();
-    const noteOd = (nodeId: string, elementId: string, odM: number): void => {
-      const list = odAtNode.get(nodeId) ?? [];
-      list.push({ elementId, odM });
-      odAtNode.set(nodeId, list);
-    };
-    for (const el of mech.elements) {
-      if (el.type === 'link') {
-        const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
-        if (pm) {
-          noteOd(el.nodeA, el.id, pm.outerDiameterM);
-          noteOd(el.nodeB, el.id, pm.outerDiameterM);
-        }
-      } else if (el.type === 'bentLink') {
-        const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
-        if (pm) {
-          noteOd(el.nodeIds[0]!, el.id, pm.outerDiameterM);
-          noteOd(el.nodeIds[el.nodeIds.length - 1]!, el.id, pm.outerDiameterM);
-        }
-      } else if (el.type === 'telescope') {
-        const om = el.outerPipeMaterialId ? pipeById.get(el.outerPipeMaterialId) : undefined;
-        if (om) {
-          noteOd(el.nodeA, el.id, om.outerDiameterM);
-          noteOd(el.nodeB, el.id, om.outerDiameterM);
-        }
+  // node → structural elements with a resolved pipe OD present at that node
+  const odAtNode = new Map<string, Array<{ elementId: string; odM: number }>>();
+  const noteOd = (nodeId: string, elementId: string, odM: number): void => {
+    const list = odAtNode.get(nodeId) ?? [];
+    list.push({ elementId, odM });
+    odAtNode.set(nodeId, list);
+  };
+  for (const el of mech.elements) {
+    if (el.type === 'link') {
+      const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
+      if (pm) {
+        noteOd(el.nodeA, el.id, pm.outerDiameterM);
+        noteOd(el.nodeB, el.id, pm.outerDiameterM);
+      }
+    } else if (el.type === 'bentLink') {
+      const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
+      if (pm) {
+        noteOd(el.nodeIds[0]!, el.id, pm.outerDiameterM);
+        noteOd(el.nodeIds[el.nodeIds.length - 1]!, el.id, pm.outerDiameterM);
+      }
+    } else if (el.type === 'telescope') {
+      const om = el.outerPipeMaterialId ? pipeById.get(el.outerPipeMaterialId) : undefined;
+      if (om) {
+        noteOd(el.nodeA, el.id, om.outerDiameterM);
+        noteOd(el.nodeB, el.id, om.outerDiameterM);
       }
     }
-    const partnerOdM = (nodeId: string, selfElId: string, ownOdM: number): number => {
-      const list = (odAtNode.get(nodeId) ?? [])
-        .filter((e) => e.elementId !== selfElId)
-        .sort((a, b) => a.elementId.localeCompare(b.elementId));
-      return list[0]?.odM ?? ownOdM;
-    };
+  }
+  const partnerOdM = (nodeId: string, selfElId: string, ownOdM: number): number => {
+    const list = (odAtNode.get(nodeId) ?? [])
+      .filter((e) => e.elementId !== selfElId)
+      .sort((a, b) => a.elementId.localeCompare(b.elementId));
+    return list[0]?.odM ?? ownOdM;
+  };
 
-    // process a link/bentLink end: apply the realization allowance to `net`,
-    // emit connector parts, count fittings; returns the signed length delta.
-    const applyEnd = (
-      el: MechanismElement & { subsystemTag?: string },
-      pm: PipeMaterial,
-      realization: JointRealization | undefined,
-      nodeId: string,
-      tag: string,
-    ): number => {
-      if (realization) bumpTechnique(technique, realization);
-      switch (realization) {
-        case 'fitting': {
-          const socket = fittingSocketBySize.get(`${pm.sizingSystem}|${pm.nominalSize}`);
-          countFitting('coupling', pm.sizingSystem, pm.nominalSize, mech.id, tag, el.id);
-          return socket === undefined ? 0 : -socket;
-        }
-        case 'nestedSleeve':
-        case 'nestedCoupler':
-        case 'clickDetachable':
-          return NESTED_OVERLAP_OD_FACTOR * pm.outerDiameterM;
-        case 'heatWrapPivot':
-        case 'heatWrapRigid': {
-          addCut(pm, 'heatWrapConnector', HEATWRAP_CONNECTOR_LENGTH_M);
-          addWeight(HEATWRAP_CONNECTOR_LENGTH_M * pm.linearDensityKgPerM, mech.id, tag, 'pipesKg');
-          return bomSettings.heatWrapAllowanceFactor * partnerOdM(nodeId, el.id, pm.outerDiameterM);
-        }
-        default:
-          return 0;
+  // process a link/bentLink end: apply the realization allowance to `net`,
+  // emit connector parts, count fittings; returns the signed length delta.
+  const applyEnd = (
+    el: MechanismElement & { subsystemTag?: string },
+    pm: PipeMaterial,
+    realization: JointRealization | undefined,
+    nodeId: string,
+    tag: string,
+  ): number => {
+    if (realization) bumpTechnique(technique, realization);
+    switch (realization) {
+      case 'fitting': {
+        const socket = fittingSocketBySize.get(`${pm.sizingSystem}|${pm.nominalSize}`);
+        countFitting('coupling', pm.sizingSystem, pm.nominalSize, tag, el.id);
+        return socket === undefined ? 0 : -socket;
       }
-    };
+      case 'nestedSleeve':
+      case 'nestedCoupler':
+      case 'clickDetachable':
+        return NESTED_OVERLAP_OD_FACTOR * pm.outerDiameterM;
+      case 'heatWrapPivot':
+      case 'heatWrapRigid': {
+        addCut(pm, 'heatWrapConnector', HEATWRAP_CONNECTOR_LENGTH_M);
+        addWeight(HEATWRAP_CONNECTOR_LENGTH_M * pm.linearDensityKgPerM, el.id, tag, 'pipesKg');
+        return bomSettings.heatWrapAllowanceFactor * partnerOdM(nodeId, el.id, pm.outerDiameterM);
+      }
+      default:
+        return 0;
+    }
+  };
 
-    for (const el of mech.elements) {
-      const tag = el.subsystemTag ?? '';
-      switch (el.type) {
-        case 'link': {
-          const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
-          if (!pm) {
-            unresolvedIds.push(el.id);
-            addAttachedPointMasses(el, mech.id, tag, addWeight);
-            break;
-          }
-          const geomLen = polylineLengthM(pointsOf([el.nodeA, el.nodeB]));
-          addWeight(geomLen * pm.linearDensityKgPerM, mech.id, tag, 'pipesKg');
-          const net =
-            geomLen +
-            applyEnd(el, pm, el.endRealizationA, el.nodeA, tag) +
-            applyEnd(el, pm, el.endRealizationB, el.nodeB, tag);
-          addCut(pm, 'pipe', Math.max(0, net));
-          addAttachedPointMasses(el, mech.id, tag, addWeight);
+  for (const el of mech.elements) {
+    const tag = el.subsystemTag ?? '';
+    switch (el.type) {
+      case 'link': {
+        const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
+        if (!pm) {
+          unresolvedIds.push(el.id);
+          addAttachedPointMasses(el, tag, addWeight);
           break;
         }
-        case 'bentLink': {
-          const vertices: BendScheduleVertex[] = [];
-          const pts = pointsOf(el.nodeIds);
-          for (let i = 1; i < el.nodeIds.length - 1; i++) {
-            vertices.push({
-              nodeId: el.nodeIds[i]!,
-              angleRad: deflection(pts[i - 1]!, pts[i]!, pts[i + 1]!),
-              radiusM: el.filletRadiiM[i - 1] ?? 0,
-            });
-          }
-          technique.bends += vertices.length;
-          const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
-          bendSchedule.push({ elementId: el.id, materialId: pm?.id, vertices });
-          if (!pm) {
-            unresolvedIds.push(el.id);
-            addAttachedPointMasses(el, mech.id, tag, addWeight);
-            break;
-          }
-          const devLen = developedLengthM(pts, el.filletRadiiM);
-          addWeight(devLen * pm.linearDensityKgPerM, mech.id, tag, 'pipesKg');
-          const first = el.nodeIds[0]!;
-          const last = el.nodeIds[el.nodeIds.length - 1]!;
-          const net =
-            devLen +
-            applyEnd(el, pm, el.endRealizationA, first, tag) +
-            applyEnd(el, pm, el.endRealizationB, last, tag);
-          addCut(pm, 'pipe', Math.max(0, net));
-          addAttachedPointMasses(el, mech.id, tag, addWeight);
+        const geomLen = polylineLengthM(pointsOf([el.nodeA, el.nodeB]));
+        addWeight(geomLen * pm.linearDensityKgPerM, el.id, tag, 'pipesKg');
+        const net =
+          geomLen +
+          applyEnd(el, pm, el.endRealizationA, el.nodeA, tag) +
+          applyEnd(el, pm, el.endRealizationB, el.nodeB, tag);
+        addCut(pm, 'pipe', Math.max(0, net));
+        addAttachedPointMasses(el, tag, addWeight);
+        break;
+      }
+      case 'bentLink': {
+        const vertices: BendScheduleVertex[] = [];
+        const pts = pointsOf(el.nodeIds);
+        const dihedrals = bendDihedralsRad(pts);
+        for (let i = 1; i < el.nodeIds.length - 1; i++) {
+          vertices.push({
+            nodeId: el.nodeIds[i]!,
+            angleRad: deflection(pts[i - 1]!, pts[i]!, pts[i + 1]!),
+            dihedralRad: dihedrals[i - 1] ?? 0,
+            radiusM: el.filletRadiiM[i - 1] ?? 0,
+          });
+        }
+        technique.bends += vertices.length;
+        const pm = el.pipeMaterialId ? pipeById.get(el.pipeMaterialId) : undefined;
+        bendSchedule.push({ elementId: el.id, materialId: pm?.id, vertices });
+        if (!pm) {
+          unresolvedIds.push(el.id);
+          addAttachedPointMasses(el, tag, addWeight);
           break;
         }
-        case 'telescope': {
-          technique.telescopes += 1;
-          const om = el.outerPipeMaterialId ? pipeById.get(el.outerPipeMaterialId) : undefined;
-          const im = el.innerPipeMaterialId ? pipeById.get(el.innerPipeMaterialId) : undefined;
-          if (!om || !im) {
-            unresolvedIds.push(el.id);
-            addAttachedPointMasses(el, mech.id, tag, addWeight);
-            break;
-          }
-          const fit = validateTelescopePair(om, im);
-          if (!fit.acceptable) {
-            warnings.push({
-              kind: 'telescopeNestingIncompatible',
-              elementId: el.id,
-              message: `telescope ${el.id}: ${fit.classification} fit — ${fit.reason ?? 'not a slip fit'}`,
-            });
-          }
-          const ov = el.overlapM ?? NESTED_OVERLAP_OD_FACTOR * im.outerDiameterM;
-          const outerCut = el.lengthM / 2;
-          const innerCut = el.lengthM / 2 + ov; // overlap on the inner member
-          addCut(om, 'pipe', outerCut);
-          addCut(im, 'pipe', innerCut);
-          addWeight(outerCut * om.linearDensityKgPerM, mech.id, tag, 'pipesKg');
-          addWeight(innerCut * im.linearDensityKgPerM, mech.id, tag, 'pipesKg');
-          addAttachedPointMasses(el, mech.id, tag, addWeight);
+        const devLen = developedLengthM(pts, el.filletRadiiM);
+        addWeight(devLen * pm.linearDensityKgPerM, el.id, tag, 'pipesKg');
+        const first = el.nodeIds[0]!;
+        const last = el.nodeIds[el.nodeIds.length - 1]!;
+        const net =
+          devLen +
+          applyEnd(el, pm, el.endRealizationA, first, tag) +
+          applyEnd(el, pm, el.endRealizationB, last, tag);
+        addCut(pm, 'pipe', Math.max(0, net));
+        addAttachedPointMasses(el, tag, addWeight);
+        break;
+      }
+      case 'telescope': {
+        technique.telescopes += 1;
+        const om = el.outerPipeMaterialId ? pipeById.get(el.outerPipeMaterialId) : undefined;
+        const im = el.innerPipeMaterialId ? pipeById.get(el.innerPipeMaterialId) : undefined;
+        if (!om || !im) {
+          unresolvedIds.push(el.id);
+          addAttachedPointMasses(el, tag, addWeight);
           break;
         }
-        case 'pivot': {
-          if (el.realization) {
-            bumpTechnique(technique, el.realization);
-            const hw = REALIZATION_HARDWARE[el.realization];
-            if (hw) addHardware(hw, hardwareById, mech.id, tag, addWeight, hardwareQtyByMaterial);
-            if (el.realization === 'fitting') {
-              const pm = pipeMaterialOfMembers(el.memberIds, mech, pipeById);
-              if (pm) {
-                countFitting(
-                  fittingTypeForPivot(el.memberIds.length),
-                  pm.sizingSystem,
-                  pm.nominalSize,
-                  mech.id,
-                  tag,
-                  el.id,
-                );
-              }
+        const fit = validateTelescopePair(om, im);
+        if (!fit.acceptable) {
+          warnings.push({
+            kind: 'telescopeNestingIncompatible',
+            elementId: el.id,
+            message: `telescope ${el.id}: ${fit.classification} fit — ${fit.reason ?? 'not a slip fit'}`,
+          });
+        }
+        const ov = el.overlapM ?? NESTED_OVERLAP_OD_FACTOR * im.outerDiameterM;
+        const outerCut = el.lengthM / 2;
+        const innerCut = el.lengthM / 2 + ov; // overlap on the inner member
+        addCut(om, 'pipe', outerCut);
+        addCut(im, 'pipe', innerCut);
+        addWeight(outerCut * om.linearDensityKgPerM, el.id, tag, 'pipesKg');
+        addWeight(innerCut * im.linearDensityKgPerM, el.id, tag, 'pipesKg');
+        addAttachedPointMasses(el, tag, addWeight);
+        break;
+      }
+      case 'pivot': {
+        if (el.realization) {
+          bumpTechnique(technique, el.realization);
+          const hw = REALIZATION_HARDWARE[el.realization];
+          if (hw) addHardware(hw, hardwareById, el.id, tag, addWeight, hardwareQtyByMaterial);
+          if (el.realization === 'fitting') {
+            const pm = pipeMaterialOfMembers(el.memberIds, mech, pipeById);
+            if (pm) {
+              countFitting(
+                fittingTypeForPivot(el.memberIds.length),
+                pm.sizingSystem,
+                pm.nominalSize,
+                tag,
+                el.id,
+              );
             }
           }
-          break;
         }
-        case 'slider': {
-          if (el.realization) {
-            bumpTechnique(technique, el.realization);
-            const hw = REALIZATION_HARDWARE[el.realization];
-            if (hw) addHardware(hw, hardwareById, mech.id, tag, addWeight, hardwareQtyByMaterial);
-          }
-          break;
-        }
-        case 'rope': {
-          consumables.ropeRawM += el.lengthM;
-          addCordage(el.cordageMaterialId, el.lengthM, cordageById, cordageLengthByMaterial, () =>
-            addWeight(
-              el.lengthM * (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
-              mech.id,
-              tag,
-              'cordageKg',
-            ),
-          );
-          break;
-        }
-        case 'elastic': {
-          consumables.elasticTotalM += el.restLengthM;
-          addCordage(
-            el.cordageMaterialId,
-            el.restLengthM,
-            cordageById,
-            cordageLengthByMaterial,
-            () =>
-              addWeight(
-                el.restLengthM *
-                  (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
-                mech.id,
-                tag,
-                'cordageKg',
-              ),
-          );
-          break;
-        }
-        case 'bowden': {
-          const len = el.restLengthAM + el.restLengthBM;
-          consumables.bowdenTotalM += len;
-          addCordage(el.cordageMaterialId, len, cordageById, cordageLengthByMaterial, () =>
-            addWeight(
-              len * (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
-              mech.id,
-              tag,
-              'cordageKg',
-            ),
-          );
-          break;
-        }
-        case 'torsionCable':
-          // routing-independent angle coupling: no cut/consumable/mass in v1
-          break;
+        break;
       }
+      case 'slider': {
+        if (el.realization) {
+          bumpTechnique(technique, el.realization);
+          const hw = REALIZATION_HARDWARE[el.realization];
+          if (hw) addHardware(hw, hardwareById, el.id, tag, addWeight, hardwareQtyByMaterial);
+        }
+        break;
+      }
+      case 'rope': {
+        consumables.ropeRawM += el.lengthM;
+        addCordage(el.cordageMaterialId, el.lengthM, cordageById, cordageLengthByMaterial, () =>
+          addWeight(
+            el.lengthM * (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
+            el.id,
+            tag,
+            'cordageKg',
+          ),
+        );
+        break;
+      }
+      case 'elastic': {
+        consumables.elasticTotalM += el.restLengthM;
+        addCordage(el.cordageMaterialId, el.restLengthM, cordageById, cordageLengthByMaterial, () =>
+          addWeight(
+            el.restLengthM *
+              (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
+            el.id,
+            tag,
+            'cordageKg',
+          ),
+        );
+        break;
+      }
+      case 'bowden': {
+        const len = el.restLengthAM + el.restLengthBM;
+        consumables.bowdenTotalM += len;
+        addCordage(el.cordageMaterialId, len, cordageById, cordageLengthByMaterial, () =>
+          addWeight(
+            len * (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
+            el.id,
+            tag,
+            'cordageKg',
+          ),
+        );
+        break;
+      }
+      case 'torsionCable':
+        // routing-independent angle coupling: no cut/consumable/mass in v1
+        break;
     }
+  }
 
-    // node point masses always count (explicit, material-independent)
-    for (const pm of mech.pointMasses) {
-      addWeight(pm.massKg, mech.id, '', 'pointMassesKg');
-    }
+  // node point masses always count (explicit, material-independent); they hang
+  // on nodes, not elements, so they belong to no group.
+  for (const pm of mech.pointMasses) {
+    addWeight(pm.massKg, undefined, '', 'pointMassesKg');
   }
 
   consumables.ropeTotalM = consumables.ropeRawM * bomSettings.ropeWasteFactor;
@@ -567,7 +595,7 @@ export function computeBom(
     fittings,
     techniqueSummary: technique,
     consumables,
-    weights: { grandTotalKg, breakdown, perMechanismKg, perSubsystemTagKg },
+    weights: { grandTotalKg, breakdown, perGroupKg, groupNames, perSubsystemTagKg },
     cost: { byMaterialId, totalCost },
     warnings,
     unresolved: { count: unresolvedIds.length, elementIds: [...unresolvedIds].sort() },
@@ -575,15 +603,17 @@ export function computeBom(
 }
 
 // ── small helpers (module-local) ───────────────────────────────────────────
-function deflection(prev: Vec2, vertex: Vec2, next: Vec2): number {
+function deflection(prev: Vec3, vertex: Vec3, next: Vec3): number {
   const inx = vertex.x - prev.x;
   const iny = vertex.y - prev.y;
+  const inz = vertex.z - prev.z;
   const outx = next.x - vertex.x;
   const outy = next.y - vertex.y;
-  const li = Math.hypot(inx, iny);
-  const lo = Math.hypot(outx, outy);
+  const outz = next.z - vertex.z;
+  const li = Math.hypot(inx, iny, inz);
+  const lo = Math.hypot(outx, outy, outz);
   if (li < 1e-12 || lo < 1e-12) return 0;
-  const cos = (inx * outx + iny * outy) / (li * lo);
+  const cos = (inx * outx + iny * outy + inz * outz) / (li * lo);
   return Math.acos(Math.max(-1, Math.min(1, cos)));
 }
 
@@ -593,12 +623,16 @@ function bumpTechnique(t: TechniqueSummary, r: JointRealization): void {
 
 function addAttachedPointMasses(
   el: MechanismElement,
-  mechId: string,
   tag: string,
-  addWeight: (m: number, mech: string, tag: string, cat: keyof WeightBreakdown) => void,
+  addWeight: (
+    m: number,
+    elementId: string | undefined,
+    tag: string,
+    cat: keyof WeightBreakdown,
+  ) => void,
 ): void {
   if (el.type === 'link' || el.type === 'bentLink' || el.type === 'telescope') {
-    for (const pm of el.pointMasses) addWeight(pm.massKg, mechId, tag, 'pointMassesKg');
+    for (const pm of el.pointMasses) addWeight(pm.massKg, el.id, tag, 'pointMassesKg');
   }
 }
 
@@ -624,14 +658,19 @@ function pipeMaterialOfMembers(
 function addHardware(
   hardwareId: string,
   hardwareById: Map<string, { massKg: number }>,
-  mechId: string,
+  elementId: string,
   tag: string,
-  addWeight: (m: number, mech: string, tag: string, cat: keyof WeightBreakdown) => void,
+  addWeight: (
+    m: number,
+    elementId: string | undefined,
+    tag: string,
+    cat: keyof WeightBreakdown,
+  ) => void,
   hardwareQtyByMaterial: Map<string, number>,
 ): void {
   const hw = hardwareById.get(hardwareId);
   if (!hw) return;
-  addWeight(hw.massKg, mechId, tag, 'hardwareKg');
+  addWeight(hw.massKg, elementId, tag, 'hardwareKg');
   hardwareQtyByMaterial.set(hardwareId, (hardwareQtyByMaterial.get(hardwareId) ?? 0) + 1);
 }
 

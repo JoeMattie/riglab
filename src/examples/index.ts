@@ -53,7 +53,7 @@ export const EXAMPLES: BundledExample[] = [
   {
     id: 'example-steer-mirror',
     name: 'Steer mirror (plan)',
-    description: 'Handle pan joint rope-mirrored to the head with crossed left/right ropes.',
+    description: 'Horizontal pan joints rope-mirrored steer-to-head with crossed left/right ropes.',
     load: load(steerMirrorJson),
   },
   {
@@ -77,7 +77,8 @@ export const EXAMPLES: BundledExample[] = [
   {
     id: 'example-full-creature',
     name: 'Full creature',
-    description: 'Every mechanism composed on one wearer, with global weight and cut list.',
+    description:
+      'One compound mechanism: pan × pitch neck joints, mirrored legs, global weight and cut list.',
     load: load(fullCreatureJson),
   },
 ];

@@ -1,28 +1,36 @@
 // Pure document transforms for sketch editing. All editing flows through
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
-import { defaultPlacement } from '../assembly/placement';
+//
+// v7 (PLANFILE-3d-conversion.md): every op targets the project's single
+// compound mechanism (the mechanismId indirection is gone), positions are
+// Vec3, and pivots carry a joint (hinge with axis | spherical). Ops that
+// create pivots accept an optional `joint`; the UI passes a hinge whose axis
+// is the active panel's normal, and the default is the side-panel normal +z —
+// identical feel to the old 2D pivots. The assembly layer (instances /
+// bindings / place) is deleted; groups + mirror-duplicate replace it.
 import type { ProposedChange } from '../design/autoResolve';
 import { derivedMaturity } from '../design/resolution';
+import { dot, normalize, scale, sub, length as vecLength } from '../geometry/math3';
 import type {
   BowdenElement,
   Control,
   ControlAxis,
   ControlClip,
   ElasticElement,
+  Group,
   InputChannel,
   JointRealization,
   Mechanism,
   MechanismElement,
-  MechanismInstance,
   PivotElement,
+  PivotJoint,
   Project,
   RopeElement,
   SkeletonPoint,
   SliderElement,
   TorsionCableElement,
-  Vec2,
-  ViewOrientation,
+  Vec3,
   WearerAnchor,
 } from '../schema';
 
@@ -32,62 +40,34 @@ const uid = (): string => crypto.randomUUID();
  * (with its own preset) is assigned in the design face (§4.2). */
 export const DEFAULT_ELASTIC_STIFFNESS_N_PER_M = 200;
 
-function nodePosition(m: Mechanism, nodeId: string): Vec2 {
+/** Hinge about +z — the normal of the default (side) sketch panel. Ops that
+ * create pivots use this when the caller passes no joint. */
+export const DEFAULT_PIVOT_JOINT: PivotJoint = { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } };
+
+function nodePosition(m: Mechanism, nodeId: string): Vec3 {
   const n = m.nodes.find((nd) => nd.id === nodeId);
   if (!n) throw new Error(`no node ${nodeId}`);
   return n.position;
 }
 
-function segLength(a: Vec2, b: Vec2): number {
-  return Math.hypot(b.x - a.x, b.y - a.y);
+function segLength(a: Vec3, b: Vec3): number {
+  return vecLength(sub(b, a));
 }
 
-function withMechanism(doc: Project, mechId: string, fn: (m: Mechanism) => Mechanism): Project {
-  return {
-    ...doc,
-    mechanisms: doc.mechanisms.map((m) => (m.id === mechId ? fn(m) : m)),
-  };
+function withMechanism(doc: Project, fn: (m: Mechanism) => Mechanism): Project {
+  return { ...doc, mechanism: fn(doc.mechanism) };
 }
 
-export function addMechanism(
-  doc: Project,
-  viewOrientation: ViewOrientation,
-): { doc: Project; mechanismId: string } {
-  const id = uid();
-  const mechanism: Mechanism = {
-    id,
-    name: `Mechanism ${doc.mechanisms.length + 1}`,
-    viewOrientation,
-    // §4.2: gravity defaults on for elevation views, off for plan view
-    gravityOn: viewOrientation !== 'top',
-    nodes: [],
-    elements: [],
-    pointMasses: [],
-    skeletonBindings: [],
-    anchorBindings: [],
-    inputs: [],
-    namedStates: [],
-  };
-  return { doc: { ...doc, mechanisms: [...doc.mechanisms, mechanism] }, mechanismId: id };
-}
-
-export function renameMechanism(doc: Project, mechId: string, name: string): Project {
-  return withMechanism(doc, mechId, (m) => ({ ...m, name }));
-}
-
-export function deleteMechanism(doc: Project, mechId: string): Project {
-  return { ...doc, mechanisms: doc.mechanisms.filter((m) => m.id !== mechId) };
-}
-
-/** How a drawn pipe end lands in the mechanism. */
+/** How a drawn pipe end lands in the mechanism. Positions are Vec3 document
+ * coordinates (the panel projects pointer input onto its work plane first). */
 export type EndSpec =
   | { kind: 'existingNode'; nodeId: string; connect: 'pivot' | 'weld' }
-  | { kind: 'newNode'; pos: Vec2 }
+  | { kind: 'newNode'; pos: Vec3 }
   /** snapped to a pack-frame/wearer anchor → grounded node attached to (and
    * riding) that anchor */
-  | { kind: 'anchorNode'; pos: Vec2; anchor: WearerAnchor }
+  | { kind: 'anchorNode'; pos: Vec3; anchor: WearerAnchor }
   /** snapped to a skeleton point → free node driven by clips via binding */
-  | { kind: 'boundNode'; pos: Vec2; point: SkeletonPoint }
+  | { kind: 'boundNode'; pos: Vec3; point: SkeletonPoint }
   /** snapped mid-span on an existing pipe */
   | { kind: 'onPipe'; elementId: string; t: number; connect: 'pivot' | 'weld' | 'slider' };
 
@@ -96,6 +76,10 @@ interface ResolveResult {
   nodeId: string;
   /** element to weld the incoming pipe to (weld connect choice) */
   weldTo?: string;
+  /** node the incoming pipe should pin-joint at (pivot connect choice) —
+   * in 3D a bare shared node is spherical, so an explicit hinge pivot is
+   * materialized (decision 2, PLANFILE-3d-conversion.md) */
+  pivotAt?: string;
 }
 
 function elementsAtNode(m: Mechanism, nodeId: string): string[] {
@@ -110,14 +94,14 @@ function elementsAtNode(m: Mechanism, nodeId: string): string[] {
   return out;
 }
 
-function positionOnLink(m: Mechanism, elementId: string, t: number): Vec2 {
+function positionOnLink(m: Mechanism, elementId: string, t: number): Vec3 {
   const el = m.elements.find((e) => e.id === elementId);
   if (!el || (el.type !== 'link' && el.type !== 'telescope')) {
     throw new Error(`cannot locate along element ${elementId}`);
   }
   const a = m.nodes.find((n) => n.id === el.nodeA)!.position;
   const b = m.nodes.find((n) => n.id === el.nodeB)!.position;
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
 }
 
 /** Split a straight link at parameter t into two segments WELDED at the new
@@ -127,6 +111,7 @@ export function splitLink(
   m: Mechanism,
   elementId: string,
   t: number,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
 ): { mechanism: Mechanism; nodeId: string } {
   const el = m.elements.find((e) => e.id === elementId);
   if (el?.type !== 'link') throw new Error(`cannot split element ${elementId}`);
@@ -139,6 +124,7 @@ export function splitLink(
     type: 'pivot',
     maturity: 'sketch',
     nodeId,
+    joint,
     memberIds: [segA.id, segB.id],
     welds: [[segA.id, segB.id]],
   };
@@ -150,11 +136,13 @@ export function splitLink(
   return { mechanism, nodeId };
 }
 
-function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
+function resolveEnd(m: Mechanism, spec: EndSpec, joint: PivotJoint): ResolveResult {
   switch (spec.kind) {
     case 'existingNode': {
-      const weldTo = spec.connect === 'weld' ? elementsAtNode(m, spec.nodeId)[0] : undefined;
-      return { mechanism: m, nodeId: spec.nodeId, weldTo };
+      if (spec.connect === 'weld') {
+        return { mechanism: m, nodeId: spec.nodeId, weldTo: elementsAtNode(m, spec.nodeId)[0] };
+      }
+      return { mechanism: m, nodeId: spec.nodeId, pivotAt: spec.nodeId };
     }
     case 'newNode': {
       const nodeId = uid();
@@ -209,14 +197,22 @@ function resolveEnd(m: Mechanism, spec: EndSpec): ResolveResult {
           nodeId,
         };
       }
-      const { mechanism, nodeId } = splitLink(m, spec.elementId, spec.t);
-      const weldTo = spec.connect === 'weld' ? elementsAtNode(mechanism, nodeId)[0] : undefined;
-      return { mechanism, nodeId, weldTo };
+      const { mechanism, nodeId } = splitLink(m, spec.elementId, spec.t, joint);
+      if (spec.connect === 'weld') {
+        return { mechanism, nodeId, weldTo: elementsAtNode(mechanism, nodeId)[0] };
+      }
+      return { mechanism, nodeId, pivotAt: nodeId };
     }
   }
 }
 
-function addWeld(m: Mechanism, nodeId: string, elA: string, elB: string): Mechanism {
+function addWeld(
+  m: Mechanism,
+  nodeId: string,
+  elA: string,
+  elB: string,
+  joint: PivotJoint,
+): Mechanism {
   const existing = m.elements.find(
     (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
   );
@@ -239,25 +235,59 @@ function addWeld(m: Mechanism, nodeId: string, elA: string, elB: string): Mechan
     type: 'pivot',
     maturity: 'sketch',
     nodeId,
+    joint,
     memberIds: [elA, elB],
     welds: [[elA, elB]],
   };
   return { ...m, elements: [...m.elements, pivot] };
 }
 
+/** Pin the element into the joint at `nodeId`: joins an existing pivot's
+ * member list, or materializes a fresh (unwelded) pivot with the given joint
+ * when the node now has ≥2 members. In 3D a bare shared node behaves as a
+ * spherical joint, so the sketch default must be an explicit hinge. */
+function addToPivot(m: Mechanism, nodeId: string, elementId: string, joint: PivotJoint): Mechanism {
+  const existing = m.elements.find(
+    (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
+  );
+  if (existing) {
+    if (existing.memberIds.includes(elementId)) return m;
+    return {
+      ...m,
+      elements: m.elements.map((e) =>
+        e.id === existing.id ? { ...existing, memberIds: [...existing.memberIds, elementId] } : e,
+      ),
+    };
+  }
+  const members = elementsAtNode(m, nodeId);
+  if (members.length < 2) return m;
+  const pivot: PivotElement = {
+    id: uid(),
+    type: 'pivot',
+    maturity: 'sketch',
+    nodeId,
+    joint,
+    memberIds: members,
+    welds: [],
+  };
+  return { ...m, elements: [...m.elements, pivot] };
+}
+
 /** Draw a straight pipe (2 ends) or a bent pipe (3+ vertices; interior
- * vertices become new free nodes). Returns the created element id. */
+ * vertices become new free nodes). `joint` is the pivot created at a
+ * pivot-connect end (hinge axis = the sketch panel's normal). Returns the
+ * created element id. */
 export function addPipe(
   doc: Project,
-  mechId: string,
-  vertices: Vec2[],
+  vertices: Vec3[],
   startSpec: EndSpec,
   endSpec: EndSpec,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
 ): { doc: Project; elementId: string } {
   const elementId = uid();
-  const newDoc = withMechanism(doc, mechId, (m0) => {
-    const start = resolveEnd(m0, startSpec);
-    const end = resolveEnd(start.mechanism, endSpec);
+  const newDoc = withMechanism(doc, (m0) => {
+    const start = resolveEnd(m0, startSpec, joint);
+    const end = resolveEnd(start.mechanism, endSpec, joint);
     let m = end.mechanism;
 
     let element: MechanismElement;
@@ -286,8 +316,14 @@ export function addPipe(
       };
     }
     m = { ...m, elements: [...m.elements, element] };
-    if (start.weldTo) m = addWeld(m, start.nodeId, elementId, start.weldTo);
-    if (end.weldTo) m = addWeld(m, end.nodeId, elementId, end.weldTo);
+    if (start.weldTo) m = addWeld(m, start.nodeId, elementId, start.weldTo, joint);
+    else if (start.pivotAt) m = addToPivot(m, start.pivotAt, elementId, joint);
+    if (end.weldTo) m = addWeld(m, end.nodeId, elementId, end.weldTo, joint);
+    else if (end.pivotAt) m = addToPivot(m, end.pivotAt, elementId, joint);
+    // ends drawn onto a wearer anchor are grounded — pin them as ground
+    // hinges about the draw plane's normal, not bare spherical anchors
+    if (startSpec.kind === 'anchorNode') m = ensureGroundHinge(m, start.nodeId, joint);
+    if (endSpec.kind === 'anchorNode') m = ensureGroundHinge(m, end.nodeId, joint);
     return m;
   });
   return { doc: newDoc, elementId };
@@ -295,13 +331,13 @@ export function addPipe(
 
 /** Resolve a chain of pipe-end specs into node ids on the mechanism, threading
  * the mutated mechanism through each resolution. Force elements (rope/elastic/
- * bowden) attach to nodes but never weld the incoming cord to existing pipes,
- * so `weldTo` is intentionally ignored. */
+ * bowden) attach to nodes but never weld or pin the incoming cord to existing
+ * pipes, so `weldTo`/`pivotAt` are intentionally ignored. */
 function resolveChain(m: Mechanism, specs: EndSpec[]): { mechanism: Mechanism; nodeIds: string[] } {
   let mech = m;
   const nodeIds: string[] = [];
   for (const spec of specs) {
-    const r = resolveEnd(mech, spec);
+    const r = resolveEnd(mech, spec, DEFAULT_PIVOT_JOINT);
     mech = r.mechanism;
     nodeIds.push(r.nodeId);
   }
@@ -311,13 +347,9 @@ function resolveChain(m: Mechanism, specs: EndSpec[]): { mechanism: Mechanism; n
 /** Draw a rope: a tension-only cord through 2+ path points. Interior points
  * landing on a pipe become frictionless eyelets fixed to that pipe (§4.2).
  * Rest length L₀ defaults to the drawn path length (taut at creation). */
-export function addRope(
-  doc: Project,
-  mechId: string,
-  path: EndSpec[],
-): { doc: Project; elementId: string } {
+export function addRope(doc: Project, path: EndSpec[]): { doc: Project; elementId: string } {
   const elementId = uid();
-  const newDoc = withMechanism(doc, mechId, (m0) => {
+  const newDoc = withMechanism(doc, (m0) => {
     const { mechanism, nodeIds } = resolveChain(m0, path);
     // collapse a path point that resolved onto the previous node (e.g. a
     // double-click that re-snapped the last vertex)
@@ -342,12 +374,11 @@ export function addRope(
  * the drawn length so a fresh elastic sits at zero force. */
 export function addElastic(
   doc: Project,
-  mechId: string,
   startSpec: EndSpec,
   endSpec: EndSpec,
 ): { doc: Project; elementId: string } {
   const elementId = uid();
-  const newDoc = withMechanism(doc, mechId, (m0) => {
+  const newDoc = withMechanism(doc, (m0) => {
     const { mechanism, nodeIds } = resolveChain(m0, [startSpec, endSpec]);
     const [a, b] = nodeIds as [string, string];
     if (a === b) return m0;
@@ -371,14 +402,13 @@ export function addElastic(
  * and B(b1→b2), routing-independent (brake-cable jaw drive, §4.2). */
 export function addBowden(
   doc: Project,
-  mechId: string,
   aStart: EndSpec,
   aEnd: EndSpec,
   bStart: EndSpec,
   bEnd: EndSpec,
 ): { doc: Project; elementId: string } {
   const elementId = uid();
-  const newDoc = withMechanism(doc, mechId, (m0) => {
+  const newDoc = withMechanism(doc, (m0) => {
     const { mechanism, nodeIds } = resolveChain(m0, [aStart, aEnd, bStart, bEnd]);
     const [a1, a2, b1, b2] = nodeIds as [string, string, string, string];
     if (a1 === a2 || b1 === b2) return m0;
@@ -405,15 +435,14 @@ export function addBowden(
 }
 
 /** Couple two existing pivots with a torsion cable (θ_B − θ_B₀ = ratio·(θ_A −
- * θ_A₀), §4.2). No-op if either id is not a pivot in this mechanism. */
+ * θ_A₀), §4.2). No-op if either id is not a pivot in the mechanism. */
 export function addTorsionCable(
   doc: Project,
-  mechId: string,
   pivotAId: string,
   pivotBId: string,
 ): { doc: Project; elementId: string } {
   const elementId = uid();
-  const newDoc = withMechanism(doc, mechId, (m) => {
+  const newDoc = withMechanism(doc, (m) => {
     const isPivot = (id: string) => m.elements.some((e) => e.id === id && e.type === 'pivot');
     if (pivotAId === pivotBId || !isPivot(pivotAId) || !isPivot(pivotBId)) return m;
     const cable: TorsionCableElement = {
@@ -430,16 +459,11 @@ export function addTorsionCable(
   return { doc: newDoc, elementId };
 }
 
-export function setGravity(doc: Project, mechId: string, on: boolean): Project {
-  return withMechanism(doc, mechId, (m) => ({ ...m, gravityOn: on }));
-}
-
 /** Add a generic input channel. Channel→geometry binding (driven nodes) is
- * authored later (its concrete meaning arrives with the example mechanisms);
- * this exists so the Phase 2 slider + lock-toggle UI is usable and testable. */
-export function addInputChannel(doc: Project, mechId: string): { doc: Project; channelId: string } {
+ * authored later; this exists so the slider + lock-toggle UI is usable. */
+export function addInputChannel(doc: Project): { doc: Project; channelId: string } {
   const channelId = uid();
-  const newDoc = withMechanism(doc, mechId, (m) => {
+  const newDoc = withMechanism(doc, (m) => {
     const channel: InputChannel = {
       id: channelId,
       name: `input ${m.inputs.length + 1}`,
@@ -456,11 +480,10 @@ export function addInputChannel(doc: Project, mechId: string): { doc: Project; c
 
 export function setInputChannel(
   doc: Project,
-  mechId: string,
   channelId: string,
   patch: Partial<Pick<InputChannel, 'name' | 'value' | 'locked' | 'min' | 'max'>>,
 ): Project {
-  return withMechanism(doc, mechId, (m) => ({
+  return withMechanism(doc, (m) => ({
     ...m,
     inputs: m.inputs.map((c) => {
       if (c.id !== channelId) return c;
@@ -472,15 +495,15 @@ export function setInputChannel(
   }));
 }
 
-export function removeInputChannel(doc: Project, mechId: string, channelId: string): Project {
-  return withMechanism(doc, mechId, (m) => ({
+export function removeInputChannel(doc: Project, channelId: string): Project {
+  return withMechanism(doc, (m) => ({
     ...m,
     inputs: m.inputs.filter((c) => c.id !== channelId),
   }));
 }
 
-export function moveNodes(doc: Project, mechId: string, positions: Record<string, Vec2>): Project {
-  return withMechanism(doc, mechId, (m) => ({
+export function moveNodes(doc: Project, positions: Record<string, Vec3>): Project {
+  return withMechanism(doc, (m) => ({
     ...m,
     nodes: m.nodes.map((n) => {
       const p = positions[n.id];
@@ -489,55 +512,106 @@ export function moveNodes(doc: Project, mechId: string, positions: Record<string
   }));
 }
 
-export function setNodeKind(
-  doc: Project,
-  mechId: string,
-  nodeId: string,
-  kind: 'free' | 'anchor',
-): Project {
-  return withMechanism(doc, mechId, (m) => ({
-    ...m,
-    nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind } : n)),
-  }));
+/** Materialize a GROUND HINGE at an anchored node (PLANFILE-3d-conversion
+ * integration fix): if the node carries ≥1 rigid member and no pivot element
+ * yet, add a pivot over all members at the node. A single-member pivot at an
+ * anchored node pins the hinge to the frame (see pivotElementSchema), so a
+ * chain end anchored by double-click keeps rotating about the panel normal
+ * instead of coning about a bare spherical anchor. No-op when a pivot
+ * already exists (its joint is respected) or the node has no members. */
+function ensureGroundHinge(m: Mechanism, nodeId: string, joint: PivotJoint): Mechanism {
+  const hasPivot = m.elements.some((e) => e.type === 'pivot' && e.nodeId === nodeId);
+  if (hasPivot) return m;
+  const members = elementsAtNode(m, nodeId);
+  if (members.length < 1) return m;
+  const pivot: PivotElement = {
+    id: uid(),
+    type: 'pivot',
+    maturity: 'sketch',
+    nodeId,
+    joint,
+    memberIds: members,
+    welds: [],
+  };
+  return { ...m, elements: [...m.elements, pivot] };
 }
 
-/** Delete an element plus dependents (pivots/sliders that reference it) and
- * any nodes left orphaned. */
-export function deleteElement(doc: Project, mechId: string, elementId: string): Project {
-  return withMechanism(doc, mechId, (m) => {
-    const remaining = m.elements.filter((e) => {
-      if (e.id === elementId) return false;
-      if (e.type === 'pivot') {
-        return !e.memberIds.includes(elementId);
-      }
-      if (e.type === 'slider') return e.alongElementId !== elementId;
-      // a torsion cable couples two pivots; drop it if either pivot is gone
-      if (e.type === 'torsionCable') return e.pivotA !== elementId && e.pivotB !== elementId;
-      return true;
-    });
-    const used = new Set<string>();
-    for (const el of remaining) {
-      if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
-        used.add(el.nodeA);
-        used.add(el.nodeB);
-      } else if (el.type === 'bentLink') {
-        for (const id of el.nodeIds) used.add(id);
-      } else if (el.type === 'pivot' || el.type === 'slider') used.add(el.nodeId);
-      else if (el.type === 'rope') {
-        for (const id of el.path) used.add(id);
-      } else if (el.type === 'bowden') {
-        for (const id of [el.a1, el.a2, el.b1, el.b2]) used.add(id);
-      }
-    }
-    return {
+/** Re-kind a node. Anchoring (kind 'anchor') additionally materializes a
+ * ground hinge in the same op — one undo step — with `joint` (the calling
+ * panel's normal; DEFAULT_PIVOT_JOINT when absent). Un-anchoring leaves any
+ * existing pivot alone: the ground hinge simply becomes a plain pivot over
+ * the same members, removable via its own delete. */
+export function setNodeKind(
+  doc: Project,
+  nodeId: string,
+  kind: 'free' | 'anchor',
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
+): Project {
+  return withMechanism(doc, (m) => {
+    const next = {
       ...m,
-      elements: remaining,
+      nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind } : n)),
+    };
+    return kind === 'anchor' ? ensureGroundHinge(next, nodeId, joint) : next;
+  });
+}
+
+/** Delete an element plus dependents (pivots/sliders that reference it), any
+ * nodes left orphaned, and every project-level reference (group membership,
+ * point masses / foam plates hanging on a removed node). */
+export function deleteElement(doc: Project, elementId: string): Project {
+  const m = doc.mechanism;
+  const remaining = m.elements.filter((e) => {
+    if (e.id === elementId) return false;
+    if (e.type === 'pivot') return !e.memberIds.includes(elementId);
+    if (e.type === 'slider') return e.alongElementId !== elementId;
+    // a torsion cable couples two pivots; drop it if either pivot is gone
+    if (e.type === 'torsionCable') return e.pivotA !== elementId && e.pivotB !== elementId;
+    return true;
+  });
+  const keptElementIds = new Set(remaining.map((e) => e.id));
+  // torsion cables whose pivot was removed as a dependent go too
+  const survivors = remaining.filter(
+    (e) =>
+      e.type !== 'torsionCable' || (keptElementIds.has(e.pivotA) && keptElementIds.has(e.pivotB)),
+  );
+  const survivorIds = new Set(survivors.map((e) => e.id));
+
+  const used = new Set<string>();
+  for (const el of survivors) {
+    if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
+      used.add(el.nodeA);
+      used.add(el.nodeB);
+    } else if (el.type === 'bentLink') {
+      for (const id of el.nodeIds) used.add(id);
+    } else if (el.type === 'pivot' || el.type === 'slider') used.add(el.nodeId);
+    else if (el.type === 'rope') {
+      for (const id of el.path) used.add(id);
+    } else if (el.type === 'bowden') {
+      for (const id of [el.a1, el.a2, el.b1, el.b2]) used.add(id);
+    }
+  }
+  return {
+    ...doc,
+    mechanism: {
+      ...m,
+      elements: survivors,
       nodes: m.nodes.filter((n) => used.has(n.id)),
       skeletonBindings: m.skeletonBindings.filter((b) => used.has(b.nodeId)),
       anchorBindings: m.anchorBindings.filter((b) => used.has(b.nodeId)),
       pointMasses: m.pointMasses.filter((p) => used.has(p.nodeId)),
-    };
-  });
+    },
+    groups: doc.groups.map((g) => ({
+      ...g,
+      elementIds: g.elementIds.filter((id) => survivorIds.has(id)),
+    })),
+    pointMasses: doc.pointMasses.filter(
+      (pm) => pm.attach.kind !== 'node' || used.has(pm.attach.nodeId),
+    ),
+    foamPlates: doc.foamPlates.filter(
+      (fp) => fp.attach.kind !== 'node' || used.has(fp.attach.nodeId),
+    ),
+  };
 }
 
 /** Duplicate a pipe element (link/bentLink/telescope) with fresh nodes offset
@@ -546,15 +620,14 @@ export function deleteElement(doc: Project, mechId: string, elementId: string): 
  * isn't well-defined on its own (joints, ropes — they reference other parts). */
 export function duplicateElement(
   doc: Project,
-  mechId: string,
   elementId: string,
 ): { doc: Project; newElementId: string | null } {
-  const mech = doc.mechanisms.find((m) => m.id === mechId);
-  const el = mech?.elements.find((e) => e.id === elementId);
-  if (!mech || !el || (el.type !== 'link' && el.type !== 'bentLink' && el.type !== 'telescope')) {
+  const mech = doc.mechanism;
+  const el = mech.elements.find((e) => e.id === elementId);
+  if (!el || (el.type !== 'link' && el.type !== 'bentLink' && el.type !== 'telescope')) {
     return { doc, newElementId: null };
   }
-  const off = (p: Vec2): Vec2 => ({ x: p.x + 0.1, y: p.y - 0.1 });
+  const off = (p: Vec3): Vec3 => ({ x: p.x + 0.1, y: p.y - 0.1, z: p.z });
   const nodeCopies = new Map<string, string>();
   const oldIds = el.type === 'bentLink' ? el.nodeIds : [el.nodeA, el.nodeB];
   for (const id of oldIds) if (!nodeCopies.has(id)) nodeCopies.set(id, uid());
@@ -574,7 +647,7 @@ export function duplicateElement(
           nodeB: nodeCopies.get(el.nodeB)!,
         };
   return {
-    doc: withMechanism(doc, mechId, (m) => ({
+    doc: withMechanism(doc, (m) => ({
       ...m,
       nodes: [...m.nodes, ...newNodes],
       elements: [...m.elements, copy],
@@ -583,13 +656,8 @@ export function duplicateElement(
   };
 }
 
-export function addSkeletonBinding(
-  doc: Project,
-  mechId: string,
-  point: SkeletonPoint,
-  nodeId: string,
-): Project {
-  return withMechanism(doc, mechId, (m) => ({
+export function addSkeletonBinding(doc: Project, point: SkeletonPoint, nodeId: string): Project {
+  return withMechanism(doc, (m) => ({
     ...m,
     skeletonBindings: [
       ...m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
@@ -598,8 +666,8 @@ export function addSkeletonBinding(
   }));
 }
 
-export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: string): Project {
-  return withMechanism(doc, mechId, (m) => ({
+export function removeSkeletonBinding(doc: Project, nodeId: string): Project {
+  return withMechanism(doc, (m) => ({
     ...m,
     skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
   }));
@@ -609,8 +677,8 @@ export function removeSkeletonBinding(doc: Project, mechId: string, nodeId: stri
  * deadzone, PLANFILE-wearer-attachments-and-floor slice B): drops any
  * skeleton binding or anchor attachment, and un-grounds a grounded node so
  * the drag can move it freely. Driven nodes keep their channel. */
-export function releaseNodeConnection(doc: Project, mechId: string, nodeId: string): Project {
-  return withMechanism(doc, mechId, (m) => ({
+export function releaseNodeConnection(doc: Project, nodeId: string): Project {
+  return withMechanism(doc, (m) => ({
     ...m,
     nodes: m.nodes.map((n) =>
       n.id === nodeId && n.kind === 'anchor' ? { ...n, kind: 'free' as const } : n,
@@ -624,23 +692,32 @@ export function releaseNodeConnection(doc: Project, mechId: string, nodeId: stri
  * attaches it — the ground point rides the wearer anchor through pose/clip
  * playback (PLANFILE-wearer-attachments-and-floor slice A). The drag-gesture
  * counterpart of drawing's `anchorNode` end spec. A grounded node cannot
- * also be skeleton-driven, so any skeleton binding is removed. */
+ * also be skeleton-driven, so any skeleton binding is removed. Bindings now
+ * target true 3D wearer points (no per-view projection). */
 export function groundNodeAtAnchor(
   doc: Project,
-  mechId: string,
   nodeId: string,
   anchor: WearerAnchor,
-  pos: Vec2,
+  pos: Vec3,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
 ): Project {
-  return withMechanism(doc, mechId, (m) => ({
-    ...m,
-    nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
-    skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
-    anchorBindings: [
-      ...m.anchorBindings.filter((b) => b.nodeId !== nodeId),
-      { id: uid(), anchor, nodeId },
-    ],
-  }));
+  return withMechanism(doc, (m) =>
+    // grounding materializes a ground hinge like every other anchoring path
+    // (panel normal in `joint`), so the attached member cannot cone
+    ensureGroundHinge(
+      {
+        ...m,
+        nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
+        skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
+        anchorBindings: [
+          ...m.anchorBindings.filter((b) => b.nodeId !== nodeId),
+          { id: uid(), anchor, nodeId },
+        ],
+      },
+      nodeId,
+      joint,
+    ),
+  );
 }
 
 // ── design-face assignment ops (§8.2, §8.2a) ────────────────────────────────
@@ -654,12 +731,8 @@ const withMaturity = <T extends MechanismElement>(el: T): T => ({
   maturity: derivedMaturity(el),
 });
 
-function mapElements(
-  doc: Project,
-  mechId: string,
-  fn: (el: MechanismElement) => MechanismElement,
-): Project {
-  return withMechanism(doc, mechId, (m) => ({ ...m, elements: m.elements.map(fn) }));
+function mapElements(doc: Project, fn: (el: MechanismElement) => MechanismElement): Project {
+  return withMechanism(doc, (m) => ({ ...m, elements: m.elements.map(fn) }));
 }
 
 /** Assign (or clear, with undefined) a pipe material on every link/bentLink in
@@ -667,12 +740,11 @@ function mapElements(
  * types in the list are ignored, so a mixed selection is safe. */
 export function assignPipeMaterial(
   doc: Project,
-  mechId: string,
   elementIds: string[],
   pipeMaterialId: string | undefined,
 ): Project {
   const ids = new Set(elementIds);
-  return mapElements(doc, mechId, (el) =>
+  return mapElements(doc, (el) =>
     ids.has(el.id) && (el.type === 'link' || el.type === 'bentLink')
       ? withMaturity({ ...el, pipeMaterialId })
       : el,
@@ -682,12 +754,11 @@ export function assignPipeMaterial(
 /** Assign (or clear) one member of a telescope's outer/inner material pair. */
 export function assignTelescopeMaterial(
   doc: Project,
-  mechId: string,
   elementId: string,
   member: 'outer' | 'inner',
   pipeMaterialId: string | undefined,
 ): Project {
-  return mapElements(doc, mechId, (el) =>
+  return mapElements(doc, (el) =>
     el.id === elementId && el.type === 'telescope'
       ? withMaturity(
           member === 'outer'
@@ -703,7 +774,6 @@ export function assignTelescopeMaterial(
  * to an elastic adopts the preset (§4.2 "material with its own preset"). */
 export function assignCordageMaterial(
   doc: Project,
-  mechId: string,
   elementIds: string[],
   cordageMaterialId: string | undefined,
 ): Project {
@@ -711,7 +781,7 @@ export function assignCordageMaterial(
   const preset = cordageMaterialId
     ? doc.materials.cordage.find((c) => c.id === cordageMaterialId)?.defaultStiffnessNPerM
     : undefined;
-  return mapElements(doc, mechId, (el) => {
+  return mapElements(doc, (el) => {
     if (!ids.has(el.id)) return el;
     if (el.type === 'elastic') {
       return withMaturity({
@@ -731,12 +801,11 @@ export function assignCordageMaterial(
  * `elementIds` — the bulk-realization surface (§8.2). */
 export function assignRealization(
   doc: Project,
-  mechId: string,
   elementIds: string[],
   realization: JointRealization | undefined,
 ): Project {
   const ids = new Set(elementIds);
-  return mapElements(doc, mechId, (el) =>
+  return mapElements(doc, (el) =>
     ids.has(el.id) && (el.type === 'pivot' || el.type === 'slider')
       ? withMaturity({ ...el, realization })
       : el,
@@ -752,11 +821,11 @@ export function assignRealization(
  * sketch state. No-op on nodes that are not a pivot-like joint. */
 export function assignNodeRealization(
   doc: Project,
-  mechId: string,
   nodeId: string,
   realization: JointRealization | undefined,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
 ): Project {
-  return withMechanism(doc, mechId, (m) => {
+  return withMechanism(doc, (m) => {
     const existing = m.elements.find(
       (e): e is PivotElement | SliderElement =>
         (e.type === 'pivot' || e.type === 'slider') && e.nodeId === nodeId,
@@ -789,6 +858,7 @@ export function assignNodeRealization(
       type: 'pivot',
       maturity: 'engineered',
       nodeId,
+      joint,
       memberIds: members,
       welds: [],
       realization,
@@ -802,12 +872,11 @@ export function assignNodeRealization(
  * not participate in the maturity rule. */
 export function assignEndRealization(
   doc: Project,
-  mechId: string,
   elementId: string,
   end: 'A' | 'B',
   realization: JointRealization | undefined,
 ): Project {
-  return mapElements(doc, mechId, (el) =>
+  return mapElements(doc, (el) =>
     el.id === elementId && (el.type === 'link' || el.type === 'bentLink')
       ? end === 'A'
         ? { ...el, endRealizationA: realization }
@@ -820,31 +889,27 @@ export function assignEndRealization(
  * by folding every change through the existing assignment ops, so maturity
  * derivation stays in one place. Callers run this inside a single
  * updateCurrent — one undo step for the whole proposal. */
-export function applyAutoResolve(
-  doc: Project,
-  mechId: string,
-  changes: readonly ProposedChange[],
-): Project {
+export function applyAutoResolve(doc: Project, changes: readonly ProposedChange[]): Project {
   let d = doc;
   for (const c of changes) {
     switch (c.slot) {
       case 'pipeMaterial':
-        d = assignPipeMaterial(d, mechId, [c.elementId], c.after);
+        d = assignPipeMaterial(d, [c.elementId], c.after);
         break;
       case 'outerPipeMaterial':
-        d = assignTelescopeMaterial(d, mechId, c.elementId, 'outer', c.after);
+        d = assignTelescopeMaterial(d, c.elementId, 'outer', c.after);
         break;
       case 'innerPipeMaterial':
-        d = assignTelescopeMaterial(d, mechId, c.elementId, 'inner', c.after);
+        d = assignTelescopeMaterial(d, c.elementId, 'inner', c.after);
         break;
       case 'realization':
-        d = assignRealization(d, mechId, [c.elementId], c.after as JointRealization);
+        d = assignRealization(d, [c.elementId], c.after as JointRealization);
         break;
       case 'endRealizationA':
-        d = assignEndRealization(d, mechId, c.elementId, 'A', c.after as JointRealization);
+        d = assignEndRealization(d, c.elementId, 'A', c.after as JointRealization);
         break;
       case 'endRealizationB':
-        d = assignEndRealization(d, mechId, c.elementId, 'B', c.after as JointRealization);
+        d = assignEndRealization(d, c.elementId, 'B', c.after as JointRealization);
         break;
     }
   }
@@ -856,14 +921,9 @@ export function applyAutoResolve(
  * zero-length links extend along +x). Only node B moves — connected geometry
  * reconciles on the next kinematic solve. Telescopes clamp to [min, max] and
  * update their length parameter as well. Non-positive lengths are ignored. */
-export function setLinkLength(
-  doc: Project,
-  mechId: string,
-  elementId: string,
-  lengthM: number,
-): Project {
+export function setLinkLength(doc: Project, elementId: string, lengthM: number): Project {
   if (!(lengthM > 0)) return doc;
-  return withMechanism(doc, mechId, (m) => {
+  return withMechanism(doc, (m) => {
     const el = m.elements.find((e) => e.id === elementId);
     if (!el || (el.type !== 'link' && el.type !== 'telescope')) return m;
     const target =
@@ -871,8 +931,12 @@ export function setLinkLength(
     const a = nodePosition(m, el.nodeA);
     const b = nodePosition(m, el.nodeB);
     const len = segLength(a, b);
-    const dir = len > 1e-9 ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: 1, y: 0 };
-    const newB = { x: a.x + dir.x * target, y: a.y + dir.y * target };
+    const dir: Vec3 = len > 1e-9 ? normalize(sub(b, a)) : { x: 1, y: 0, z: 0 };
+    const newB: Vec3 = {
+      x: a.x + dir.x * target,
+      y: a.y + dir.y * target,
+      z: a.z + dir.z * target,
+    };
     return {
       ...m,
       nodes: m.nodes.map((n) => (n.id === el.nodeB ? { ...n, position: newB } : n)),
@@ -889,13 +953,8 @@ export function setLinkLength(
 /** Pin/unpin a link/telescope length (the dimension-chip lock). Locked
  * lengths refuse direct geometry edits (endpoint drag / scrub / typed value);
  * the kinematic solver already holds every pipe length rigid while posing. */
-export function setLengthLocked(
-  doc: Project,
-  mechId: string,
-  elementId: string,
-  locked: boolean,
-): Project {
-  return mapElements(doc, mechId, (el) =>
+export function setLengthLocked(doc: Project, elementId: string, locked: boolean): Project {
+  return mapElements(doc, (el) =>
     el.id === elementId && (el.type === 'link' || el.type === 'telescope')
       ? { ...el, lengthLocked: locked || undefined }
       : el,
@@ -903,23 +962,32 @@ export function setLengthLocked(
 }
 
 /** Re-realize the joint at a node (joint popover):
- * - 'pivot' — members rotate freely: node un-anchored; any pivot element at
- *   the node keeps its members/realization but loses its welds.
- * - 'weld' — all members rigid: node un-anchored; a pivot element is created
- *   (or updated) with every member pair welded.
+ * - 'pivot' — members rotate about the joint: any pivot element at the node
+ *   loses its welds; with no element yet, an explicit pivot is materialized
+ *   (in 3D a bare shared node is spherical, so hinge-by-default needs the
+ *   element). A `joint` argument re-aims an existing hinge / switches to
+ *   spherical.
+ * - 'weld' — all members rigid: a pivot element is created (or updated) with
+ *   every member pair welded.
  * - 'anchor' — the node is grounded (double-click parity).
  * No-op when a joint kind needs ≥2 members and the node has fewer. */
 export function setNodeJoint(
   doc: Project,
-  mechId: string,
   nodeId: string,
   kind: 'pivot' | 'weld' | 'anchor',
+  joint?: PivotJoint,
 ): Project {
-  return withMechanism(doc, mechId, (m) => {
+  return withMechanism(doc, (m) => {
     const node = m.nodes.find((n) => n.id === nodeId);
     if (!node) return m;
     if (kind === 'anchor') {
-      return { ...m, nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor' } : n)) };
+      // anchoring from the joint popover materializes a ground hinge too
+      // (same as setNodeKind), so panel sketches stay planar
+      return ensureGroundHinge(
+        { ...m, nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor' } : n)) },
+        nodeId,
+        joint ?? DEFAULT_PIVOT_JOINT,
+      );
     }
     const members = elementsAtNode(m, nodeId);
     const existing = m.elements.find(
@@ -928,9 +996,24 @@ export function setNodeJoint(
     let elements = m.elements;
     if (kind === 'pivot') {
       if (existing) {
-        elements = elements.map((e) => (e.id === existing.id ? { ...existing, welds: [] } : e));
+        elements = elements.map((e) =>
+          e.id === existing.id ? { ...existing, welds: [], joint: joint ?? existing.joint } : e,
+        );
+      } else {
+        if (members.length < 2) return m;
+        elements = [
+          ...elements,
+          {
+            id: uid(),
+            type: 'pivot',
+            maturity: 'sketch',
+            nodeId,
+            joint: joint ?? DEFAULT_PIVOT_JOINT,
+            memberIds: members,
+            welds: [],
+          } satisfies PivotElement,
+        ];
       }
-      // no explicit pivot element = an implicit free pin already
     } else {
       if (members.length < 2) return m;
       const first = members[0]!;
@@ -946,6 +1029,7 @@ export function setNodeJoint(
               type: 'pivot',
               maturity: 'sketch',
               nodeId,
+              joint: joint ?? DEFAULT_PIVOT_JOINT,
               memberIds: members,
               welds,
             } satisfies PivotElement,
@@ -961,11 +1045,40 @@ export function setNodeJoint(
   });
 }
 
+/** Set the joint of the pivot at a node (joint-popover hinge-axis edit /
+ * spherical toggle). Finds-or-materializes the pivot element, preserving
+ * welds/limits/realization when one already exists. */
+export function setNodePivotJoint(doc: Project, nodeId: string, joint: PivotJoint): Project {
+  return withMechanism(doc, (m) => {
+    const existing = m.elements.find(
+      (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
+    );
+    if (existing) {
+      return {
+        ...m,
+        elements: m.elements.map((e) => (e.id === existing.id ? { ...existing, joint } : e)),
+      };
+    }
+    const members = elementsAtNode(m, nodeId);
+    if (members.length < 2) return m;
+    const pivot: PivotElement = {
+      id: uid(),
+      type: 'pivot',
+      maturity: 'sketch',
+      nodeId,
+      joint,
+      memberIds: members,
+      welds: [],
+    };
+    return { ...m, elements: [...m.elements, pivot] };
+  });
+}
+
 /** Disconnect a junction: every incident element beyond the first gets its
  * own copy of the node (same position), and joint elements (pivot/slider) at
  * the node are removed. Skeleton bindings stay on the original node. */
-export function detachNode(doc: Project, mechId: string, nodeId: string): Project {
-  return withMechanism(doc, mechId, (m) => {
+export function detachNode(doc: Project, nodeId: string): Project {
+  return withMechanism(doc, (m) => {
     const node = m.nodes.find((n) => n.id === nodeId);
     if (!node) return m;
     const newNodes: Mechanism['nodes'] = [];
@@ -1014,8 +1127,8 @@ export function detachNode(doc: Project, mechId: string, nodeId: string): Projec
 /** Swap a link/telescope's A and B ends (selection-card "Reverse"). Length
  * edits and end realizations are A-anchored, so reversing chooses which end
  * stays put. */
-export function reverseLink(doc: Project, mechId: string, elementId: string): Project {
-  return mapElements(doc, mechId, (el) => {
+export function reverseLink(doc: Project, elementId: string): Project {
+  return mapElements(doc, (el) => {
     if (el.id !== elementId) return el;
     if (el.type === 'link') {
       return {
@@ -1042,90 +1155,296 @@ export function reverseLink(doc: Project, mechId: string, elementId: string): Pr
 
 /** Split a straight link at its midpoint (selection-card "Split"); the two
  * halves stay welded at the new node, matching the drawn-onto-pipe behavior. */
-export function splitLinkAtMidpoint(doc: Project, mechId: string, elementId: string): Project {
-  return withMechanism(doc, mechId, (m) => {
+export function splitLinkAtMidpoint(
+  doc: Project,
+  elementId: string,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
+): Project {
+  return withMechanism(doc, (m) => {
     const el = m.elements.find((e) => e.id === elementId);
     if (el?.type !== 'link') return m;
-    return splitLink(m, elementId, 0.5).mechanism;
+    return splitLink(m, elementId, 0.5, joint).mechanism;
   });
 }
 
 /** Patch behavior parameters of one element (rope L₀, elastic k/rest/
  * pretension, telescope range/sliding, bowden rests, torsion ratio/backlash,
- * pivot limits/spring — §8.2a). The expected `type` guards against stale
- * selections patching a different element kind. */
+ * pivot joint/limits/spring — §8.2a). The expected `type` guards against
+ * stale selections patching a different element kind. */
 export function patchElement<K extends MechanismElement['type']>(
   doc: Project,
-  mechId: string,
   elementId: string,
   type: K,
   patch: Partial<Extract<MechanismElement, { type: K }>>,
 ): Project {
-  return mapElements(doc, mechId, (el) =>
+  return mapElements(doc, (el) =>
     el.id === elementId && el.type === type
       ? withMaturity({ ...el, ...patch } as MechanismElement)
       : el,
   );
 }
 
-// ── Assembly (3D) edits (§4.3/§8.3) ────────────────────────────────────────
+// ── Groups (PLANFILE-3d-conversion.md) ──────────────────────────────────────
+// Named selection sets over the compound mechanism — the successors of the
+// per-plane "mechanisms". They drive BOM rollup and scope checklist notes.
 
-/** Place a mechanism into the 3D assembly at its view-orientation default
- * plane (one-click Place on an unplaced ghost, PLANFILE-quad-workspace). The
- * instance starts fixed-drive so the existing gizmo applies immediately. */
-export function addInstance(
+function withGroup(doc: Project, groupId: string, fn: (g: Group) => Group): Project {
+  return { ...doc, groups: doc.groups.map((g) => (g.id === groupId ? fn(g) : g)) };
+}
+
+export function createGroup(
   doc: Project,
-  mechanismId: string,
-): { doc: Project; instanceId: string | null } {
-  const mech = doc.mechanisms.find((m) => m.id === mechanismId);
-  if (!mech) return { doc, instanceId: null };
-  const { position, quaternion } = defaultPlacement(mech.viewOrientation);
-  const instance: MechanismInstance = {
-    id: uid(),
-    name: mech.name,
-    mechanismId,
-    position,
-    quaternion,
-    mirror: false,
-    transformDrive: { kind: 'fixed' },
+  name: string,
+  elementIds: string[] = [],
+): { doc: Project; groupId: string } {
+  const groupId = uid();
+  const group: Group = { id: groupId, name, elementIds: [...new Set(elementIds)] };
+  return { doc: { ...doc, groups: [...doc.groups, group] }, groupId };
+}
+
+export function renameGroup(doc: Project, groupId: string, name: string): Project {
+  return withGroup(doc, groupId, (g) => ({ ...g, name }));
+}
+
+/** Replace a group's membership wholesale (deduped, order kept). */
+export function setGroupElements(doc: Project, groupId: string, elementIds: string[]): Project {
+  return withGroup(doc, groupId, (g) => ({ ...g, elementIds: [...new Set(elementIds)] }));
+}
+
+/** Add elements to a group (union, existing order kept). */
+export function addToGroup(doc: Project, groupId: string, elementIds: string[]): Project {
+  return withGroup(doc, groupId, (g) => ({
+    ...g,
+    elementIds: [...new Set([...g.elementIds, ...elementIds])],
+  }));
+}
+
+/** Delete a group. Its elements survive — a group is a named selection, not a
+ * container. */
+export function deleteGroup(doc: Project, groupId: string): Project {
+  return { ...doc, groups: doc.groups.filter((g) => g.id !== groupId) };
+}
+
+/** Dismiss a group's note (e.g. the migration's "re-joint needed" warning). */
+export function clearGroupNote(doc: Project, groupId: string): Project {
+  return withGroup(doc, groupId, ({ note: _note, ...g }) => g);
+}
+
+// ── Mirror-duplicate (PLANFILE-3d-conversion.md decision 1) ─────────────────
+
+/** A mirror plane through `origin` with unit-ish `normal` (normalized here). */
+export interface MirrorPlane {
+  origin: Vec3;
+  normal: Vec3;
+}
+
+/** The wearer's sagittal plane z = 0 — the default mirror for limbs. */
+export const SAGITTAL_PLANE: MirrorPlane = {
+  origin: { x: 0, y: 0, z: 0 },
+  normal: { x: 0, y: 0, z: 1 },
+};
+
+/** Duplicate the selected elements reflected across `plane` (default the
+ * sagittal z = 0): real duplicated geometry with fresh node/element ids, no
+ * live link. Hinge axes are reflected then NEGATED so signed-angle
+ * conventions (limits, torsion rest angles) survive the reflection — the
+ * same rule the v6→v7 migration uses for mirrored instances. Dependent
+ * elements whose references fall outside the selection are dropped (a pivot
+ * keeps only in-selection members and needs ≥2; sliders need their rail;
+ * torsion cables need both pivots). Wearer bindings are NOT copied — the
+ * mirrored side is re-bound explicitly (left/right anchors don't reflect
+ * mechanically). Creates a group "<source group or 'mirror'> (mirrored)"
+ * over the copies. */
+export function mirrorDuplicate(
+  doc: Project,
+  elementIds: string[],
+  plane: MirrorPlane = SAGITTAL_PLANE,
+): { doc: Project; newElementIds: string[]; groupId: string | null } {
+  const m = doc.mechanism;
+  const n = normalize(plane.normal);
+  const wanted = new Set(elementIds);
+  const selected = m.elements.filter((e) => wanted.has(e.id));
+  if (selected.length === 0) return { doc, newElementIds: [], groupId: null };
+
+  // decide which elements can be copied (references must stay inside the set)
+  const selectedIds = new Set(selected.map((e) => e.id));
+  const copyable = selected.filter((e) => {
+    if (e.type === 'pivot') return e.memberIds.filter((id) => selectedIds.has(id)).length >= 2;
+    if (e.type === 'slider') return selectedIds.has(e.alongElementId);
+    if (e.type === 'torsionCable') return selectedIds.has(e.pivotA) && selectedIds.has(e.pivotB);
+    return true;
+  });
+  // pivots that survive, for torsion-cable re-checking
+  const copyableIds = new Set(copyable.map((e) => e.id));
+  const finalElements = copyable.filter(
+    (e) => e.type !== 'torsionCable' || (copyableIds.has(e.pivotA) && copyableIds.has(e.pivotB)),
+  );
+  if (finalElements.length === 0) return { doc, newElementIds: [], groupId: null };
+
+  const reflectPoint = (p: Vec3): Vec3 => sub(p, scale(n, 2 * dot(sub(p, plane.origin), n)));
+  const reflectDir = (v: Vec3): Vec3 => sub(v, scale(n, 2 * dot(v, n)));
+  /** reflected then negated — the migration's mirrored-hinge rule */
+  const mirrorAxis = (axis: Vec3): Vec3 => scale(reflectDir(axis), -1);
+
+  // fresh ids
+  const elIdMap = new Map(finalElements.map((e) => [e.id, uid()] as const));
+  const nodeIdMap = new Map<string, string>();
+  const mapNode = (id: string): string => {
+    let mapped = nodeIdMap.get(id);
+    if (!mapped) {
+      mapped = uid();
+      nodeIdMap.set(id, mapped);
+    }
+    return mapped;
   };
+  const usedNodeIds = new Set<string>();
+  for (const e of finalElements) {
+    switch (e.type) {
+      case 'link':
+      case 'telescope':
+      case 'elastic':
+        usedNodeIds.add(e.nodeA).add(e.nodeB);
+        break;
+      case 'bentLink':
+        for (const id of e.nodeIds) usedNodeIds.add(id);
+        break;
+      case 'pivot':
+      case 'slider':
+        usedNodeIds.add(e.nodeId);
+        break;
+      case 'rope':
+        for (const id of e.path) usedNodeIds.add(id);
+        break;
+      case 'bowden':
+        for (const id of [e.a1, e.a2, e.b1, e.b2]) usedNodeIds.add(id);
+        break;
+      case 'torsionCable':
+        break;
+    }
+  }
+
+  const newNodes: Mechanism['nodes'] = [];
+  for (const nodeId of usedNodeIds) {
+    const src = m.nodes.find((nd) => nd.id === nodeId);
+    if (!src) continue;
+    newNodes.push({ ...src, id: mapNode(nodeId), position: reflectPoint(src.position) });
+  }
+
+  const freshMasses = <T extends { id: string }>(masses: T[]): T[] =>
+    masses.map((pm) => ({ ...pm, id: uid() }));
+
+  const memberPairMap = (pair: [string, string]): [string, string] => [
+    elIdMap.get(pair[0])!,
+    elIdMap.get(pair[1])!,
+  ];
+
+  const copyElement = (e: MechanismElement): MechanismElement => {
+    const id = elIdMap.get(e.id)!;
+    switch (e.type) {
+      case 'link':
+        return {
+          ...e,
+          id,
+          nodeA: mapNode(e.nodeA),
+          nodeB: mapNode(e.nodeB),
+          pointMasses: freshMasses(e.pointMasses),
+        };
+      case 'telescope':
+        return {
+          ...e,
+          id,
+          nodeA: mapNode(e.nodeA),
+          nodeB: mapNode(e.nodeB),
+          pointMasses: freshMasses(e.pointMasses),
+        };
+      case 'elastic':
+        return { ...e, id, nodeA: mapNode(e.nodeA), nodeB: mapNode(e.nodeB) };
+      case 'bentLink':
+        return {
+          ...e,
+          id,
+          nodeIds: e.nodeIds.map(mapNode),
+          pointMasses: freshMasses(e.pointMasses),
+        };
+      case 'pivot': {
+        const members = e.memberIds.filter((mid) => elIdMap.has(mid));
+        const keptSet = new Set(members);
+        const bothKept = (a: string, b: string) => keptSet.has(a) && keptSet.has(b);
+        return {
+          ...e,
+          id,
+          nodeId: mapNode(e.nodeId),
+          joint:
+            e.joint.kind === 'hinge' ? { kind: 'hinge', axis: mirrorAxis(e.joint.axis) } : e.joint,
+          memberIds: members.map((mid) => elIdMap.get(mid)!),
+          welds: e.welds.filter(([a, b]) => bothKept(a, b)).map(memberPairMap),
+          angleLimit:
+            e.angleLimit && bothKept(e.angleLimit.memberA, e.angleLimit.memberB)
+              ? {
+                  ...e.angleLimit,
+                  memberA: elIdMap.get(e.angleLimit.memberA)!,
+                  memberB: elIdMap.get(e.angleLimit.memberB)!,
+                }
+              : undefined,
+          torsionSpring:
+            e.torsionSpring && bothKept(e.torsionSpring.memberA, e.torsionSpring.memberB)
+              ? {
+                  ...e.torsionSpring,
+                  memberA: elIdMap.get(e.torsionSpring.memberA)!,
+                  memberB: elIdMap.get(e.torsionSpring.memberB)!,
+                }
+              : undefined,
+        };
+      }
+      case 'slider':
+        return {
+          ...e,
+          id,
+          nodeId: mapNode(e.nodeId),
+          alongElementId: elIdMap.get(e.alongElementId)!,
+        };
+      case 'rope':
+        return { ...e, id, path: e.path.map(mapNode) };
+      case 'bowden':
+        return {
+          ...e,
+          id,
+          a1: mapNode(e.a1),
+          a2: mapNode(e.a2),
+          b1: mapNode(e.b1),
+          b2: mapNode(e.b2),
+        };
+      case 'torsionCable':
+        return { ...e, id, pivotA: elIdMap.get(e.pivotA)!, pivotB: elIdMap.get(e.pivotB)! };
+    }
+  };
+  const copies = finalElements.map(copyElement);
+
+  const newElementIds = finalElements.map((e) => elIdMap.get(e.id)!);
+  const sourceGroup = doc.groups.find((g) => elementIds.every((id) => g.elementIds.includes(id)));
+  const groupName = `${sourceGroup?.name ?? 'mirror'} (mirrored)`;
+  const groupId = uid();
   return {
     doc: {
       ...doc,
-      assembly: { ...doc.assembly, instances: [...doc.assembly.instances, instance] },
+      mechanism: { ...m, nodes: [...m.nodes, ...newNodes], elements: [...m.elements, ...copies] },
+      groups: [...doc.groups, { id: groupId, name: groupName, elementIds: newElementIds }],
     },
-    instanceId: instance.id,
+    newElementIds,
+    groupId,
   };
 }
 
-/** Patch a mechanism instance's placement transform (gizmo drag, mirror
- * toggle). Pure Project→Project like every other edit, so undo/autosave see
- * one path. */
-export function setInstanceTransform(
-  doc: Project,
-  instanceId: string,
-  patch: Partial<Pick<MechanismInstance, 'position' | 'quaternion' | 'mirror'>>,
-): Project {
-  return {
-    ...doc,
-    assembly: {
-      ...doc.assembly,
-      instances: doc.assembly.instances.map((i) => (i.id === instanceId ? { ...i, ...patch } : i)),
-    },
-  };
-}
+// ── Project-level masses (formerly assembly-level) ──────────────────────────
 
-/** Set an assembly point mass's mass (kg) — drives the live CG/balance
- * readout in the Assembly analysis sidebar. */
+/** Set a project point mass's mass (kg) — drives the live CG/balance readout
+ * in the analysis sidebar. */
 export function setPointMassKg(doc: Project, pointMassId: string, massKg: number): Project {
   return {
     ...doc,
-    assembly: {
-      ...doc.assembly,
-      pointMasses: doc.assembly.pointMasses.map((m) =>
-        m.id === pointMassId ? { ...m, massKg: Math.max(0, massKg) } : m,
-      ),
-    },
+    pointMasses: doc.pointMasses.map((m) =>
+      m.id === pointMassId ? { ...m, massKg: Math.max(0, massKg) } : m,
+    ),
   };
 }
 

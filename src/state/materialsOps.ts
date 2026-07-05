@@ -100,29 +100,27 @@ export function deleteMaterialRow(
   }));
 }
 
-/** How many elements across all mechanisms reference this material id. */
+/** How many elements in the compound mechanism reference this material id. */
 export function materialReferenceCount(doc: Project, materialId: string): number {
   let n = 0;
-  for (const m of doc.mechanisms) {
-    for (const el of m.elements) {
-      switch (el.type) {
-        case 'link':
-        case 'bentLink':
-          if (el.pipeMaterialId === materialId) n++;
-          break;
-        case 'telescope':
-          if (el.outerPipeMaterialId === materialId) n++;
-          if (el.innerPipeMaterialId === materialId) n++;
-          break;
-        case 'rope':
-        case 'elastic':
-        case 'bowden':
-        case 'torsionCable':
-          if (el.cordageMaterialId === materialId) n++;
-          break;
-        default:
-          break;
-      }
+  for (const el of doc.mechanism.elements) {
+    switch (el.type) {
+      case 'link':
+      case 'bentLink':
+        if (el.pipeMaterialId === materialId) n++;
+        break;
+      case 'telescope':
+        if (el.outerPipeMaterialId === materialId) n++;
+        if (el.innerPipeMaterialId === materialId) n++;
+        break;
+      case 'rope':
+      case 'elastic':
+      case 'bowden':
+      case 'torsionCable':
+        if (el.cordageMaterialId === materialId) n++;
+        break;
+      default:
+        break;
     }
   }
   return n;

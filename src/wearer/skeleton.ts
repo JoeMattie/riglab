@@ -1,8 +1,8 @@
 // Parametric mannequin (§7): segment lengths from standard anthropometry
 // fractions of height (Drillis & Contini — approximate, user-editable via
 // project.wearer). World frame: y up, x forward (wearer faces +x), z to the
-// wearer's left. Phase 1 poses are sagittal (rotations about z), which
-// covers the walk / arm-swing / lean clips; richer poses come with 3D.
+// wearer's left. Poses are sagittal (rotations about z), which covers the
+// walk / arm-swing / lean clip library; out-of-plane poses are future work.
 import type { SkeletonPoint, Vec3, WearerAnchor, WearerParams } from '../schema';
 
 export interface JointPose {

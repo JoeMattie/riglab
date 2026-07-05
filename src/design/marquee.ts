@@ -1,9 +1,14 @@
-// Marquee (drag-box) hit-testing: pure world-space geometry, crossing
-// semantics — touching the box selects (the friendlier CAD convention).
-// Span elements (links, cordage) test their segments; node-carried elements
-// (pivots, sliders) test their node; a torsion cable tests either coupled
-// pivot's node. Positions come from the caller so the posed geometry is what
-// gets hit-tested, matching what is on screen.
+// Marquee (drag-box) hit-testing: pure 2D geometry, crossing semantics —
+// touching the box selects (the friendlier CAD convention).
+//
+// Deliberately 2D in the fully-3D app (PLANFILE-3d-conversion.md): a marquee
+// is a rectangle in an ortho panel, so callers project the document's Vec3
+// positions into that panel's plane coordinates FIRST (panelProject in the
+// quad UI) and pass the projected {x, y} record here, along with the rect in
+// the same panel coordinates. Span elements (links, cordage) test their
+// segments; node-carried elements (pivots, sliders) test their node; a
+// torsion cable tests either coupled pivot's node. Positions come from the
+// caller so the posed geometry is what gets hit-tested, matching the screen.
 import type { Mechanism, Vec2 } from '../schema';
 
 export interface WorldRect {

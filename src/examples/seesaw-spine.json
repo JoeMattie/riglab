@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-seesaw-spine",
   "name": "Example — seesaw spine",
   "unitsPreference": "imperial",
@@ -622,326 +622,354 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
+  "mechanism": {
+    "id": "seesaw-spine",
+    "name": "Seesaw spine",
+    "nodes": [
+      {
+        "id": "hipBackTop",
+        "kind": "anchor",
+        "position": {
+          "x": -0.15,
+          "y": 1.05,
+          "z": 0
+        }
+      },
+      {
+        "id": "hipFrontTop",
+        "kind": "anchor",
+        "position": {
+          "x": 0.15,
+          "y": 1.05,
+          "z": 0
+        }
+      },
+      {
+        "id": "hipBackBot",
+        "kind": "anchor",
+        "position": {
+          "x": -0.15,
+          "y": 0.95,
+          "z": 0
+        }
+      },
+      {
+        "id": "hipFrontBot",
+        "kind": "anchor",
+        "position": {
+          "x": 0.15,
+          "y": 0.95,
+          "z": 0
+        }
+      },
+      {
+        "id": "tTail",
+        "kind": "free",
+        "position": {
+          "x": -1,
+          "y": 1.05,
+          "z": 0
+        }
+      },
+      {
+        "id": "bTail",
+        "kind": "free",
+        "position": {
+          "x": -1,
+          "y": 0.95,
+          "z": 0
+        }
+      },
+      {
+        "id": "tNeck",
+        "kind": "free",
+        "position": {
+          "x": 1,
+          "y": 1.05,
+          "z": 0
+        }
+      },
+      {
+        "id": "bNeck",
+        "kind": "free",
+        "position": {
+          "x": 1,
+          "y": 0.95,
+          "z": 0
+        }
+      },
+      {
+        "id": "head",
+        "kind": "free",
+        "position": {
+          "x": 1.6,
+          "y": 1.15,
+          "z": 0
+        }
+      },
+      {
+        "id": "tail",
+        "kind": "free",
+        "position": {
+          "x": -1.6,
+          "y": 1,
+          "z": 0
+        }
+      }
+    ],
+    "elements": [
+      {
+        "id": "topTail",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "tTail",
+        "nodeB": "hipBackTop",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "topMid",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipBackTop",
+        "nodeB": "hipFrontTop",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "topNeck",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipFrontTop",
+        "nodeB": "tNeck",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "fitting",
+        "pointMasses": []
+      },
+      {
+        "id": "botTail",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "bTail",
+        "nodeB": "hipBackBot",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "botMid",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipBackBot",
+        "nodeB": "hipFrontBot",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "botNeck",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipFrontBot",
+        "nodeB": "bNeck",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "fitting",
+        "pointMasses": []
+      },
+      {
+        "id": "vertTail",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "tTail",
+        "nodeB": "bTail",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "vertBack",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipBackTop",
+        "nodeB": "hipBackBot",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "vertFront",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "hipFrontTop",
+        "nodeB": "hipFrontBot",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "vertNeck",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "spine",
+        "nodeA": "tNeck",
+        "nodeB": "bNeck",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "neckTop",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "tNeck",
+        "nodeB": "head",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "neckBot",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "bNeck",
+        "nodeB": "head",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "tailTop",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeA": "tTail",
+        "nodeB": "tail",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "tailBot",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeA": "bTail",
+        "nodeB": "tail",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "heatWrapRigid",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "braceTail1",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "path": ["tTail", "hipBackBot"],
+        "lengthM": 0.856,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "braceTail2",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "path": ["bTail", "hipBackTop"],
+        "lengthM": 0.856,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "braceNeck1",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "path": ["hipFrontTop", "bNeck"],
+        "lengthM": 0.856,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "braceNeck2",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "path": ["hipFrontBot", "tNeck"],
+        "lengthM": 0.856,
+        "cordageMaterialId": "cord-paracord550"
+      }
+    ],
+    "pointMasses": [
+      {
+        "id": "headMass",
+        "name": "head",
+        "massKg": 1.5,
+        "nodeId": "head"
+      },
+      {
+        "id": "tailMass",
+        "name": "tail",
+        "massKg": 0.8,
+        "nodeId": "tail"
+      }
+    ],
+    "skeletonBindings": [],
+    "anchorBindings": [],
+    "inputs": [],
+    "namedStates": []
+  },
+  "groups": [
     {
-      "id": "seesaw-spine",
+      "id": "grp-spine",
       "name": "Seesaw spine",
-      "viewOrientation": "side-left",
-      "gravityOn": true,
-      "nodes": [
-        {
-          "id": "hipBackTop",
-          "kind": "anchor",
-          "position": {
-            "x": -0.15,
-            "y": 1.05
-          }
-        },
-        {
-          "id": "hipFrontTop",
-          "kind": "anchor",
-          "position": {
-            "x": 0.15,
-            "y": 1.05
-          }
-        },
-        {
-          "id": "hipBackBot",
-          "kind": "anchor",
-          "position": {
-            "x": -0.15,
-            "y": 0.95
-          }
-        },
-        {
-          "id": "hipFrontBot",
-          "kind": "anchor",
-          "position": {
-            "x": 0.15,
-            "y": 0.95
-          }
-        },
-        {
-          "id": "tTail",
-          "kind": "free",
-          "position": {
-            "x": -1,
-            "y": 1.05
-          }
-        },
-        {
-          "id": "bTail",
-          "kind": "free",
-          "position": {
-            "x": -1,
-            "y": 0.95
-          }
-        },
-        {
-          "id": "tNeck",
-          "kind": "free",
-          "position": {
-            "x": 1,
-            "y": 1.05
-          }
-        },
-        {
-          "id": "bNeck",
-          "kind": "free",
-          "position": {
-            "x": 1,
-            "y": 0.95
-          }
-        },
-        {
-          "id": "head",
-          "kind": "free",
-          "position": {
-            "x": 1.6,
-            "y": 1.15
-          }
-        },
-        {
-          "id": "tail",
-          "kind": "free",
-          "position": {
-            "x": -1.6,
-            "y": 1
-          }
-        }
-      ],
-      "elements": [
-        {
-          "id": "topTail",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "tTail",
-          "nodeB": "hipBackTop",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "fitting",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "topMid",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipBackTop",
-          "nodeB": "hipFrontTop",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "topNeck",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipFrontTop",
-          "nodeB": "tNeck",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "fitting",
-          "pointMasses": []
-        },
-        {
-          "id": "botTail",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "bTail",
-          "nodeB": "hipBackBot",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "fitting",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "botMid",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipBackBot",
-          "nodeB": "hipFrontBot",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "botNeck",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipFrontBot",
-          "nodeB": "bNeck",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "fitting",
-          "pointMasses": []
-        },
-        {
-          "id": "vertTail",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "tTail",
-          "nodeB": "bTail",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "vertBack",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipBackTop",
-          "nodeB": "hipBackBot",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "vertFront",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "hipFrontTop",
-          "nodeB": "hipFrontBot",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "vertNeck",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "spine",
-          "nodeA": "tNeck",
-          "nodeB": "bNeck",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "neckTop",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeA": "tNeck",
-          "nodeB": "head",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "neckBot",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeA": "bNeck",
-          "nodeB": "head",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "tailTop",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeA": "tTail",
-          "nodeB": "tail",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "tailBot",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeA": "bTail",
-          "nodeB": "tail",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "heatWrapRigid",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "braceTail1",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "path": ["tTail", "hipBackBot"],
-          "lengthM": 0.856,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "braceTail2",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "path": ["bTail", "hipBackTop"],
-          "lengthM": 0.856,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "braceNeck1",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "path": ["hipFrontTop", "bNeck"],
-          "lengthM": 0.856,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "braceNeck2",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "path": ["hipFrontBot", "tNeck"],
-          "lengthM": 0.856,
-          "cordageMaterialId": "cord-paracord550"
-        }
-      ],
-      "pointMasses": [
-        {
-          "id": "headMass",
-          "name": "head",
-          "massKg": 1.5,
-          "nodeId": "head"
-        },
-        {
-          "id": "tailMass",
-          "name": "tail",
-          "massKg": 0.8,
-          "nodeId": "tail"
-        }
-      ],
-      "skeletonBindings": [],
-      "anchorBindings": [],
-      "inputs": [],
-      "namedStates": []
+      "elementIds": [
+        "topTail",
+        "topMid",
+        "topNeck",
+        "botTail",
+        "botMid",
+        "botNeck",
+        "vertTail",
+        "vertBack",
+        "vertFront",
+        "vertNeck",
+        "neckTop",
+        "neckBot",
+        "tailTop",
+        "tailBot",
+        "braceTail1",
+        "braceTail2",
+        "braceNeck1",
+        "braceNeck2"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

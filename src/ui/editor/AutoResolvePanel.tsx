@@ -33,7 +33,7 @@ export function AutoResolvePanel({ doc, mech }: { doc: Project; mech: Mechanism 
   const setAutoProposal = useEditorStore((s) => s.setAutoProposal);
   const select = useEditorStore((s) => s.select);
 
-  const fresh = proposal !== null && proposal.docRef === doc && proposal.mechId === mech.id;
+  const fresh = proposal !== null && proposal.docRef === doc;
 
   const valueLabel = (c: ProposedChange, id: string | undefined): string => {
     if (id === undefined) return '—';
@@ -49,8 +49,7 @@ export function AutoResolvePanel({ doc, mech }: { doc: Project; mech: Mechanism 
         run={(resolveAssigned) =>
           setAutoProposal({
             docRef: doc,
-            mechId: mech.id,
-            changes: autoResolve(doc, mech.id, { resolveAssigned }).changes,
+            changes: autoResolve(doc, { resolveAssigned }).changes,
           })
         }
       />
@@ -58,7 +57,7 @@ export function AutoResolvePanel({ doc, mech }: { doc: Project; mech: Mechanism 
   }
 
   const apply = () => {
-    updateCurrent((cur) => applyAutoResolve(cur, mech.id, proposal.changes));
+    updateCurrent((cur) => applyAutoResolve(cur, proposal.changes));
     setAutoProposal(null);
   };
   const dismiss = (c: ProposedChange) =>

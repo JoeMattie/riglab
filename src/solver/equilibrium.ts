@@ -1,4 +1,5 @@
-// Static equilibrium mode (§5.1 mode 2) + force extraction (§5.2).
+// Static equilibrium mode (§5.1 mode 2) + force extraction (§5.2), fully 3D
+// (PLANFILE-3d-conversion.md).
 //
 // Pseudo-dynamic relaxation: integrate the mechanism particles under gravity
 // and spring forces with heavy damping (×0.85/step) and an XPBD position
@@ -7,13 +8,24 @@
 // are then read from the XPBD Lagrange multipliers via a single gravity-loaded
 // measurement substep from the settled pose (force = λ/Δt² per unit gradient).
 //
+// Gravity is global −y and always available (the per-mechanism gravityOn flag
+// is gone); hinge pivots gain a solver-internal virtual axis particle
+// (hinge.ts); spherical pivots are the plain shared node.
+//
 // Determinism (§12, DECISIONS.md): fixed timestep, fixed iteration counts,
 // constraints projected in id order, no Math.random. Same input ⇒ identical
 // output.
 //
 // The solver is pure and framework-free (§12): schema data in, plain data out.
-import { polylineLengthM } from '../geometry/pipe';
-import type { InputChannel, Mechanism, MechanismElement, Vec2 } from '../schema';
+import type { InputChannel, Mechanism, MechanismElement, Vec3 } from '../schema';
+import {
+  adjacentNodeId,
+  angle3,
+  drawnAngle3,
+  type HingePlan,
+  hingePlan,
+  rotateAboutAxis,
+} from './hinge';
 import type { SolveDiagnostics, SolveForces, SolveInputs, SolveResult } from './types';
 
 // ── tuned constants (all fixed for determinism) ──────────────────────────
@@ -40,36 +52,43 @@ const POSE_QUIESCENCE_EPS = 1e-4; // m — max free-particle drift over the wind
 const RESIDUAL_TOL = 1e-4; // m — constraint-violation tolerance for `converged`
 const GENERIC_NODE_MASS = 1; // kg — inverse-mass conditioning for massless free nodes (no gravity)
 const COMP_TOL = 1e-3; // N — rope axial force below −tol ⇒ "requires compression"
+const GRAVITY: Vec3 = { x: 0, y: -G, z: 0 }; // global −y, always on
 
 // ── particle ─────────────────────────────────────────────────────────────
 interface Particle {
   id: string;
   x: number;
   y: number;
+  z: number;
   px: number; // previous position (for velocity)
   py: number;
+  pz: number;
   vx: number;
   vy: number;
+  vz: number;
   w: number; // inverse mass used by projection (0 = held)
   mass: number; // true mass (kg) — drives gravity and force balance
   held: boolean; // anchor, driven, or drag-held: position is prescribed
 }
 
-const hypot = Math.hypot;
-const unit = (dx: number, dy: number): [number, number] => {
-  const l = hypot(dx, dy);
-  return l < 1e-12 ? [0, 0] : [dx / l, dy / l];
+const len3 = (dx: number, dy: number, dz: number): number => Math.sqrt(dx * dx + dy * dy + dz * dz);
+const unit = (dx: number, dy: number, dz: number): [number, number, number] => {
+  const l = len3(dx, dy, dz);
+  return l < 1e-12 ? [0, 0, 0] : [dx / l, dy / l, dz / l];
 };
-const perp = (x: number, y: number): [number, number] => [-y, x];
+const dist3 = (a: Vec3, b: Vec3): number => len3(a.x - b.x, a.y - b.y, a.z - b.z);
 
 // ── driven-node input channels (semantics defined in Phase 2, DECISIONS.md) ─
 interface DriveRef {
   nodeId: string;
   channel: InputChannel;
   kind: 'angle' | 'displacement';
-  pivot: Vec2; // angle: rotation centre · displacement: axis origin
-  drawn: Vec2; // node's drawn position
-  axis: Vec2; // displacement: unit drive direction
+  pivot: Vec3; // angle: rotation centre · displacement: axis origin
+  drawn: Vec3; // node's drawn position
+  axis: Vec3; // displacement: unit drive direction
+  /** angle: unit rotation axis — the pivot's hinge axis when a hinge pivot
+   * element sits at the reference node, else +z (the 2D-parity rotation) */
+  rotAxis: Vec3;
 }
 
 /** Effective channel value: a locked channel ignores overrides and holds its
@@ -83,7 +102,9 @@ export function channelValue(channel: InputChannel, inputs: SolveInputs): number
 
 /** Reference frame a driven node moves in: the axis/pivot of the lowest-id
  * link/telescope incident to it (its "rail"); failing that, the line from the
- * lowest-id anchor; failing that, the world +x axis through the drawn point. */
+ * lowest-id anchor; failing that, the world +x axis through the drawn point.
+ * Angle channels rotate about the reference node's hinge axis when one is
+ * declared there (lowest-id hinge pivot element), else about +z. */
 function driveRefs(mechanism: Mechanism): DriveRef[] {
   const posOf = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const channelById = new Map(mechanism.inputs.map((c) => [c.id, c]));
@@ -94,13 +115,16 @@ function driveRefs(mechanism: Mechanism): DriveRef[] {
     if (!channel) continue;
     const drawn = n.position;
     // rail: lowest-id link/telescope with this node as an endpoint
-    let other: Vec2 | null = null;
+    let other: Vec3 | null = null;
+    let otherId: string | null = null;
     for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
       if (
         (el.type === 'link' || el.type === 'telescope') &&
         (el.nodeA === n.id || el.nodeB === n.id)
       ) {
-        other = posOf.get(el.nodeA === n.id ? el.nodeB : el.nodeA) ?? null;
+        otherId = el.nodeA === n.id ? el.nodeB : el.nodeA;
+        other = posOf.get(otherId) ?? null;
+        if (!other) otherId = null;
         break;
       }
     }
@@ -108,38 +132,61 @@ function driveRefs(mechanism: Mechanism): DriveRef[] {
       const anchor = [...mechanism.nodes]
         .filter((a) => a.kind === 'anchor' && a.id !== n.id)
         .sort((a, b) => a.id.localeCompare(b.id))[0];
-      other = anchor ? anchor.position : { x: drawn.x - 1, y: drawn.y };
+      if (anchor) {
+        other = anchor.position;
+        otherId = anchor.id;
+      } else {
+        other = { x: drawn.x - 1, y: drawn.y, z: drawn.z };
+      }
     }
-    const [ax, ay] = unit(drawn.x - other.x, drawn.y - other.y);
+    const [ax, ay, az] = unit(drawn.x - other.x, drawn.y - other.y, drawn.z - other.z);
+    // hinge axis at the reference node, if a hinge pivot element sits there
+    let rotAxis: Vec3 = { x: 0, y: 0, z: 1 };
+    if (otherId) {
+      for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
+        if (el.type === 'pivot' && el.nodeId === otherId && el.joint.kind === 'hinge') {
+          const [kx, ky, kz] = unit(el.joint.axis.x, el.joint.axis.y, el.joint.axis.z);
+          if (kx !== 0 || ky !== 0 || kz !== 0) rotAxis = { x: kx, y: ky, z: kz };
+          break;
+        }
+      }
+    }
     refs.push({
       nodeId: n.id,
       channel,
       kind: channel.kind,
       pivot: other,
       drawn,
-      axis: { x: ax || 1, y: ay },
+      axis: ax === 0 && ay === 0 && az === 0 ? { x: 1, y: 0, z: 0 } : { x: ax, y: ay, z: az },
+      rotAxis,
     });
   }
   return refs;
 }
 
 /** Prescribed position of a driven node for a channel value. */
-function drivenPosition(ref: DriveRef, value: number): Vec2 {
+function drivenPosition(ref: DriveRef, value: number): Vec3 {
   if (ref.kind === 'angle') {
-    const dx = ref.drawn.x - ref.pivot.x;
-    const dy = ref.drawn.y - ref.pivot.y;
-    const c = Math.cos(value);
-    const s = Math.sin(value);
-    return { x: ref.pivot.x + c * dx - s * dy, y: ref.pivot.y + s * dx + c * dy };
+    const v: Vec3 = {
+      x: ref.drawn.x - ref.pivot.x,
+      y: ref.drawn.y - ref.pivot.y,
+      z: ref.drawn.z - ref.pivot.z,
+    };
+    const r = rotateAboutAxis(v, ref.rotAxis, value);
+    return { x: ref.pivot.x + r.x, y: ref.pivot.y + r.y, z: ref.pivot.z + r.z };
   }
   // displacement: slide along the rail axis by `value` metres from drawn
-  return { x: ref.drawn.x + ref.axis.x * value, y: ref.drawn.y + ref.axis.y * value };
+  return {
+    x: ref.drawn.x + ref.axis.x * value,
+    y: ref.drawn.y + ref.axis.y * value,
+    z: ref.drawn.z + ref.axis.z * value,
+  };
 }
 
 /** Public: prescribed positions of all driven nodes, keyed by node id. Shared
  * with kinematic drag so both modes honour input channels identically. */
-export function drivenTargets(mechanism: Mechanism, inputs: SolveInputs): Record<string, Vec2> {
-  const out: Record<string, Vec2> = {};
+export function drivenTargets(mechanism: Mechanism, inputs: SolveInputs): Record<string, Vec3> {
+  const out: Record<string, Vec3> = {};
   for (const ref of driveRefs(mechanism)) {
     out[ref.nodeId] = drivenPosition(ref, channelValue(ref.channel, inputs));
   }
@@ -147,8 +194,14 @@ export function drivenTargets(mechanism: Mechanism, inputs: SolveInputs): Record
 }
 
 // ── mass accumulation (§5.1) ─────────────────────────────────────────────
-function polyLen(nodeIds: string[], posOf: Map<string, Vec2>): number {
-  return polylineLengthM(nodeIds.map((id) => posOf.get(id)!));
+/** Chord (sharp polyline) length through the node positions — 3D counterpart
+ * of geometry/pipe.ts polylineLengthM (still Vec2 mid-conversion). */
+function polyLen(nodeIds: string[], posOf: Map<string, Vec3>): number {
+  let total = 0;
+  for (let i = 1; i < nodeIds.length; i++) {
+    total += dist3(posOf.get(nodeIds[i - 1]!)!, posOf.get(nodeIds[i]!)!);
+  }
+  return total;
 }
 
 /** Node masses: link/bentLink/telescope self-weight (length × density, half to
@@ -171,7 +224,7 @@ function accumulateMasses(
     if (el.type === 'link' || el.type === 'telescope') {
       const a = posOf.get(el.nodeA)!;
       const b = posOf.get(el.nodeB)!;
-      const len = el.type === 'telescope' ? el.lengthM : hypot(a.x - b.x, a.y - b.y);
+      const len = el.type === 'telescope' ? el.lengthM : dist3(a, b);
       const self = len * densityOf(el.id);
       add(el.nodeA, self / 2);
       add(el.nodeB, self / 2);
@@ -200,26 +253,22 @@ function accumulateMasses(
 interface EqConstraint {
   elementId: string;
   lambda: number;
-  mobility: number; // equalities touching a free node (Grübler count)
+  mobility: number; // equalities touching a free particle (Grübler count)
   reset(): void;
   project(): void;
   violation(): number;
   /** add this constraint's force on each incident particle (λ/Δt²·∇C). */
-  addForces(force: Map<string, { fx: number; fy: number }>): void;
+  addForces(force: Map<string, Vec3>): void;
 }
 
-function addForce(
-  map: Map<string, { fx: number; fy: number }>,
-  id: string,
-  fx: number,
-  fy: number,
-): void {
+function addForce(map: Map<string, Vec3>, id: string, fx: number, fy: number, fz: number): void {
   const f = map.get(id);
   if (f) {
-    f.fx += fx;
-    f.fy += fy;
+    f.x += fx;
+    f.y += fy;
+    f.z += fz;
   } else {
-    map.set(id, { fx, fy });
+    map.set(id, { x: fx, y: fy, z: fz });
   }
 }
 
@@ -241,7 +290,7 @@ class DistanceC implements EqConstraint {
   }
 
   private cValue(): number {
-    const c = hypot(this.p1.x - this.p2.x, this.p1.y - this.p2.y) - this.rest;
+    const c = len3(this.p1.x - this.p2.x, this.p1.y - this.p2.y, this.p1.z - this.p2.z) - this.rest;
     if (this.kind === 'max') return Math.max(0, c);
     if (this.kind === 'min') return Math.min(0, c);
     return c;
@@ -252,29 +301,33 @@ class DistanceC implements EqConstraint {
     if (C === 0) return;
     const dx = this.p1.x - this.p2.x;
     const dy = this.p1.y - this.p2.y;
-    const len = hypot(dx, dy);
+    const dz = this.p1.z - this.p2.z;
+    const len = len3(dx, dy, dz);
     if (len < 1e-12) return;
     const nx = dx / len;
     const ny = dy / len;
+    const nz = dz / len;
     const denom = this.p1.w + this.p2.w;
     if (denom <= 0) return;
     const dl = -C / denom;
     this.lambda += dl;
     this.p1.x += this.p1.w * dl * nx;
     this.p1.y += this.p1.w * dl * ny;
+    this.p1.z += this.p1.w * dl * nz;
     this.p2.x -= this.p2.w * dl * nx;
     this.p2.y -= this.p2.w * dl * ny;
+    this.p2.z -= this.p2.w * dl * nz;
   }
 
   violation(): number {
     return Math.abs(this.cValue());
   }
 
-  addForces(force: Map<string, { fx: number; fy: number }>): void {
-    const [nx, ny] = unit(this.p1.x - this.p2.x, this.p1.y - this.p2.y);
+  addForces(force: Map<string, Vec3>): void {
+    const [nx, ny, nz] = unit(this.p1.x - this.p2.x, this.p1.y - this.p2.y, this.p1.z - this.p2.z);
     const f = this.lambda * INV_DT2;
-    addForce(force, this.p1.id, f * nx, f * ny);
-    addForce(force, this.p2.id, -f * nx, -f * ny);
+    addForce(force, this.p1.id, f * nx, f * ny, f * nz);
+    addForce(force, this.p2.id, -f * nx, -f * ny, -f * nz);
   }
 
   /** signed axial tension (N): positive = tension pulling the ends together. */
@@ -303,24 +356,32 @@ class RopeC implements EqConstraint {
   private total(): number {
     let t = 0;
     for (let i = 1; i < this.nodes.length; i++) {
-      t += hypot(this.nodes[i]!.x - this.nodes[i - 1]!.x, this.nodes[i]!.y - this.nodes[i - 1]!.y);
+      t += len3(
+        this.nodes[i]!.x - this.nodes[i - 1]!.x,
+        this.nodes[i]!.y - this.nodes[i - 1]!.y,
+        this.nodes[i]!.z - this.nodes[i - 1]!.z,
+      );
     }
     return t;
   }
 
-  private grads(): Array<[number, number]> {
-    const g: Array<[number, number]> = this.nodes.map(() => [0, 0]);
+  private grads(): Array<[number, number, number]> {
+    const g: Array<[number, number, number]> = this.nodes.map(() => [0, 0, 0]);
     for (let i = 0; i < this.nodes.length; i++) {
       const p = this.nodes[i]!;
       if (i > 0) {
-        const [ux, uy] = unit(p.x - this.nodes[i - 1]!.x, p.y - this.nodes[i - 1]!.y);
+        const q = this.nodes[i - 1]!;
+        const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
         g[i]![0] += ux;
         g[i]![1] += uy;
+        g[i]![2] += uz;
       }
       if (i < this.nodes.length - 1) {
-        const [ux, uy] = unit(p.x - this.nodes[i + 1]!.x, p.y - this.nodes[i + 1]!.y);
+        const q = this.nodes[i + 1]!;
+        const [ux, uy, uz] = unit(p.x - q.x, p.y - q.y, p.z - q.z);
         g[i]![0] += ux;
         g[i]![1] += uy;
+        g[i]![2] += uz;
       }
     }
     return g;
@@ -333,7 +394,7 @@ class RopeC implements EqConstraint {
     const at = this.compliance * INV_DT2;
     let denom = at;
     for (let i = 0; i < this.nodes.length; i++) {
-      denom += this.nodes[i]!.w * (g[i]![0] * g[i]![0] + g[i]![1] * g[i]![1]);
+      denom += this.nodes[i]!.w * (g[i]![0] * g[i]![0] + g[i]![1] * g[i]![1] + g[i]![2] * g[i]![2]);
     }
     if (denom <= 0) return;
     const dl = (-C - at * this.lambda) / denom;
@@ -342,6 +403,7 @@ class RopeC implements EqConstraint {
       const p = this.nodes[i]!;
       p.x += p.w * dl * g[i]![0];
       p.y += p.w * dl * g[i]![1];
+      p.z += p.w * dl * g[i]![2];
     }
   }
 
@@ -349,11 +411,11 @@ class RopeC implements EqConstraint {
     return Math.max(0, this.total() - this.l0);
   }
 
-  addForces(force: Map<string, { fx: number; fy: number }>): void {
+  addForces(force: Map<string, Vec3>): void {
     const g = this.grads();
     const f = this.lambda * INV_DT2;
     for (let i = 0; i < this.nodes.length; i++) {
-      addForce(force, this.nodes[i]!.id, f * g[i]![0], f * g[i]![1]);
+      addForce(force, this.nodes[i]!.id, f * g[i]![0], f * g[i]![1], f * g[i]![2]);
     }
   }
 
@@ -362,29 +424,8 @@ class RopeC implements EqConstraint {
   }
 }
 
-/** Signed relative angle at a pivot = deviation from the straight
- * continuation of memberA through the pivot into memberB (schema convention,
- * DECISIONS.md Phase 1). Returns θ and the ∂θ/∂node gradients. */
-function angleAndGrads(
-  pivot: Particle,
-  a: Particle,
-  b: Particle,
-): { theta: number; ga: [number, number]; gb: [number, number]; gp: [number, number] } | null {
-  const vax = pivot.x - a.x;
-  const vay = pivot.y - a.y;
-  const vbx = b.x - pivot.x;
-  const vby = b.y - pivot.y;
-  const la2 = vax * vax + vay * vay;
-  const lb2 = vbx * vbx + vby * vby;
-  if (la2 < 1e-12 || lb2 < 1e-12) return null;
-  const theta = Math.atan2(vax * vby - vay * vbx, vax * vbx + vay * vby);
-  const ga = perp(vax / la2, vay / la2);
-  const gb = perp(vbx / lb2, vby / lb2);
-  const gp: [number, number] = [-(ga[0] + gb[0]), -(ga[1] + gb[1])];
-  return { theta, ga, gb, gp };
-}
-
-/** Pivot angle limit (inequality): clamp the relative angle into [min, max]. */
+/** Pivot angle limit (inequality): clamp the relative hinge angle into
+ * [min, max], measured about the pivot's current axis (hinge.ts angle3). */
 class AngleLimitC implements EqConstraint {
   lambda = 0;
   readonly mobility = 0;
@@ -393,6 +434,7 @@ class AngleLimitC implements EqConstraint {
     private readonly pivot: Particle,
     private readonly a: Particle,
     private readonly b: Particle,
+    private readonly axisTip: Particle,
     private readonly minRad: number,
     private readonly maxRad: number,
   ) {}
@@ -408,26 +450,29 @@ class AngleLimitC implements EqConstraint {
   }
 
   project(): void {
-    const ag = angleAndGrads(this.pivot, this.a, this.b);
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
     if (!ag) return;
     const C = this.cValue(ag.theta);
     if (C === 0) return;
     const denom =
-      this.a.w * (ag.ga[0] ** 2 + ag.ga[1] ** 2) +
-      this.b.w * (ag.gb[0] ** 2 + ag.gb[1] ** 2) +
-      this.pivot.w * (ag.gp[0] ** 2 + ag.gp[1] ** 2);
+      this.a.w * (ag.ga.x ** 2 + ag.ga.y ** 2 + ag.ga.z ** 2) +
+      this.b.w * (ag.gb.x ** 2 + ag.gb.y ** 2 + ag.gb.z ** 2) +
+      this.pivot.w * (ag.gp.x ** 2 + ag.gp.y ** 2 + ag.gp.z ** 2);
     if (denom <= 0) return;
     const s = -C / denom;
-    this.a.x += this.a.w * s * ag.ga[0];
-    this.a.y += this.a.w * s * ag.ga[1];
-    this.b.x += this.b.w * s * ag.gb[0];
-    this.b.y += this.b.w * s * ag.gb[1];
-    this.pivot.x += this.pivot.w * s * ag.gp[0];
-    this.pivot.y += this.pivot.w * s * ag.gp[1];
+    this.a.x += this.a.w * s * ag.ga.x;
+    this.a.y += this.a.w * s * ag.ga.y;
+    this.a.z += this.a.w * s * ag.ga.z;
+    this.b.x += this.b.w * s * ag.gb.x;
+    this.b.y += this.b.w * s * ag.gb.y;
+    this.b.z += this.b.w * s * ag.gb.z;
+    this.pivot.x += this.pivot.w * s * ag.gp.x;
+    this.pivot.y += this.pivot.w * s * ag.gp.y;
+    this.pivot.z += this.pivot.w * s * ag.gp.z;
   }
 
   violation(): number {
-    const ag = angleAndGrads(this.pivot, this.a, this.b);
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
     return ag ? Math.abs(this.cValue(ag.theta)) : 0;
   }
 
@@ -459,7 +504,7 @@ function elasticForce(
   a: Particle,
   b: Particle,
 ): number {
-  const len = hypot(a.x - b.x, a.y - b.y);
+  const len = len3(a.x - b.x, a.y - b.y, a.z - b.z);
   const restEff = el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
   const f = el.stiffnessNPerM * (len - restEff);
   return el.tensionOnly ? Math.max(0, f) : f;
@@ -480,46 +525,54 @@ class ElasticForceGen implements ForceGen {
   apply(): void {
     const f = elasticForce(this.el, this.a, this.b);
     if (f === 0) return;
-    const [ux, uy] = unit(this.b.x - this.a.x, this.b.y - this.a.y); // pull A toward B
+    const [ux, uy, uz] = unit(this.b.x - this.a.x, this.b.y - this.a.y, this.b.z - this.a.z); // pull A toward B
     this.a.vx += this.a.w * f * ux * DT;
     this.a.vy += this.a.w * f * uy * DT;
+    this.a.vz += this.a.w * f * uz * DT;
     this.b.vx -= this.b.w * f * ux * DT;
     this.b.vy -= this.b.w * f * uy * DT;
+    this.b.vz -= this.b.w * f * uz * DT;
   }
 }
 
 /** Pivot torsion spring — restoring moment τ = −k(θ − rest) applied to the two
- * members (hose-joint flex / fibreglass return rod). */
+ * members (hose-joint flex / fibreglass return rod), about the hinge axis. */
 class TorsionSpringForceGen implements ForceGen {
   constructor(
     readonly elementId: string,
     private readonly pivot: Particle,
     private readonly a: Particle,
     private readonly b: Particle,
+    private readonly axisTip: Particle,
     private readonly restAngle: number,
     private readonly stiffness: number,
   ) {}
 
   moment(): number {
-    const ag = angleAndGrads(this.pivot, this.a, this.b);
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
     return ag ? -this.stiffness * (ag.theta - this.restAngle) : 0;
   }
 
   apply(): void {
     if (this.stiffness <= 0) return;
-    const ag = angleAndGrads(this.pivot, this.a, this.b);
+    const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
     if (!ag) return;
     const tau = -this.stiffness * (ag.theta - this.restAngle); // restoring
-    this.a.vx += this.a.w * tau * ag.ga[0] * DT;
-    this.a.vy += this.a.w * tau * ag.ga[1] * DT;
-    this.b.vx += this.b.w * tau * ag.gb[0] * DT;
-    this.b.vy += this.b.w * tau * ag.gb[1] * DT;
-    this.pivot.vx += this.pivot.w * tau * ag.gp[0] * DT;
-    this.pivot.vy += this.pivot.w * tau * ag.gp[1] * DT;
+    this.a.vx += this.a.w * tau * ag.ga.x * DT;
+    this.a.vy += this.a.w * tau * ag.ga.y * DT;
+    this.a.vz += this.a.w * tau * ag.ga.z * DT;
+    this.b.vx += this.b.w * tau * ag.gb.x * DT;
+    this.b.vy += this.b.w * tau * ag.gb.y * DT;
+    this.b.vz += this.b.w * tau * ag.gb.z * DT;
+    this.pivot.vx += this.pivot.w * tau * ag.gp.x * DT;
+    this.pivot.vy += this.pivot.w * tau * ag.gp.y * DT;
+    this.pivot.vz += this.pivot.w * tau * ag.gp.z * DT;
   }
 }
 
-/** Point-on-line (slider) with parametric travel limits. */
+/** Point-on-line (slider) with parametric travel limits. On-line = 2 removed
+ * DOF in 3D; the perpendicular offset is projected out along its own
+ * direction each pass. */
 class PointOnLineC implements EqConstraint {
   lambda = 0;
   constructor(
@@ -536,42 +589,56 @@ class PointOnLineC implements EqConstraint {
     this.lambda = 0;
   }
 
-  private apply(C: number, gx: number, gy: number, t: number): void {
+  private apply(C: number, gx: number, gy: number, gz: number, t: number): void {
     if (C === 0) return;
     const denom = this.n.w + this.a.w * (1 - t) * (1 - t) + this.b.w * t * t;
     if (denom <= 0) return;
     const s = -C / denom;
     this.n.x += this.n.w * s * gx;
     this.n.y += this.n.w * s * gy;
+    this.n.z += this.n.w * s * gz;
     this.a.x -= this.a.w * (1 - t) * s * gx;
     this.a.y -= this.a.w * (1 - t) * s * gy;
+    this.a.z -= this.a.w * (1 - t) * s * gz;
     this.b.x -= this.b.w * t * s * gx;
     this.b.y -= this.b.w * t * s * gy;
+    this.b.z -= this.b.w * t * s * gz;
   }
 
   project(): void {
     const ux = this.b.x - this.a.x;
     const uy = this.b.y - this.a.y;
-    const L = hypot(ux, uy);
+    const uz = this.b.z - this.a.z;
+    const L = len3(ux, uy, uz);
     if (L < 1e-12) return;
+    const ex = ux / L;
+    const ey = uy / L;
+    const ez = uz / L;
     const relx = this.n.x - this.a.x;
     const rely = this.n.y - this.a.y;
-    const t = (relx * ux + rely * uy) / (L * L);
-    this.apply((relx * -uy + rely * ux) / L, -uy / L, ux / L, t);
-    const s = (relx * ux + rely * uy) / L;
-    if (s < this.travelMin * L) this.apply(s - this.travelMin * L, ux / L, uy / L, t);
-    else if (s > this.travelMax * L) this.apply(s - this.travelMax * L, ux / L, uy / L, t);
+    const relz = this.n.z - this.a.z;
+    const s = relx * ex + rely * ey + relz * ez;
+    const t = s / L;
+    const px = relx - s * ex;
+    const py = rely - s * ey;
+    const pz = relz - s * ez;
+    const cPerp = len3(px, py, pz);
+    if (cPerp > 1e-12) this.apply(cPerp, px / cPerp, py / cPerp, pz / cPerp, t);
+    if (s < this.travelMin * L) this.apply(s - this.travelMin * L, ex, ey, ez, t);
+    else if (s > this.travelMax * L) this.apply(s - this.travelMax * L, ex, ey, ez, t);
   }
 
   violation(): number {
     const ux = this.b.x - this.a.x;
     const uy = this.b.y - this.a.y;
-    const L = hypot(ux, uy);
+    const uz = this.b.z - this.a.z;
+    const L = len3(ux, uy, uz);
     if (L < 1e-12) return 0;
     const relx = this.n.x - this.a.x;
     const rely = this.n.y - this.a.y;
-    const cPerp = Math.abs((relx * -uy + rely * ux) / L);
-    const s = (relx * ux + rely * uy) / L;
+    const relz = this.n.z - this.a.z;
+    const s = (relx * ux + rely * uy + relz * uz) / L;
+    const cPerp = len3(relx - (s / L) * ux, rely - (s / L) * uy, relz - (s / L) * uz);
     return Math.max(
       cPerp,
       Math.max(0, this.travelMin * L - s),
@@ -605,26 +672,38 @@ class BowdenC implements EqConstraint {
   }
 
   private cValue(): number {
-    const lenA = hypot(this.a1.x - this.a2.x, this.a1.y - this.a2.y);
-    const lenB = hypot(this.b1.x - this.b2.x, this.b1.y - this.b2.y);
+    const lenA = len3(this.a1.x - this.a2.x, this.a1.y - this.a2.y, this.a1.z - this.a2.z);
+    const lenB = len3(this.b1.x - this.b2.x, this.b1.y - this.b2.y, this.b1.z - this.b2.z);
     return lenA - this.restA + (lenB - this.restB);
   }
 
   project(): void {
-    const [uAx, uAy] = unit(this.a1.x - this.a2.x, this.a1.y - this.a2.y);
-    const [uBx, uBy] = unit(this.b1.x - this.b2.x, this.b1.y - this.b2.y);
+    const [uAx, uAy, uAz] = unit(
+      this.a1.x - this.a2.x,
+      this.a1.y - this.a2.y,
+      this.a1.z - this.a2.z,
+    );
+    const [uBx, uBy, uBz] = unit(
+      this.b1.x - this.b2.x,
+      this.b1.y - this.b2.y,
+      this.b1.z - this.b2.z,
+    );
     const denom = this.a1.w + this.a2.w + this.b1.w + this.b2.w;
     if (denom <= 0) return;
     const dl = -this.cValue() / denom;
     this.lambda += dl;
     this.a1.x += this.a1.w * dl * uAx;
     this.a1.y += this.a1.w * dl * uAy;
+    this.a1.z += this.a1.w * dl * uAz;
     this.a2.x -= this.a2.w * dl * uAx;
     this.a2.y -= this.a2.w * dl * uAy;
+    this.a2.z -= this.a2.w * dl * uAz;
     this.b1.x += this.b1.w * dl * uBx;
     this.b1.y += this.b1.w * dl * uBy;
+    this.b1.z += this.b1.w * dl * uBz;
     this.b2.x -= this.b2.w * dl * uBx;
     this.b2.y -= this.b2.w * dl * uBy;
+    this.b2.z -= this.b2.w * dl * uBz;
   }
 
   violation(): number {
@@ -641,7 +720,9 @@ class BowdenC implements EqConstraint {
 }
 
 /** Torsion cable angle coupling with a backlash dead-zone:
- * (θB−θB0) = ratio·(θA−θA0), free play of ±backlash before it transmits. */
+ * (θB−θB0) = ratio·(θA−θA0), each angle measured about its OWN pivot's
+ * current hinge axis (non-parallel axes couple fine), free play of ±backlash
+ * before it transmits. */
 class TorsionCableC implements EqConstraint {
   lambda = 0;
   readonly mobility = 0;
@@ -650,9 +731,11 @@ class TorsionCableC implements EqConstraint {
     private readonly pa: Particle,
     private readonly aa: Particle,
     private readonly ba: Particle,
+    private readonly axisTipA: Particle,
     private readonly pb: Particle,
     private readonly ab: Particle,
     private readonly bb: Particle,
+    private readonly axisTipB: Particle,
     private readonly thetaA0: number,
     private readonly thetaB0: number,
     private readonly ratio: number,
@@ -664,8 +747,8 @@ class TorsionCableC implements EqConstraint {
   }
 
   project(): void {
-    const A = angleAndGrads(this.pa, this.aa, this.ba);
-    const B = angleAndGrads(this.pb, this.ab, this.bb);
+    const A = angle3(this.pa, this.aa, this.ba, this.pa, this.axisTipA);
+    const B = angle3(this.pb, this.ab, this.bb, this.pb, this.axisTipB);
     if (!A || !B) return;
     const raw = B.theta - this.thetaB0 - this.ratio * (A.theta - this.thetaA0);
     // dead-zone: only the part of `raw` beyond ±backlash transmits
@@ -673,28 +756,29 @@ class TorsionCableC implements EqConstraint {
       raw > this.backlash ? raw - this.backlash : raw < -this.backlash ? raw + this.backlash : 0;
     if (excess === 0) return;
     // effective gradient per node: ∂raw/∂θB·(θB grads) − ratio·(θA grads)
-    const contrib: Array<[Particle, number, number]> = [
-      [this.ab, B.ga[0], B.ga[1]],
-      [this.bb, B.gb[0], B.gb[1]],
-      [this.pb, B.gp[0], B.gp[1]],
-      [this.aa, -this.ratio * A.ga[0], -this.ratio * A.ga[1]],
-      [this.ba, -this.ratio * A.gb[0], -this.ratio * A.gb[1]],
-      [this.pa, -this.ratio * A.gp[0], -this.ratio * A.gp[1]],
+    const contrib: Array<[Particle, Vec3, number]> = [
+      [this.ab, B.ga, 1],
+      [this.bb, B.gb, 1],
+      [this.pb, B.gp, 1],
+      [this.aa, A.ga, -this.ratio],
+      [this.ba, A.gb, -this.ratio],
+      [this.pa, A.gp, -this.ratio],
     ];
     let denom = 0;
-    for (const [p, gx, gy] of contrib) denom += p.w * (gx * gx + gy * gy);
+    for (const [p, g, f] of contrib) denom += p.w * f * f * (g.x * g.x + g.y * g.y + g.z * g.z);
     if (denom <= 0) return;
     const dl = -excess / denom;
     this.lambda += dl;
-    for (const [p, gx, gy] of contrib) {
-      p.x += p.w * dl * gx;
-      p.y += p.w * dl * gy;
+    for (const [p, g, f] of contrib) {
+      p.x += p.w * dl * f * g.x;
+      p.y += p.w * dl * f * g.y;
+      p.z += p.w * dl * f * g.z;
     }
   }
 
   violation(): number {
-    const A = angleAndGrads(this.pa, this.aa, this.ba);
-    const B = angleAndGrads(this.pb, this.ab, this.bb);
+    const A = angle3(this.pa, this.aa, this.ba, this.pa, this.axisTipA);
+    const B = angle3(this.pb, this.ab, this.bb, this.pb, this.axisTipB);
     if (!A || !B) return 0;
     const raw = B.theta - this.thetaB0 - this.ratio * (A.theta - this.thetaA0);
     return raw > this.backlash
@@ -714,32 +798,24 @@ class TorsionCableC implements EqConstraint {
 }
 
 // ── build ──────────────────────────────────────────────────────────────
-function adjacentNodeId(el: MechanismElement, pivotNodeId: string): string | null {
-  if (el.type === 'link' || el.type === 'telescope') {
-    if (el.nodeA === pivotNodeId) return el.nodeB;
-    if (el.nodeB === pivotNodeId) return el.nodeA;
-    return null;
-  }
-  if (el.type === 'bentLink') {
-    const i = el.nodeIds.indexOf(pivotNodeId);
-    if (i < 0) return null;
-    return el.nodeIds[i + 1] ?? el.nodeIds[i - 1] ?? null;
-  }
-  return null;
-}
-
 interface Built {
   particles: Map<string, Particle>;
+  userIds: Set<string>;
   constraints: EqConstraint[];
   forceGens: ForceGen[];
   torsionSpringByPivot: Map<string, TorsionSpringForceGen>;
   elementById: Map<string, MechanismElement>;
-  pivotByElementId: Map<string, { pivotNodeId: string; aId: string; bId: string } | null>;
+  pivotByElementId: Map<
+    string,
+    { pivotNodeId: string; aId: string; bId: string; axisVirtualId?: string } | null
+  >;
   freeCount: number;
+  freeVirtualCount: number;
 }
 
-/** Ground plane y ≥ 0 for free particles (slice C). A pure position clamp:
- * no λ (contact reactions are out of scope), no mobility cost. */
+/** Ground plane y ≥ 0 for free USER particles (v6 slice C, world y). A pure
+ * position clamp: no λ (contact reactions are out of scope), no mobility
+ * cost. Virtual axis particles are exempt (solver internals). */
 class FloorC implements EqConstraint {
   readonly elementId = '__floor__';
   lambda = 0;
@@ -773,12 +849,11 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
     // hung off the shoulder dangles from it. Anchor/driven nodes ignore
     // drags, mirroring kinematic mode.
     // a drag hold below the floor is clamped onto it — the holder's hand
-    // cannot be underground (slice C; mirrors the kinematic drag clamp)
+    // cannot be underground (slice C; the floor is global in 3D)
     const dragHoldRaw = n.kind === 'free' ? inputs.dragTargets?.[n.id] : undefined;
-    const dragHold =
-      dragHoldRaw && mechanism.viewOrientation !== 'top'
-        ? { x: dragHoldRaw.x, y: Math.max(0, dragHoldRaw.y) }
-        : dragHoldRaw;
+    const dragHold = dragHoldRaw
+      ? { x: dragHoldRaw.x, y: Math.max(0, dragHoldRaw.y), z: dragHoldRaw.z }
+      : undefined;
     const held = n.kind === 'anchor' || n.kind === 'driven' || dragHold !== undefined;
     // anchor nodes attached to the wearer (anchorBindings) are held AT the
     // caller's ground target — the pack frame / body carries the ground point
@@ -794,15 +869,19 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
       id: n.id,
       x: pos.x,
       y: pos.y,
+      z: pos.z,
       px: pos.x,
       py: pos.y,
+      pz: pos.z,
       vx: 0,
       vy: 0,
+      vz: 0,
       w: held ? 0 : mass > 0 ? 1 / mass : 1 / GENERIC_NODE_MASS,
       mass,
       held,
     });
   }
+  const userIds = new Set(mechanism.nodes.map((n) => n.id));
   const get = (id: string): Particle => {
     const p = particles.get(id);
     if (!p) throw new Error(`unknown node ${id}`);
@@ -810,23 +889,54 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   };
   const posOf = new Map(mechanism.nodes.map((n) => [n.id, n.position]));
   const elementById = new Map(mechanism.elements.map((e) => [e.id, e]));
+  const sortedElements = [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id));
+
+  // virtual axis particles for hinge pivots (hinge.ts) — created before the
+  // constraint pass; massless (no gravity), generic conditioning mass, in the
+  // free list unless pinned to a grounded axis
+  const hingePlans = new Map<string, HingePlan>();
+  let freeVirtualCount = 0;
+  for (const el of sortedElements) {
+    if (el.type !== 'pivot') continue;
+    const plan = hingePlan(el, posOf, elementById, (id) => get(id).held);
+    if (!plan) continue;
+    hingePlans.set(el.id, plan);
+    const pivot = get(plan.pivotNodeId);
+    const x = pivot.x + plan.axis.x * plan.h;
+    const y = pivot.y + plan.axis.y * plan.h;
+    const z = pivot.z + plan.axis.z * plan.h;
+    particles.set(plan.virtualId, {
+      id: plan.virtualId,
+      x,
+      y,
+      z,
+      px: x,
+      py: y,
+      pz: z,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      w: plan.pinned ? 0 : 1 / GENERIC_NODE_MASS,
+      mass: 0,
+      held: plan.pinned,
+    });
+    if (!plan.pinned) freeVirtualCount++;
+  }
+
   const free = new Set(mechanism.nodes.filter((n) => n.kind === 'free').map((n) => n.id));
+  for (const plan of hingePlans.values()) if (!plan.pinned) free.add(plan.virtualId);
   const mob = (...ids: string[]): number => (ids.some((id) => free.has(id)) ? 1 : 0);
-  const dist = (a: string, b: string): number => {
-    const pa = posOf.get(a)!;
-    const pb = posOf.get(b)!;
-    return hypot(pa.x - pb.x, pa.y - pb.y);
-  };
+  const dist = (a: string, b: string): number => dist3(posOf.get(a)!, posOf.get(b)!);
 
   const constraints: EqConstraint[] = [];
   const forceGens: ForceGen[] = [];
   const torsionSpringByPivot = new Map<string, TorsionSpringForceGen>();
   const pivotByElementId = new Map<
     string,
-    { pivotNodeId: string; aId: string; bId: string } | null
+    { pivotNodeId: string; aId: string; bId: string; axisVirtualId?: string } | null
   >();
 
-  for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const el of sortedElements) {
     switch (el.type) {
       case 'link':
         constraints.push(
@@ -853,7 +963,7 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         break;
       case 'bentLink': {
         const ids = el.nodeIds;
-        let mobilityLeft = 2 * ids.length - 3;
+        let mobilityLeft = 3 * ids.length - 6;
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
             const counts = mobilityLeft > 0 ? mob(ids[i]!, ids[j]!) : 0;
@@ -875,7 +985,32 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
           if (!a || !b) continue;
           constraints.push(new DistanceC(el.id, get(a), get(b), dist(a, b), mob(a, b)));
         }
-        if (el.angleLimit) {
+        const plan = hingePlans.get(el.id);
+        if (plan) {
+          const virtual = get(plan.virtualId);
+          constraints.push(
+            new DistanceC(
+              el.id,
+              virtual,
+              get(plan.pivotNodeId),
+              plan.h,
+              mob(plan.virtualId, plan.pivotNodeId),
+            ),
+          );
+          for (const tie of plan.ties) {
+            constraints.push(
+              new DistanceC(
+                el.id,
+                virtual,
+                get(tie.nodeId),
+                tie.rest,
+                mob(plan.virtualId, tie.nodeId),
+              ),
+            );
+          }
+        }
+        // angle features are hinge-only (measured about the axis)
+        if (el.angleLimit && plan) {
           const a = elementById.get(el.angleLimit.memberA);
           const b = elementById.get(el.angleLimit.memberB);
           const an = a ? adjacentNodeId(a, el.nodeId) : null;
@@ -887,13 +1022,14 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
                 get(el.nodeId),
                 get(an),
                 get(bn),
+                get(plan.virtualId),
                 el.angleLimit.minRad,
                 el.angleLimit.maxRad,
               ),
             );
           }
         }
-        if (el.torsionSpring) {
+        if (el.torsionSpring && plan) {
           const a = elementById.get(el.torsionSpring.memberA);
           const b = elementById.get(el.torsionSpring.memberB);
           const an = a ? adjacentNodeId(a, el.nodeId) : null;
@@ -904,6 +1040,7 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
               get(el.nodeId),
               get(an),
               get(bn),
+              get(plan.virtualId),
               el.torsionSpring.restAngleRad,
               el.torsionSpring.stiffnessNmPerRad,
             );
@@ -916,7 +1053,12 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         const second = el.memberIds[1] ? elementById.get(el.memberIds[1]) : undefined;
         const an = first ? adjacentNodeId(first, el.nodeId) : null;
         const bn = second ? adjacentNodeId(second, el.nodeId) : null;
-        pivotByElementId.set(el.id, an && bn ? { pivotNodeId: el.nodeId, aId: an, bId: bn } : null);
+        pivotByElementId.set(
+          el.id,
+          an && bn
+            ? { pivotNodeId: el.nodeId, aId: an, bId: bn, axisVirtualId: plan?.virtualId }
+            : null,
+        );
         break;
       }
       case 'slider': {
@@ -930,7 +1072,7 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
               get(rail.nodeB),
               el.travelMin,
               el.travelMax,
-              mob(el.nodeId),
+              mob(el.nodeId) ? 2 : 0,
             ),
           );
         }
@@ -961,23 +1103,39 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
     }
   }
 
-  // torsion cables reference pivot elements; wire them now that pivots exist
-  for (const el of [...mechanism.elements].sort((a, b) => a.id.localeCompare(b.id))) {
+  // torsion cables reference pivot elements; wire them now that pivots exist.
+  // Each angle is measured about its OWN pivot's hinge axis — both pivots
+  // must be hinges (spherical joints carry no angle features, planfile).
+  for (const el of sortedElements) {
     if (el.type !== 'torsionCable') continue;
     const pa = pivotByElementId.get(el.pivotA);
     const pb = pivotByElementId.get(el.pivotB);
-    if (!pa || !pb) continue;
-    const thetaA0 = drawnAngle(posOf, pa);
-    const thetaB0 = drawnAngle(posOf, pb);
+    if (!pa || !pb || !pa.axisVirtualId || !pb.axisVirtualId) continue;
+    const planA = hingePlans.get(el.pivotA)!;
+    const planB = hingePlans.get(el.pivotB)!;
+    const thetaA0 = drawnAngle3(
+      posOf.get(pa.pivotNodeId)!,
+      posOf.get(pa.aId)!,
+      posOf.get(pa.bId)!,
+      planA.axis,
+    );
+    const thetaB0 = drawnAngle3(
+      posOf.get(pb.pivotNodeId)!,
+      posOf.get(pb.aId)!,
+      posOf.get(pb.bId)!,
+      planB.axis,
+    );
     constraints.push(
       new TorsionCableC(
         el.id,
         get(pa.pivotNodeId),
         get(pa.aId),
         get(pa.bId),
+        get(pa.axisVirtualId),
         get(pb.pivotNodeId),
         get(pb.aId),
         get(pb.bId),
+        get(pb.axisVirtualId),
         thetaA0,
         thetaB0,
         el.ratio,
@@ -986,59 +1144,49 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
     );
   }
 
-  // ground plane (PLANFILE-wearer-attachments-and-floor, slice C): free
-  // particles cannot settle below y = 0 in non-`top` views. Appended last so
-  // every projection pass ends floor-satisfied — it never enters `violated`;
-  // geometry that cannot stay above it reports on its own elements. Held
-  // particles (anchor/driven/drag-held) are prescribed and exempt. Contact
-  // reactions are NOT reported (addForces is a no-op) — positional only.
-  if (mechanism.viewOrientation !== 'top') {
-    for (const n of mechanism.nodes) {
-      if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
-    }
+  // ground plane (v6 slice C, world y in 3D): free USER particles cannot
+  // settle below y = 0. Appended last so every projection pass ends
+  // floor-satisfied — it never enters `violated`; geometry that cannot stay
+  // above it reports on its own elements. Held particles (anchor/driven/
+  // drag-held) are prescribed and exempt; virtual axis particles are solver
+  // internals and exempt. Contact reactions are NOT reported (addForces is a
+  // no-op) — positional only.
+  for (const n of mechanism.nodes) {
+    if (n.kind === 'free') constraints.push(new FloorC(get(n.id)));
   }
 
   return {
     particles,
+    userIds,
     constraints,
     forceGens,
     torsionSpringByPivot,
     elementById,
     pivotByElementId,
-    freeCount: free.size,
+    freeCount: free.size - freeVirtualCount,
+    freeVirtualCount,
   };
-}
-
-function drawnAngle(
-  posOf: Map<string, Vec2>,
-  piv: { pivotNodeId: string; aId: string; bId: string },
-): number {
-  const p = posOf.get(piv.pivotNodeId)!;
-  const a = posOf.get(piv.aId)!;
-  const b = posOf.get(piv.bId)!;
-  const vax = p.x - a.x;
-  const vay = p.y - a.y;
-  const vbx = b.x - p.x;
-  const vby = b.y - p.y;
-  return Math.atan2(vax * vby - vay * vbx, vax * vbx + vay * vby);
 }
 
 // ── settle + measure ─────────────────────────────────────────────────────
 /** Apply gravity + spring forces to the free particles' velocities, integrate,
  * and project the rigid constraints. Returns the max resulting particle speed. */
-function substep(built: Built, free: Particle[], gravity: Vec2): number {
+function substep(built: Built, free: Particle[]): number {
   for (const p of free) {
     p.px = p.x;
     p.py = p.y;
+    p.pz = p.z;
     if (p.mass > 0) {
-      p.vx += gravity.x * DT;
-      p.vy += gravity.y * DT;
+      p.vx += GRAVITY.x * DT;
+      p.vy += GRAVITY.y * DT;
+      p.vz += GRAVITY.z * DT;
     }
   }
   for (const g of built.forceGens) g.apply();
   for (const p of free) {
     p.x += p.vx * DT;
     p.y += p.vy * DT;
+    p.z += p.vz * DT;
   }
   for (const c of built.constraints) c.reset();
   for (let it = 0; it < ITERS; it++) {
@@ -1048,12 +1196,13 @@ function substep(built: Built, free: Particle[], gravity: Vec2): number {
   for (const p of free) {
     p.vx = ((p.x - p.px) / DT) * DAMPING;
     p.vy = ((p.y - p.py) / DT) * DAMPING;
-    maxSpeed = Math.max(maxSpeed, hypot(p.vx, p.vy));
+    p.vz = ((p.z - p.pz) / DT) * DAMPING;
+    maxSpeed = Math.max(maxSpeed, len3(p.vx, p.vy, p.vz));
   }
   return maxSpeed;
 }
 
-function settle(built: Built, gravity: Vec2): boolean {
+function settle(built: Built): boolean {
   const free = [...built.particles.values()].filter((p) => !p.held);
   if (free.length === 0) return true;
   // Constraint-only warm start: propagate driven-input steps and any drawn
@@ -1067,6 +1216,7 @@ function settle(built: Built, gravity: Vec2): boolean {
   for (const p of free) {
     p.vx = 0;
     p.vy = 0;
+    p.vz = 0;
   }
   // Pose-quiescence fallback (Phase 3 solver-robustness). A tension-only
   // constraint held at its active boundary makes the relaxation *creep* rather
@@ -1082,16 +1232,21 @@ function settle(built: Built, gravity: Vec2): boolean {
   // this never pre-empts a genuinely converging settle — see DECISIONS.md).
   let snapX = free.map((p) => p.x);
   let snapY = free.map((p) => p.y);
+  let snapZ = free.map((p) => p.z);
   for (let step = 0; step < MAX_STEPS; step++) {
-    if (substep(built, free, gravity) < SETTLE_SPEED_EPS) return true;
+    if (substep(built, free) < SETTLE_SPEED_EPS) return true;
     if ((step + 1) % POSE_QUIESCENCE_WINDOW === 0) {
       let maxDrift = 0;
       for (let i = 0; i < free.length; i++) {
-        maxDrift = Math.max(maxDrift, hypot(free[i]!.x - snapX[i]!, free[i]!.y - snapY[i]!));
+        maxDrift = Math.max(
+          maxDrift,
+          len3(free[i]!.x - snapX[i]!, free[i]!.y - snapY[i]!, free[i]!.z - snapZ[i]!),
+        );
       }
       if (maxDrift < POSE_QUIESCENCE_EPS) return true;
       snapX = free.map((p) => p.x);
       snapY = free.map((p) => p.y);
+      snapZ = free.map((p) => p.z);
     }
   }
   return false;
@@ -1100,25 +1255,30 @@ function settle(built: Built, gravity: Vec2): boolean {
 /** One loaded substep from the settled pose to read static forces from the
  * rigid-constraint λ (force = λ/Δt²). The gravity + spring loads present at
  * equilibrium are exactly what the rigid constraints react, so their λ is the
- * static force — this works with gravity off (the coupling load is a spring or
- * a driven displacement). Positions are restored afterwards. */
-function measure(built: Built, gravity: Vec2): Map<string, { fx: number; fy: number }> {
+ * static force — this works for massless coupling mechanisms too (the load is
+ * a spring or a driven displacement). Positions are restored afterwards. */
+function measure(built: Built): Map<string, Vec3> {
   const { particles } = built;
   const free = [...particles.values()].filter((p) => !p.held);
-  const savedX = new Map([...particles].map(([id, p]) => [id, [p.x, p.y, p.vx, p.vy] as const]));
+  const savedX = new Map(
+    [...particles].map(([id, p]) => [id, [p.x, p.y, p.z, p.vx, p.vy, p.vz] as const]),
+  );
   for (const p of free) {
     p.vx = 0;
     p.vy = 0;
+    p.vz = 0;
   }
-  substep(built, free, gravity);
-  const force = new Map<string, { fx: number; fy: number }>();
+  substep(built, free);
+  const force = new Map<string, Vec3>();
   for (const c of built.constraints) c.addForces(force);
   for (const [id, p] of particles) {
     const s = savedX.get(id)!;
     p.x = s[0];
     p.y = s[1];
-    p.vx = s[2];
-    p.vy = s[3];
+    p.z = s[2];
+    p.vx = s[3];
+    p.vy = s[4];
+    p.vz = s[5];
   }
   return force;
 }
@@ -1133,7 +1293,6 @@ function measure(built: Built, gravity: Vec2): Map<string, { fx: number; fy: num
 // a collapsed equilibrium when a rope can't do its job.
 function ropesRequiringCompression(
   mechanism: Mechanism,
-  gravity: Vec2,
   density: number,
   elementDensity: Record<string, number>,
   dragHeldIds: ReadonlySet<string>,
@@ -1152,16 +1311,14 @@ function ropesRequiringCompression(
 
   interface Member {
     ropeId: string | null;
-    // contribution of +1 unit tension to each free node's (x,y) balance
-    terms: Array<{ node: string; dx: number; dy: number }>;
+    // contribution of +1 unit tension to each free node's (x,y,z) balance
+    terms: Array<{ node: string; dx: number; dy: number; dz: number }>;
   }
   const members: Member[] = [];
   const pathTaut = (path: string[], l0: number): boolean => {
     let t = 0;
     for (let i = 1; i < path.length; i++) {
-      const a = posOf.get(path[i - 1]!)!;
-      const b = posOf.get(path[i]!)!;
-      t += hypot(a.x - b.x, a.y - b.y);
+      t += dist3(posOf.get(path[i - 1]!)!, posOf.get(path[i]!)!);
     }
     return t >= l0 - 1e-6;
   };
@@ -1169,37 +1326,36 @@ function ropesRequiringCompression(
     if (el.type === 'link' || (el.type === 'telescope' && !el.sliding)) {
       const a = posOf.get(el.nodeA)!;
       const b = posOf.get(el.nodeB)!;
-      const [ux, uy] = unit(b.x - a.x, b.y - a.y);
+      const [ux, uy, uz] = unit(b.x - a.x, b.y - a.y, b.z - a.z);
       members.push({
         ropeId: null,
         terms: [
-          { node: el.nodeA, dx: ux, dy: uy }, // tension pulls A toward B
-          { node: el.nodeB, dx: -ux, dy: -uy },
+          { node: el.nodeA, dx: ux, dy: uy, dz: uz }, // tension pulls A toward B
+          { node: el.nodeB, dx: -ux, dy: -uy, dz: -uz },
         ],
       });
     } else if (el.type === 'rope' && pathTaut(el.path, el.lengthM)) {
-      const terms: Array<{ node: string; dx: number; dy: number }> = [];
+      const terms: Array<{ node: string; dx: number; dy: number; dz: number }> = [];
       for (let i = 0; i < el.path.length; i++) {
         const p = posOf.get(el.path[i]!)!;
         let gx = 0;
         let gy = 0;
+        let gz = 0;
         if (i > 0) {
-          const [ux, uy] = unit(
-            posOf.get(el.path[i - 1]!)!.x - p.x,
-            posOf.get(el.path[i - 1]!)!.y - p.y,
-          );
+          const q = posOf.get(el.path[i - 1]!)!;
+          const [ux, uy, uz] = unit(q.x - p.x, q.y - p.y, q.z - p.z);
           gx += ux;
           gy += uy;
+          gz += uz;
         }
         if (i < el.path.length - 1) {
-          const [ux, uy] = unit(
-            posOf.get(el.path[i + 1]!)!.x - p.x,
-            posOf.get(el.path[i + 1]!)!.y - p.y,
-          );
+          const q = posOf.get(el.path[i + 1]!)!;
+          const [ux, uy, uz] = unit(q.x - p.x, q.y - p.y, q.z - p.z);
           gx += ux;
           gy += uy;
+          gz += uz;
         }
-        terms.push({ node: el.path[i]!, dx: gx, dy: gy });
+        terms.push({ node: el.path[i]!, dx: gx, dy: gy, dz: gz });
       }
       members.push({ ropeId: el.id, terms });
     }
@@ -1207,40 +1363,42 @@ function ropesRequiringCompression(
   if (members.length === 0) return [];
 
   // right-hand side: −(gravity + elastic loads) per free node
-  const b = new Float64Array(2 * freeNodes.length);
-  const addRhs = (node: string, fx: number, fy: number): void => {
+  const b = new Float64Array(3 * freeNodes.length);
+  const addRhs = (node: string, fx: number, fy: number, fz: number): void => {
     const r = rowOf.get(node);
     if (r === undefined) return;
-    b[2 * r] = (b[2 * r] ?? 0) - fx;
-    b[2 * r + 1] = (b[2 * r + 1] ?? 0) - fy;
+    b[3 * r] = (b[3 * r] ?? 0) - fx;
+    b[3 * r + 1] = (b[3 * r + 1] ?? 0) - fy;
+    b[3 * r + 2] = (b[3 * r + 2] ?? 0) - fz;
   };
   for (const id of freeNodes) {
     const m = masses.get(id) ?? 0;
-    addRhs(id, m * gravity.x, m * gravity.y);
+    addRhs(id, m * GRAVITY.x, m * GRAVITY.y, m * GRAVITY.z);
   }
   for (const el of mechanism.elements) {
     if (el.type !== 'elastic') continue;
     const a = posOf.get(el.nodeA)!;
     const bb = posOf.get(el.nodeB)!;
-    const len = hypot(a.x - bb.x, a.y - bb.y);
+    const len = dist3(a, bb);
     const restEff = el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
     let f = el.stiffnessNPerM * (len - restEff);
     if (el.tensionOnly) f = Math.max(0, f);
-    const [ux, uy] = unit(bb.x - a.x, bb.y - a.y);
-    addRhs(el.nodeA, f * ux, f * uy); // pulls A toward B
-    addRhs(el.nodeB, -f * ux, -f * uy);
+    const [ux, uy, uz] = unit(bb.x - a.x, bb.y - a.y, bb.z - a.z);
+    addRhs(el.nodeA, f * ux, f * uy, f * uz); // pulls A toward B
+    addRhs(el.nodeB, -f * ux, -f * uy, -f * uz);
   }
 
-  // A: (2·free) × members. Solve least-squares via normal equations.
-  const rows = 2 * freeNodes.length;
+  // A: (3·free) × members. Solve least-squares via normal equations.
+  const rows = 3 * freeNodes.length;
   const cols = members.length;
   const A: number[][] = Array.from({ length: rows }, () => new Array(cols).fill(0));
   for (let c = 0; c < cols; c++) {
     for (const t of members[c]!.terms) {
       const r = rowOf.get(t.node);
       if (r === undefined) continue;
-      A[2 * r]![c] = A[2 * r]![c]! + t.dx;
-      A[2 * r + 1]![c] = A[2 * r + 1]![c]! + t.dy;
+      A[3 * r]![c] = A[3 * r]![c]! + t.dx;
+      A[3 * r + 1]![c] = A[3 * r + 1]![c]! + t.dy;
+      A[3 * r + 2]![c] = A[3 * r + 2]![c]! + t.dz;
     }
   }
   const x = leastSquares(A, b, rows, cols);
@@ -1295,11 +1453,10 @@ function leastSquares(
 function extractForces(
   mechanism: Mechanism,
   built: Built,
-  nodeForce: Map<string, { fx: number; fy: number }>,
-  gravity: Vec2,
+  nodeForce: Map<string, Vec3>,
 ): SolveForces {
   const elements: Record<string, number> = {};
-  const pivotReactions: Record<string, Vec2> = {};
+  const pivotReactions: Record<string, Vec3> = {};
   const requiredInputs: Record<string, number> = {};
 
   // element axial forces / tensions / moments, grouped by element id
@@ -1339,8 +1496,8 @@ function extractForces(
   // pivot reactions: reaction = −(net constraint force on the pivot node)
   for (const el of mechanism.elements) {
     if (el.type !== 'pivot') continue;
-    const f = nodeForce.get(el.nodeId) ?? { fx: 0, fy: 0 };
-    pivotReactions[el.id] = { x: -f.fx, y: -f.fy };
+    const f = nodeForce.get(el.nodeId) ?? { x: 0, y: 0, z: 0 };
+    pivotReactions[el.id] = { x: -f.x, y: -f.y, z: -f.z };
   }
 
   // required input per driven channel: the generalized force the operator's
@@ -1348,16 +1505,26 @@ function extractForces(
   for (const ref of driveRefs(mechanism)) {
     const p = built.particles.get(ref.nodeId);
     if (!p) continue;
-    const cf = nodeForce.get(ref.nodeId) ?? { fx: 0, fy: 0 };
+    const cf = nodeForce.get(ref.nodeId) ?? { x: 0, y: 0, z: 0 };
     // holder must cancel constraint forces + gravity on the held node
-    const holdX = -(cf.fx + p.mass * gravity.x);
-    const holdY = -(cf.fy + p.mass * gravity.y);
+    const holdX = -(cf.x + p.mass * GRAVITY.x);
+    const holdY = -(cf.y + p.mass * GRAVITY.y);
+    const holdZ = -(cf.z + p.mass * GRAVITY.z);
     if (ref.kind === 'displacement') {
-      requiredInputs[ref.channel.name] = Math.abs(holdX * ref.axis.x + holdY * ref.axis.y);
+      requiredInputs[ref.channel.name] = Math.abs(
+        holdX * ref.axis.x + holdY * ref.axis.y + holdZ * ref.axis.z,
+      );
     } else {
+      // moment about the drive's rotation axis through the rail pivot
       const relx = p.x - ref.pivot.x;
       const rely = p.y - ref.pivot.y;
-      requiredInputs[ref.channel.name] = Math.abs(relx * holdY - rely * holdX); // moment about the rail pivot
+      const relz = p.z - ref.pivot.z;
+      const mx = rely * holdZ - relz * holdY;
+      const my = relz * holdX - relx * holdZ;
+      const mz = relx * holdY - rely * holdX;
+      requiredInputs[ref.channel.name] = Math.abs(
+        mx * ref.rotAxis.x + my * ref.rotAxis.y + mz * ref.rotAxis.z,
+      );
     }
   }
 
@@ -1368,7 +1535,6 @@ function diagnostics(
   mechanism: Mechanism,
   built: Built,
   settled: boolean,
-  gravity: Vec2,
   density: number,
   elementDensity: Record<string, number>,
   dragHeldIds: ReadonlySet<string>,
@@ -1382,8 +1548,7 @@ function diagnostics(
     if (v > RESIDUAL_TOL) violated.add(c.elementId);
     equalities += c.mobility;
   }
-  const freeCount = mechanism.nodes.filter((n) => n.kind === 'free').length;
-  const dof = 2 * freeCount - equalities;
+  const dof = 3 * (built.freeCount + built.freeVirtualCount) - equalities;
   return {
     dof,
     classification: dof < 0 ? 'overconstrained' : dof === 0 ? 'structure' : 'mechanism',
@@ -1392,7 +1557,6 @@ function diagnostics(
     violated: [...violated].sort(),
     ropesRequiringCompression: ropesRequiringCompression(
       mechanism,
-      gravity,
       density,
       elementDensity,
       dragHeldIds,
@@ -1402,15 +1566,16 @@ function diagnostics(
 
 // ── entry point ──────────────────────────────────────────────────────────
 export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): SolveResult {
-  const gravity: Vec2 = mechanism.gravityOn ? { x: 0, y: -G } : { x: 0, y: 0 };
   const density = inputs.linkDensityKgPerM ?? 0;
   const elementDensity = inputs.elementLinearDensityKgPerM ?? {};
   const built = build(mechanism, inputs);
-  const settled = settle(built, gravity);
-  const nodeForce = measure(built, gravity);
+  const settled = settle(built);
+  const nodeForce = measure(built);
 
-  const positions: Record<string, Vec2> = {};
-  for (const p of built.particles.values()) positions[p.id] = { x: p.x, y: p.y };
+  const positions: Record<string, Vec3> = {};
+  for (const p of built.particles.values()) {
+    if (built.userIds.has(p.id)) positions[p.id] = { x: p.x, y: p.y, z: p.z };
+  }
 
   const dragHeldIds = new Set(
     mechanism.nodes
@@ -1419,15 +1584,7 @@ export function solveEquilibrium(mechanism: Mechanism, inputs: SolveInputs): Sol
   );
   return {
     positions,
-    forces: extractForces(mechanism, built, nodeForce, gravity),
-    diagnostics: diagnostics(
-      mechanism,
-      built,
-      settled,
-      gravity,
-      density,
-      elementDensity,
-      dragHeldIds,
-    ),
+    forces: extractForces(mechanism, built, nodeForce),
+    diagnostics: diagnostics(mechanism, built, settled, density, elementDensity, dragHeldIds),
   };
 }

@@ -26,7 +26,7 @@ const m = (locked = false) =>
 
 function project(locked = false): Project {
   const p = createEmptyProject('p1', 'test');
-  return { ...p, materials: testMaterials(), mechanisms: [m(locked)] };
+  return { ...p, materials: testMaterials(), mechanism: m(locked) };
 }
 
 describe('deriveConflicts', () => {
@@ -45,7 +45,7 @@ describe('deriveConflicts', () => {
     const rows = deriveConflicts(m(true), { dof: 0, classification: 'structure' }, ['L1'], []);
     expect(rows[0]!.issue).toBe('locked length in conflict');
     const fixed = rows[0]!.fix!.apply(project(true));
-    const link = fixed.mechanisms[0]!.elements.find((e) => e.id === 'L1') as LinkElement;
+    const link = fixed.mechanism.elements.find((e) => e.id === 'L1') as LinkElement;
     expect(link.lengthLocked).toBeUndefined();
   });
 

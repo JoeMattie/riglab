@@ -2,8 +2,8 @@
 // implementation per the tests-first rule. Item taxonomy and the maturity
 // derivation rule are documented in DECISIONS.md (Phase 3 — design face UI).
 import { describe, expect, it } from 'vitest';
-import { mech, node, testMaterials } from '../bom/testHelpers';
 import type {
+  Group,
   LinkElement,
   PivotElement,
   RopeElement,
@@ -12,6 +12,7 @@ import type {
 } from '../schema';
 import type { SolveDiagnostics } from '../solver';
 import { derivedMaturity, elementResolutionItems, mechanismResolution } from './resolution';
+import { mech, node, testMaterials } from './testFixtures';
 
 const materials = testMaterials();
 
@@ -44,6 +45,7 @@ const pivot = (id: string, over: Partial<PivotElement> = {}): PivotElement => ({
   type: 'pivot',
   maturity: 'sketch',
   nodeId: 'n1',
+  joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
   memberIds: ['e1', 'e2'],
   welds: [],
   ...over,
@@ -215,6 +217,31 @@ describe('mechanismResolution', () => {
     const ids = res.items.map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(mechanismResolution(m, materials).items.map((i) => i.id)).toEqual(ids);
+  });
+
+  it('surfaces group notes (migration "re-joint needed" warnings) as items, not slots', () => {
+    const m = mech([link('L1', { pipeMaterialId: 'PA' })], nodes);
+    const groups: Group[] = [
+      {
+        id: 'g1',
+        name: 'neck pitch',
+        elementIds: ['L1'],
+        note: 're-joint needed: former driven plane',
+      },
+      { id: 'g2', name: 'quiet group', elementIds: [] },
+    ];
+    const res = mechanismResolution(m, materials, undefined, groups);
+    const noteItems = res.items.filter((i) => i.kind === 'groupNote');
+    expect(noteItems).toHaveLength(1); // noteless groups stay silent
+    expect(noteItems[0]).toMatchObject({
+      id: 'group-note:g1',
+      groupId: 'g1',
+      severity: 'warning',
+    });
+    expect(noteItems[0]!.label).toContain('neck pitch');
+    expect(noteItems[0]!.label).toContain('re-joint needed');
+    // a note is a warning, never an assignment slot
+    expect(res.progress).toEqual({ resolved: 1, total: 1 });
   });
 });
 

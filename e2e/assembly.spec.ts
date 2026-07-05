@@ -1,97 +1,77 @@
-// Phase 4 browser smoke (§11 "full-example assembly renders"): load the
-// full-creature example, switch to the 3D Assembly mode, and confirm the WebGL
-// viewport mounts and the analysis sidebar reports a plausible creature mass —
-// with no page errors. Composition correctness (walk animation, CG shift,
-// seesaw moment ±2%) is covered by the pure acceptance suite; this guards the
-// r3f wiring end-to-end in the built app.
+// Quad-workspace browser smoke, 3D-conversion edition: the quad IS the app.
+// Load the full-creature compound example, confirm all four panels mount
+// (three editable ortho sketch canvases + the WebGL perspective panel), the
+// analysis sidebar reports a plausible creature mass, and the pipe-model
+// render toggle produces pipes plus joint bodies — with no page errors.
+// Composition/solve correctness is covered by the pure acceptance suites;
+// this guards the r3f + quad wiring end-to-end in the built app.
 import { expect, test } from '@playwright/test';
 
 // A second e2e spec must not re-declare the global Window.__riglab type (it is
 // declared in sketch.spec.ts); reach the seam through a local cast instead.
-interface AssemblyHook {
+interface QuadHook {
   loadExample(id: string): void;
-  getEditor(): { mode: string };
+  getEditor(): { activePanel: string; quadMaximized: string | null };
   getAssemblyStats(): {
     render: string;
+    nodeCount: number;
+    elementCount: number;
+    groupCount: number;
     totalMassKg: number;
-    placedCount: number;
-    unplacedCount: number;
     primCount: number;
     pipeCount: number;
     fittingCount: number;
   } | null;
 }
 
-test('3D assembly mode renders the full creature with a live mass readout', async ({ page }) => {
+test('quad workspace renders the full creature with live mass and pipe model', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 
   await page.goto('/');
   // reach the editor (the __riglab seams mount there), then swap in the example
-  await page.getByTestId('new-project-name').fill('Assembly check');
-  await page.getByTestId('create-project').click();
-  await expect(page.getByTestId('project-name-input')).toBeVisible();
-  await page.evaluate(() =>
-    (window as unknown as { __riglab: AssemblyHook }).__riglab.loadExample('example-full-creature'),
-  );
-
-  // switch to 3D
-  await page.getByTestId('mode-3d').click();
-  await expect(page.getByTestId('mode-3d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(
-    page.evaluate(
-      () => (window as unknown as { __riglab: AssemblyHook }).__riglab.getEditor().mode,
-    ),
-  ).resolves.toBe('3d');
-
-  // WebGL canvas mounted + analysis sidebar shows a plausible creature mass
-  await expect(page.locator('canvas')).toBeVisible();
-  const massText = page.getByText(/kg$/).first();
-  await expect(massText).toBeVisible();
-  const total = await massText.textContent();
-  const kg = Number.parseFloat(total ?? '0');
-  expect(kg).toBeGreaterThan(1);
-  expect(kg).toBeLessThan(30);
-
-  // seesaw balance readout present
-  await expect(page.getByText('Seesaw balance')).toBeVisible();
-  await expect(page.getByText(/N·m/).first()).toBeVisible();
-
-  // pipe-model toggle (PLANFILE-quad-workspace slice 3): switch render and
-  // confirm the solved model has pipe segments and joint bodies
-  await page.getByRole('button', { name: 'Pipe model' }).click();
-  const stats = await page.evaluate(() =>
-    (window as unknown as { __riglab: AssemblyHook }).__riglab.getAssemblyStats(),
-  );
-  expect(stats).not.toBeNull();
-  expect(stats!.render).toBe('pipe');
-  expect(stats!.pipeCount).toBeGreaterThan(0);
-  // joint bodies (fittings/bands/sleeves/blobs) beyond the bare pipe runs
-  expect(stats!.primCount).toBeGreaterThan(stats!.pipeCount);
-  await expect(page.locator('canvas')).toBeVisible();
-
-  expect(errors).toEqual([]);
-});
-
-test('quad workspace mounts four panels and hosts one 2D editor', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-
-  await page.goto('/');
   await page.getByTestId('new-project-name').fill('Quad check');
   await page.getByTestId('create-project').click();
   await expect(page.getByTestId('project-name-input')).toBeVisible();
   await page.evaluate(() =>
-    (window as unknown as { __riglab: AssemblyHook }).__riglab.loadExample('example-full-creature'),
+    (window as unknown as { __riglab: QuadHook }).__riglab.loadExample('example-full-creature'),
   );
 
-  await page.getByTestId('mode-quad').click();
+  // all four panels mount; the three ortho panels each host a full editor
   for (const id of ['top', 'persp', 'front', 'side']) {
     await expect(page.getByTestId(`quad-panel-${id}`)).toBeVisible();
   }
-  // exactly one panel hosts the active mechanism's full editor; the other
-  // ortho panels are read-only ghost projections
-  await expect(page.getByTestId('sketch-canvas')).toHaveCount(1);
+  for (const p of ['top', 'front', 'side']) {
+    await expect(page.getByTestId(`sketch-canvas-${p}`)).toBeVisible();
+  }
+  // WebGL canvas mounted in the perspective panel
+  await expect(page.getByTestId('quad-panel-persp').locator('canvas')).toBeVisible();
+
+  // the compound document is one mechanism with groups
+  const stats = await page.evaluate(() =>
+    (window as unknown as { __riglab: QuadHook }).__riglab.getAssemblyStats(),
+  );
+  expect(stats).not.toBeNull();
+  expect(stats!.nodeCount).toBeGreaterThan(50);
+  expect(stats!.groupCount).toBeGreaterThanOrEqual(8);
+  // plausible wearable-creature mass
+  expect(stats!.totalMassKg).toBeGreaterThan(1);
+  expect(stats!.totalMassKg).toBeLessThan(30);
+
+  // analysis sidebar shows the mass + seesaw balance readouts
+  await expect(page.getByTestId('analysis-sidebar')).toBeVisible();
+  await expect(page.getByText(/kg$/).first()).toBeVisible();
+  await expect(page.getByText(/N·m/).first()).toBeVisible();
+
+  // pipe-model toggle: switch render and confirm pipes plus joint bodies
+  await page.getByTestId('render-pipe').click();
+  const pipeStats = await page.evaluate(() =>
+    (window as unknown as { __riglab: QuadHook }).__riglab.getAssemblyStats(),
+  );
+  expect(pipeStats!.render).toBe('pipe');
+  expect(pipeStats!.pipeCount).toBeGreaterThan(0);
+  // joint bodies (fittings/bands/sleeves/blobs) beyond the bare pipe runs
+  expect(pipeStats!.primCount).toBeGreaterThan(pipeStats!.pipeCount);
 
   // double-click a panel header maximizes it; again restores the grid
   await page.getByRole('button', { name: 'Perspective', exact: true }).dblclick();

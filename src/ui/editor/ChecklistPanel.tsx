@@ -25,19 +25,26 @@ function hintFor(item: ResolutionItem): FocusHint | null {
 
 export function ChecklistPanel() {
   const doc = useAppStore((s) => s.current);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   const select = useEditorStore((s) => s.select);
+  const setSelection = useEditorStore((s) => s.setSelection);
   const setRightTab = useEditorStore((s) => s.setRightTab);
   const setFocusHint = useEditorStore((s) => s.setFocusHint);
   const diagnostics = useDiagnosticsShim();
 
-  const mech = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
+  const mech = doc?.mechanism ?? null;
   if (!doc || !mech) return null;
 
-  const { items, progress } = mechanismResolution(mech, doc.materials, diagnostics);
+  const { items, progress } = mechanismResolution(mech, doc.materials, diagnostics, doc.groups);
   const buildable = items.length === 0;
 
   const fix = (item: ResolutionItem) => {
+    if (item.kind === 'groupNote' && item.groupId) {
+      // click-to-fix for a group note (e.g. the migration's "re-joint
+      // needed") selects that group's elements so they light up in the panels
+      const group = doc.groups.find((g) => g.id === item.groupId);
+      if (group) setSelection(group.elementIds);
+      return;
+    }
     if (item.elementId) {
       select(item.elementId);
       setRightTab('inspector');
@@ -65,7 +72,10 @@ export function ChecklistPanel() {
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {items.map((item) => {
-            const clickable = item.elementId !== undefined || item.kind === 'unboundChannel';
+            const clickable =
+              item.elementId !== undefined ||
+              item.kind === 'unboundChannel' ||
+              (item.kind === 'groupNote' && item.groupId !== undefined);
             return (
               <li key={item.id} className="border-b">
                 {clickable ? (

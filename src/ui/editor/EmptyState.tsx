@@ -1,28 +1,24 @@
-// Onboarding empty-state (§5/§8.1): a fresh project has no mechanism yet, so
-// there is nothing to draw on. This lands the user straight on a side-view
-// silhouette with the pipe tool active — one click to start playing — and
-// points to the bundled examples as the alternative path.
+// Onboarding empty-state (§5/§8.1, v7 quad): a fresh project's compound
+// mechanism has nothing drawn yet. This lands the user in the maximized Side
+// panel with the pipe tool active — one click to start playing — and points
+// to the bundled examples as the alternative path.
 import { EXAMPLES } from '../../examples';
 import { useAppStore } from '../../state/appStore';
-import { addMechanism } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { panelStyle, T } from './theme';
 
 export function EmptyState() {
-  const updateCurrent = useAppStore((s) => s.updateCurrent);
   const createFromExample = useAppStore((s) => s.createFromExample);
   const setTool = useEditorStore((s) => s.setTool);
-  const setActiveMechanism = useEditorStore((s) => s.setActiveMechanism);
+  const setActivePanel = useEditorStore((s) => s.setActivePanel);
+  const setQuadMaximized = useEditorStore((s) => s.setQuadMaximized);
+  const dismissOnboarding = useEditorStore((s) => s.dismissOnboarding);
 
   const startDrawing = () => {
-    let newId = '';
-    updateCurrent((d) => {
-      const { doc, mechanismId } = addMechanism(d, 'side-left');
-      newId = mechanismId;
-      return doc;
-    });
-    setActiveMechanism(newId);
+    setActivePanel('side');
+    setQuadMaximized('side');
     setTool('pipe'); // land with the pencil ready (§8.1)
+    dismissOnboarding(); // the overlay must yield the pointer to the canvas
   };
 
   return (

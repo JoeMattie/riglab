@@ -29,14 +29,13 @@ export function MechanismSummary({
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
 
-  const resolution = mechanismResolution(mech, doc.materials, diagnostics);
+  const resolution = mechanismResolution(mech, doc.materials, diagnostics, doc.groups);
   const unbound = resolution.items.filter((i) => i.kind === 'unboundChannel');
 
   return (
     <div data-testid="mechanism-summary">
       <Section title="Mechanism">
         <Row label="name">{mech.name}</Row>
-        <Row label="view">{mech.viewOrientation}</Row>
         {dof && (
           <Row label="DOF">
             <Badge variant="secondary" data-testid="summary-dof">
@@ -44,7 +43,6 @@ export function MechanismSummary({
             </Badge>
           </Row>
         )}
-        <Row label="gravity">{mech.gravityOn ? 'on' : 'off'}</Row>
       </Section>
 
       <Section title="Elements">
@@ -72,10 +70,7 @@ export function MechanismSummary({
         <Section title="Design progress">
           <Row label="weight">
             <span data-testid="summary-weight">
-              {kilograms(
-                computeBom([mech], doc.materials, doc.bomSettings).weights.grandTotalKg,
-                doc.unitsPreference,
-              )}
+              {kilograms(computeBom(doc).weights.grandTotalKg, doc.unitsPreference)}
             </span>
           </Row>
           <Row label="resolved">

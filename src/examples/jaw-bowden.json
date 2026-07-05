@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-jaw-bowden",
   "name": "Example — jaw + Bowden",
   "unitsPreference": "imperial",
@@ -622,204 +622,228 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
-    {
-      "id": "jaw-bowden",
-      "name": "Jaw + Bowden",
-      "viewOrientation": "side-left",
-      "gravityOn": true,
-      "nodes": [
-        {
-          "id": "skullBack",
-          "kind": "anchor",
-          "position": {
-            "x": -0.12,
-            "y": 1.5
-          }
+  "mechanism": {
+    "id": "jaw-bowden",
+    "name": "Jaw + Bowden",
+    "nodes": [
+      {
+        "id": "skullBack",
+        "kind": "anchor",
+        "position": {
+          "x": -0.12,
+          "y": 1.5,
+          "z": 0
+        }
+      },
+      {
+        "id": "jawPivot",
+        "kind": "anchor",
+        "position": {
+          "x": 0,
+          "y": 1.5,
+          "z": 0
+        }
+      },
+      {
+        "id": "crest",
+        "kind": "anchor",
+        "position": {
+          "x": 0.02,
+          "y": 1.66,
+          "z": 0
+        }
+      },
+      {
+        "id": "casingJaw",
+        "kind": "anchor",
+        "position": {
+          "x": -0.1,
+          "y": 1.41,
+          "z": 0
+        }
+      },
+      {
+        "id": "triggerBase",
+        "kind": "anchor",
+        "position": {
+          "x": -0.32,
+          "y": 1.1400000000000001,
+          "z": 0
+        }
+      },
+      {
+        "id": "casingTrigger",
+        "kind": "anchor",
+        "position": {
+          "x": -0.32,
+          "y": 1.2,
+          "z": 0
+        }
+      },
+      {
+        "id": "jawTip",
+        "kind": "free",
+        "position": {
+          "x": 0.24,
+          "y": 1.5,
+          "z": 0
+        }
+      },
+      {
+        "id": "jawHeel",
+        "kind": "free",
+        "position": {
+          "x": -0.065,
+          "y": 1.53,
+          "z": 0
+        }
+      },
+      {
+        "id": "trigger",
+        "kind": "driven",
+        "position": {
+          "x": -0.32,
+          "y": 1.28,
+          "z": 0
         },
-        {
-          "id": "jawPivot",
-          "kind": "anchor",
-          "position": {
+        "channelId": "chJawTrigger"
+      }
+    ],
+    "elements": [
+      {
+        "id": "skullBar",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeA": "skullBack",
+        "nodeB": "jawPivot",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "jawMain",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "jaw",
+        "nodeA": "jawPivot",
+        "nodeB": "jawTip",
+        "pipeMaterialId": "pipe-cts-cpvc-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "heatWrapRigid",
+        "pointMasses": []
+      },
+      {
+        "id": "jawHeelSpur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "jaw",
+        "nodeA": "jawPivot",
+        "nodeB": "jawHeel",
+        "pipeMaterialId": "pipe-cts-cpvc-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "zTriggerBar",
+        "type": "telescope",
+        "maturity": "engineered",
+        "subsystemTag": "trigger",
+        "nodeA": "triggerBase",
+        "nodeB": "trigger",
+        "minLengthM": 0.1,
+        "maxLengthM": 0.22,
+        "lengthM": 0.14,
+        "sliding": true,
+        "outerPipeMaterialId": "pipe-nps-cls200-075",
+        "innerPipeMaterialId": "pipe-cts-cpvc-075",
+        "pointMasses": []
+      },
+      {
+        "id": "jawPivotPin",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "jaw",
+        "nodeId": "jawPivot",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
             "x": 0,
-            "y": 1.5
+            "y": 0,
+            "z": 1
           }
         },
-        {
-          "id": "crest",
-          "kind": "anchor",
-          "position": {
-            "x": 0.02,
-            "y": 1.66
-          }
+        "memberIds": ["skullBar", "jawMain", "jawHeelSpur"],
+        "welds": [["jawMain", "jawHeelSpur"]],
+        "angleLimit": {
+          "memberA": "skullBar",
+          "memberB": "jawMain",
+          "minRad": -0.7,
+          "maxRad": 0
         },
-        {
-          "id": "casingJaw",
-          "kind": "anchor",
-          "position": {
-            "x": -0.1,
-            "y": 1.41
-          }
-        },
-        {
-          "id": "triggerBase",
-          "kind": "anchor",
-          "position": {
-            "x": -0.32,
-            "y": 1.1400000000000001
-          }
-        },
-        {
-          "id": "casingTrigger",
-          "kind": "anchor",
-          "position": {
-            "x": -0.32,
-            "y": 1.2
-          }
-        },
-        {
-          "id": "jawTip",
-          "kind": "free",
-          "position": {
-            "x": 0.24,
-            "y": 1.5
-          }
-        },
-        {
-          "id": "jawHeel",
-          "kind": "free",
-          "position": {
-            "x": -0.065,
-            "y": 1.53
-          }
-        },
-        {
-          "id": "trigger",
-          "kind": "driven",
-          "position": {
-            "x": -0.32,
-            "y": 1.28
-          },
-          "channelId": "chJawTrigger"
-        }
-      ],
-      "elements": [
-        {
-          "id": "skullBar",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeA": "skullBack",
-          "nodeB": "jawPivot",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "fitting",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "jawMain",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "jaw",
-          "nodeA": "jawPivot",
-          "nodeB": "jawTip",
-          "pipeMaterialId": "pipe-cts-cpvc-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "heatWrapRigid",
-          "pointMasses": []
-        },
-        {
-          "id": "jawHeelSpur",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "jaw",
-          "nodeA": "jawPivot",
-          "nodeB": "jawHeel",
-          "pipeMaterialId": "pipe-cts-cpvc-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "zTriggerBar",
-          "type": "telescope",
-          "maturity": "engineered",
-          "subsystemTag": "trigger",
-          "nodeA": "triggerBase",
-          "nodeB": "trigger",
-          "minLengthM": 0.1,
-          "maxLengthM": 0.22,
-          "lengthM": 0.14,
-          "sliding": true,
-          "outerPipeMaterialId": "pipe-nps-cls200-075",
-          "innerPipeMaterialId": "pipe-cts-cpvc-075",
-          "pointMasses": []
-        },
-        {
-          "id": "jawPivotPin",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "jaw",
-          "nodeId": "jawPivot",
-          "memberIds": ["skullBar", "jawMain", "jawHeelSpur"],
-          "welds": [["jawMain", "jawHeelSpur"]],
-          "angleLimit": {
-            "memberA": "skullBar",
-            "memberB": "jawMain",
-            "minRad": -0.7,
-            "maxRad": 0
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "openElastic",
-          "type": "elastic",
-          "maturity": "engineered",
-          "subsystemTag": "jaw",
-          "nodeA": "crest",
-          "nodeB": "jawHeel",
-          "restLengthM": 0.1,
-          "stiffnessNPerM": 150,
-          "tensionOnly": true,
-          "cordageMaterialId": "cord-bungee6"
-        },
-        {
-          "id": "biteCable",
-          "type": "bowden",
-          "maturity": "engineered",
-          "subsystemTag": "jaw",
-          "a1": "casingTrigger",
-          "a2": "trigger",
-          "b1": "casingJaw",
-          "b2": "jawHeel",
-          "restLengthAM": 0.08,
-          "restLengthBM": 0.1697,
-          "cordageMaterialId": "cord-bowden"
-        }
-      ],
-      "pointMasses": [],
-      "skeletonBindings": [],
-      "anchorBindings": [],
-      "inputs": [
-        {
-          "id": "chJawTrigger",
-          "name": "jaw trigger",
-          "kind": "displacement",
-          "min": 0,
-          "max": 0.038,
-          "value": 0,
-          "locked": false
-        }
-      ],
-      "namedStates": []
+        "realization": "boltThrough"
+      },
+      {
+        "id": "openElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "jaw",
+        "nodeA": "crest",
+        "nodeB": "jawHeel",
+        "restLengthM": 0.1,
+        "stiffnessNPerM": 150,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee6"
+      },
+      {
+        "id": "biteCable",
+        "type": "bowden",
+        "maturity": "engineered",
+        "subsystemTag": "jaw",
+        "a1": "casingTrigger",
+        "a2": "trigger",
+        "b1": "casingJaw",
+        "b2": "jawHeel",
+        "restLengthAM": 0.08,
+        "restLengthBM": 0.1697,
+        "cordageMaterialId": "cord-bowden"
+      }
+    ],
+    "pointMasses": [],
+    "skeletonBindings": [],
+    "anchorBindings": [],
+    "inputs": [
+      {
+        "id": "chJawTrigger",
+        "name": "jaw trigger",
+        "kind": "displacement",
+        "min": 0,
+        "max": 0.038,
+        "value": 0,
+        "locked": false
+      }
+    ],
+    "namedStates": []
+  },
+  "groups": [
+    {
+      "id": "grp-jaw-bowden",
+      "name": "Jaw + Bowden",
+      "elementIds": [
+        "skullBar",
+        "jawMain",
+        "jawHeelSpur",
+        "zTriggerBar",
+        "jawPivotPin",
+        "openElastic",
+        "biteCable"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

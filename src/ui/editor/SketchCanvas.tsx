@@ -1,10 +1,14 @@
+// The panel sketch canvas (PLANFILE-3d-conversion.md): every quad ortho
+// panel hosts this full editing surface over the whole compound mechanism,
+// projected into the panel's plane. The document is Vec3; this component
+// projects for drawing/snapping and lifts pointer input back through the
+// panel frame at the panel's active work-plane depth (snapping to existing
+// geometry adopts that geometry's depth so connections land exactly).
 import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
-import { projectControlChannels } from '../../controls';
-import { elementLinearDensities } from '../../design/densities';
 import { elementIdsInRect, normalizedRect } from '../../design/marquee';
-import type { Mechanism, PivotElement, SliderElement, Vec2 } from '../../schema';
+import type { Mechanism, PivotElement, PivotJoint, SliderElement, Vec2, Vec3 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
 import type { EndSpec } from '../../state/docOps';
@@ -21,30 +25,34 @@ import {
   releaseNodeConnection,
   setNodeKind,
 } from '../../state/docOps';
-import { useEditorStore } from '../../state/editorStore';
+import { type OrthoPanelId, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import {
   anchorTargets,
   bindingTargets,
-  computeSilhouette,
+  computeSkeleton,
   getClip,
+  headRadiusM,
+  projectSilhouette,
   REST_POSE,
+  type SkeletonFrame,
   samplePose,
 } from '../../wearer';
+import {
+  PANEL_FRAME,
+  panelDepthOf,
+  panelToWorld,
+  projectPositions,
+  projectToPanel,
+} from '../quad/panelProject';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
-import {
-  carriesForceLabel,
-  forceLabelAnchor,
-  formatForce,
-  pickRenderPositions,
-  readEquilibrium,
-} from './forces';
+import { carriesForceLabel, forceLabelAnchor, formatForce, pickRenderPositions } from './forces';
 import { pinchStep, wheelGesture } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
 import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
-import { scenePalette, T } from './theme';
+import { scenePalette } from './theme';
 import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
 
 const SNAP_TOL_PX = 14;
@@ -94,38 +102,17 @@ function rdp(points: Vec2[], epsilon: number): Vec2[] {
   return [...left.slice(0, -1), ...right];
 }
 
-function snapToEndSpec(snap: Snap, connect: 'pivot' | 'weld' | 'slider' | 'detach'): EndSpec {
-  if (connect === 'detach') return { kind: 'newNode', pos: snap.pos };
-  switch (snap.kind) {
-    case 'node':
-      return {
-        kind: 'existingNode',
-        nodeId: snap.nodeId,
-        connect: connect === 'weld' ? 'weld' : 'pivot',
-      };
-    case 'onPipe':
-      return {
-        kind: 'onPipe',
-        elementId: snap.elementId,
-        t: snap.t,
-        connect: connect === 'slider' ? 'slider' : connect === 'weld' ? 'weld' : 'pivot',
-      };
-    case 'skeleton':
-      return { kind: 'boundNode', pos: snap.pos, point: snap.point };
-    case 'anchor':
-      return { kind: 'anchorNode', pos: snap.pos, anchor: snap.anchor };
-    case 'grid':
-      return { kind: 'newNode', pos: snap.pos };
-  }
-}
-
 const needsMenu = (snap: Snap): boolean => snap.kind === 'node' || snap.kind === 'onPipe';
 
 interface Draft {
   mode: 'pipe' | 'polyline' | 'freehand';
   start: Snap;
-  vertices: Vec2[]; // committed interior vertices (polyline) / raw trail (freehand)
+  /** committed interior vertices (polyline) / raw trail (freehand), panel 2D */
+  vertices: Vec2[];
   cursor: Vec2;
+  /** work-plane depth captured when the draw started (node snaps adopt the
+   * snapped node's depth, so the whole stroke lands in that plane) */
+  depthM: number;
 }
 
 /** Direct geometry edit: dragging a selected pipe's endpoint handle moves
@@ -134,7 +121,9 @@ interface Draft {
 interface EndpointDrag {
   nodeId: string;
   elementId: string;
-  /** original endpoint positions for the dashed ghost of the prior pose */
+  /** the dragged node's out-of-plane depth, held constant through the drag */
+  depthM: number;
+  /** original endpoint positions (panel 2D) for the dashed prior-pose ghost */
   ghost: [Vec2, Vec2];
   /** every element incident to the dragged node — their spans move with the
    * pointer, so onPipe-snapping to them would chase a moving target */
@@ -146,26 +135,15 @@ interface EndpointDrag {
 export const lengthStepM = (units: 'imperial' | 'metric'): number =>
   units === 'imperial' ? 0.5 * M_PER_IN : 0.01;
 
-/** World-context ghost overlay for the quad workspace (PLANFILE-quad-
- * workspace slice 4): other mechanisms' geometry projected into the active
- * mechanism's local frame, clickable to switch the active mechanism. */
-export interface PanelOverlayItem {
-  mechanismId: string;
-  name: string;
-  segments: [Vec2, Vec2][];
-}
+/** Live view transforms per panel, for the scripted-verification seam
+ * (window.__riglab.getView(panelId)). */
+export const publishedViews: Partial<Record<OrthoPanelId, ViewTransform>> = {};
 
-export interface PanelOverlay {
-  items: PanelOverlayItem[];
-  onPick(mechanismId: string): void;
-}
-
-export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}) {
+export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const beginGesture = useAppStore((s) => s.beginGesture);
   const endGesture = useAppStore((s) => s.endGesture);
-  const activeMechanismId = useEditorStore((s) => s.activeMechanismId);
   // Konva shapes take literal colors (no CSS variables), so the drawing
   // palette re-renders off the night flag
   const night = useThemeStore((s) => s.night);
@@ -176,9 +154,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   const toggleSelect = useEditorStore((s) => s.toggleSelect);
   const clearSelection = useEditorStore((s) => s.clearSelection);
   const posePositions = useEditorStore((s) => s.posePositions);
-  const setPosePositions = useEditorStore((s) => s.setPosePositions);
   const playback = useEditorStore((s) => s.playback);
-  const heldChannels = useEditorStore((s) => s.heldChannels);
   const tracing = useEditorStore((s) => s.tracing);
   const tracePath = useEditorStore((s) => s.tracePath);
   const appendTrace = useEditorStore((s) => s.appendTrace);
@@ -187,19 +163,28 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   const violated = useEditorStore((s) => s.violated);
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
   const equilibrium = useEditorStore((s) => s.equilibrium);
-  const setEquilibrium = useEditorStore((s) => s.setEquilibrium);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const focusElementId = useEditorStore((s) => s.focusElementId);
   const setFocusElement = useEditorStore((s) => s.setFocusElement);
+  const workDepthM = useEditorStore((s) => s.panelDepths[panelId]);
+  const setPanelDepth = useEditorStore((s) => s.setPanelDepth);
+  const activePanel = useEditorStore((s) => s.activePanel);
+  const setActivePanel = useEditorStore((s) => s.setActivePanel);
+  const setDragNode3 = useEditorStore((s) => s.setDragNode);
 
-  const mech: Mechanism | null = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
+  const mech: Mechanism | null = doc?.mechanism ?? null;
+  const frame = PANEL_FRAME[panelId];
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 500 });
-  const [view, setView] = useState<ViewTransform>(() => initialView(800, 500));
+  const [view, setView] = useState<ViewTransform>(() => {
+    const v = initialView(800, 500);
+    // the top panel looks down at the x-z plane: center near the wearer
+    return panelId === 'top' ? { ...v, cy: 0 } : v;
+  });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [hoverSnap, setHoverSnap] = useState<Snap | null>(null);
-  const [dragNode, setDragNode] = useState<string | null>(null);
+  const [dragNode, setDragNode] = useState<{ nodeId: string; depthM: number } | null>(null);
   /** tear-off state for a drag that started on a wearer-connected node
    * (skeleton-bound, anchor-attached, or plain grounded): the node holds its
    * point until the pointer travels TEAR_OFF_PX from mousedown, then the
@@ -211,13 +196,18 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   // force-tool drafting (§8.1: ropes/elastics/bowden/torsion drawn with their
   // own tools). Rope routes through clicked waypoints; elastic/bowden are
   // click-drag; bowden needs two segments; torsion couples two picked pivots.
-  const [ropeDraft, setRopeDraft] = useState<{ points: Snap[]; cursor: Vec2 } | null>(null);
+  const [ropeDraft, setRopeDraft] = useState<{
+    points: Snap[];
+    cursor: Vec2;
+    depthM: number;
+  } | null>(null);
   const [dragCord, setDragCord] = useState<{
     tool: 'elastic' | 'bowden';
     start: Snap;
     cursor: Vec2;
+    depthM: number;
   } | null>(null);
-  const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap } | null>(null);
+  const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap; depthM: number } | null>(null);
   const [torsionA, setTorsionA] = useState<{ pivotId: string; nodeId: string } | null>(null);
   const panRef = useRef<{ x: number; y: number } | null>(null);
   /** where the last mousedown landed, to tell a click from a drag/pan */
@@ -229,6 +219,13 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   /** set when a marquee commits on mouseup — the Konva click that fires for
    * the same down/up pair on a shape must not replace the fresh selection */
   const marqueeCommittedRef = useRef(false);
+
+  /** New pivots drawn in this panel hinge about the panel's normal
+   * (PLANFILE-3d-conversion.md decision 2). */
+  const panelHinge: PivotJoint = useMemo(
+    () => ({ kind: 'hinge', axis: { ...frame.zAxis } }),
+    [frame],
+  );
 
   const pivotAtNode = useCallback(
     (nodeId: string) =>
@@ -272,8 +269,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     if (!el) return;
     const measure = () => {
       const r = el.getBoundingClientRect();
-      const w = Math.max(200, r.width);
-      const h = Math.max(200, r.height);
+      const w = Math.max(120, r.width);
+      const h = Math.max(120, r.height);
       setSize({ w, h });
       setView((v) => ({ ...v, w, h }));
     };
@@ -288,10 +285,10 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   // pure viewTransform helpers, so content stays vector-sharp and
   // pointer-anchored. Only acts on ≥2 touch pointers, so single-pointer
   // draw/drag/select events pass straight through to Konva (behavior contract).
-  const hasMech = mech != null;
+  const hasDoc = doc != null;
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !hasMech) return;
+    if (!el || !hasDoc) return;
     const pointers = new Map<number, Vec2>();
     let last: { a: Vec2; b: Vec2 } | null = null;
     const localPos = (e: PointerEvent): Vec2 => {
@@ -331,45 +328,32 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
     };
-  }, [hasMech]);
+  }, [hasDoc]);
 
-  // debug seam: publish the live view transform (scale/cx/cy px-per-m) so
-  // scripted browser checks can assert pan/zoom without parsing canvas pixels
+  // debug seam: publish this panel's live view transform (scale/cx/cy
+  // px-per-m) so scripted browser checks can assert pan/zoom without parsing
+  // canvas pixels (window.__riglab.getView(panelId) reads this map)
   useEffect(() => {
-    const w = window as unknown as { __riglab?: Record<string, unknown> };
-    if (!w.__riglab) w.__riglab = {};
-    w.__riglab.getView = () => view;
-  }, [view]);
+    publishedViews[panelId] = view;
+  }, [view, panelId]);
 
   const pose = useMemo(() => {
     const clip = playback.clipName ? getClip(playback.clipName) : undefined;
     return clip ? samplePose(clip, playback.tS, { amplitude: playback.amplitude }) : REST_POSE;
   }, [playback.clipName, playback.tS, playback.amplitude]);
 
-  // live control channel values (§4.4): controls + a playing control clip drive
-  // input channels by name, overlaid on each mechanism's authored input values
-  const controlChannels = useMemo(
-    () =>
-      doc
-        ? projectControlChannels({
-            controls: doc.controls,
-            controlClips: doc.controlClips,
-            controlClipName: playback.controlClipName,
-            tS: playback.tS,
-            speed: playback.speed,
-            heldChannels: new Set(heldChannels),
-          })
-        : {},
-    [doc, playback.controlClipName, playback.tS, playback.speed, heldChannels],
+  /** posed wearer skeleton — 3D points for bindings, projected for drawing */
+  const skeleton: SkeletonFrame | null = useMemo(
+    () => (doc ? computeSkeleton(doc.wearer, pose) : null),
+    [doc, pose],
   );
-
   const silhouette = useMemo(
-    () => (doc && mech ? computeSilhouette(doc.wearer, pose, mech.viewOrientation) : null),
-    [doc, mech, pose],
+    () => (doc && skeleton ? projectSilhouette(skeleton, headRadiusM(doc.wearer), frame) : null),
+    [doc, skeleton, frame],
   );
 
   const docPositions = useMemo(() => {
-    const out: Record<string, Vec2> = {};
+    const out: Record<string, Vec3> = {};
     for (const n of mech?.nodes ?? []) out[n.id] = n.position;
     return out;
   }, [mech?.nodes]);
@@ -380,119 +364,57 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     dragging: dragNode !== null,
   });
 
-  // debug seam: the pose the canvas is actually drawing (drawn geometry,
-  // playback pose, or settled equilibrium sag — whichever pickRenderPositions
-  // chose), so scripted checks can assert rendering without pixel parsing
-  useEffect(() => {
-    const w = window as unknown as { __riglab?: Record<string, unknown> };
-    if (!w.__riglab) w.__riglab = {};
-    w.__riglab.getRenderPositions = () => renderPositions;
-  }, [renderPositions]);
-
-  // DOF-pill click-to-zoom: consume the one-shot focus request by centering
-  // the element's bounding box (padded) and selecting it
-  useEffect(() => {
-    if (!focusElementId || !mech) return;
-    setFocusElement(null);
-    const el = mech.elements.find((x) => x.id === focusElementId);
-    if (!el) return;
-    const ids = new Set<string>();
-    if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
-      ids.add(el.nodeA);
-      ids.add(el.nodeB);
-    } else if (el.type === 'bentLink') for (const id of el.nodeIds) ids.add(id);
-    else if (el.type === 'rope') for (const id of el.path) ids.add(id);
-    else if (el.type === 'bowden') for (const id of [el.a1, el.a2, el.b1, el.b2]) ids.add(id);
-    else if (el.type === 'pivot' || el.type === 'slider') ids.add(el.nodeId);
-    else if (el.type === 'torsionCable') {
-      for (const pid of [el.pivotA, el.pivotB]) {
-        const p = mech.elements.find((x) => x.id === pid);
-        if (p?.type === 'pivot') ids.add(p.nodeId);
-      }
-    }
-    const pts = [...ids].map((id) => renderPositions[id]).filter((p): p is Vec2 => !!p);
-    if (pts.length === 0) return;
-    const minX = Math.min(...pts.map((p) => p.x));
-    const maxX = Math.max(...pts.map((p) => p.x));
-    const minY = Math.min(...pts.map((p) => p.y));
-    const maxY = Math.max(...pts.map((p) => p.y));
-    const spanX = Math.max(maxX - minX, 0.2);
-    const spanY = Math.max(maxY - minY, 0.2);
-    setView((v) => ({
-      ...v,
-      cx: (minX + maxX) / 2,
-      cy: (minY + maxY) / 2,
-      scale: Math.min(3000, Math.max(40, Math.min(v.w / (spanX * 2.5), v.h / (spanY * 2.5)))),
-    }));
-    useEditorStore.getState().select(focusElementId);
-  }, [focusElementId, mech, renderPositions, setFocusElement]);
-
-  const runSolve = useCallback(
-    (dragTargets: Record<string, Vec2>) => {
-      if (!doc || !mech) return null;
-      const targets = { ...bindingTargets(mech, doc.wearer, pose), ...dragTargets };
-      const channelValues = {
-        ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
-        ...controlChannels,
-      };
-      const result = solve(
-        mech,
-        {
-          channelValues,
-          dragTargets: targets,
-          groundTargets: anchorTargets(mech, doc.wearer, pose),
-        },
-        'kinematic',
-      );
-      setDiagnostics(
-        { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
-        result.diagnostics.converged ? result.diagnostics.violated : result.diagnostics.violated,
-      );
-      return result;
-    },
-    [doc, mech, pose, controlChannels, setDiagnostics],
+  /** the document pose projected into this panel's plane — everything the
+   * stage draws, snaps and marquees reads these 2D coordinates */
+  const projected = useMemo(
+    () => projectPositions(renderPositions, frame),
+    [renderPositions, frame],
   );
 
-  // diagnostics on edit; pose-driven solve during playback/scrub
+  // DOF-pill click-to-zoom: consume the one-shot focus request by centering
+  // the element's bounding box (padded) and selecting it. Every panel zooms;
+  // the store clears the request after the panels had a frame to react.
   useEffect(() => {
-    if (!mech) return;
-    const result = runSolve({});
-    if (!result) return;
-    if (playback.clipName && (mech.skeletonBindings.length > 0 || mech.anchorBindings.length > 0)) {
-      setPosePositions(result.positions);
-    } else if (!dragNode) {
-      setPosePositions(null);
+    if (!focusElementId || !mech) return;
+    const el = mech.elements.find((x) => x.id === focusElementId);
+    if (el) {
+      const ids = new Set<string>();
+      if (el.type === 'link' || el.type === 'telescope' || el.type === 'elastic') {
+        ids.add(el.nodeA);
+        ids.add(el.nodeB);
+      } else if (el.type === 'bentLink') for (const id of el.nodeIds) ids.add(id);
+      else if (el.type === 'rope') for (const id of el.path) ids.add(id);
+      else if (el.type === 'bowden') for (const id of [el.a1, el.a2, el.b1, el.b2]) ids.add(id);
+      else if (el.type === 'pivot' || el.type === 'slider') ids.add(el.nodeId);
+      else if (el.type === 'torsionCable') {
+        for (const pid of [el.pivotA, el.pivotB]) {
+          const p = mech.elements.find((x) => x.id === pid);
+          if (p?.type === 'pivot') ids.add(p.nodeId);
+        }
+      }
+      const pts = [...ids].map((id) => projected[id]).filter((p): p is Vec2 => !!p);
+      if (pts.length > 0) {
+        const minX = Math.min(...pts.map((p) => p.x));
+        const maxX = Math.max(...pts.map((p) => p.x));
+        const minY = Math.min(...pts.map((p) => p.y));
+        const maxY = Math.max(...pts.map((p) => p.y));
+        const spanX = Math.max(maxX - minX, 0.2);
+        const spanY = Math.max(maxY - minY, 0.2);
+        setView((v) => ({
+          ...v,
+          cx: (minX + maxX) / 2,
+          cy: (minY + maxY) / 2,
+          scale: Math.min(3000, Math.max(40, Math.min(v.w / (spanX * 2.5), v.h / (spanY * 2.5)))),
+        }));
+        useEditorStore.getState().select(focusElementId);
+      }
     }
-  }, [mech, runSolve, playback.clipName, dragNode, setPosePositions]);
-
-  // Equilibrium force overlays (§5.2), behind the explicit toggle. Recomputed
-  // on edit/scrub but not per drag frame (labels refresh on release). The
-  // solver's equilibrium mode may be unavailable in this worktree — readEquilibrium
-  // degrades to an `unavailable` status instead of throwing.
-  useEffect(() => {
-    if (!mech || !doc || !equilibriumOn || dragNode) return;
-    const channelValues = {
-      ...Object.fromEntries(mech.inputs.map((c) => [c.name, c.value])),
-      ...controlChannels,
-    };
-    const targets = bindingTargets(mech, doc.wearer, pose);
-    // materials integration (§4.2): engineered pipes weigh what their material
-    // weighs; sketch pipes fall back to the configurable generic density
-    const readout = readEquilibrium(() =>
-      solve(
-        mech,
-        {
-          channelValues,
-          dragTargets: targets,
-          groundTargets: anchorTargets(mech, doc.wearer, pose),
-          linkDensityKgPerM: doc.materials.genericPipeLinearDensityKgPerM,
-          elementLinearDensityKgPerM: elementLinearDensities(mech, doc.materials),
-        },
-        'equilibrium',
-      ),
-    );
-    setEquilibrium(readout);
-  }, [mech, doc, equilibriumOn, dragNode, pose, controlChannels, setEquilibrium]);
+    // one panel's timeout clears the request for all — each already zoomed
+    const t = setTimeout(() => {
+      if (useEditorStore.getState().focusElementId === focusElementId) setFocusElement(null);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [focusElementId, mech, projected, setFocusElement]);
 
   const stagePointer = (e: Konva.KonvaEventObject<MouseEvent>): Vec2 | null => {
     const stage = e.target.getStage();
@@ -506,7 +428,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       if (!mech) return { kind: 'grid', pos: world };
       return findSnap(world, {
         mechanism: mech,
-        positions: renderPositions,
+        positions: projected,
         silhouette,
         tolM: SNAP_TOL_PX / view.scale,
         gridM: GRID_M,
@@ -514,22 +436,117 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         excludeElements,
       });
     },
-    [view, mech, renderPositions, silhouette],
+    [view, mech, projected, silhouette],
+  );
+
+  /** Lift a panel-2D point into document space at a work-plane depth. */
+  const to3D = useCallback(
+    (p: Vec2, depthM: number): Vec3 => panelToWorld(p, frame, depthM),
+    [frame],
+  );
+
+  /** The document-space (Vec3) position a snap stands for. Node/onPipe snaps
+   * carry their own depth (existing geometry); skeleton/anchor snaps resolve
+   * on the posed 3D skeleton; grid snaps lift at the given work depth. */
+  const vec3OfSnap = useCallback(
+    (snap: Snap, depthM: number): Vec3 => {
+      switch (snap.kind) {
+        case 'node':
+          return renderPositions[snap.nodeId] ?? to3D(snap.pos, depthM);
+        case 'onPipe': {
+          const el = mech?.elements.find((e) => e.id === snap.elementId);
+          if (el && (el.type === 'link' || el.type === 'telescope')) {
+            const a = renderPositions[el.nodeA];
+            const b = renderPositions[el.nodeB];
+            if (a && b) {
+              return {
+                x: a.x + (b.x - a.x) * snap.t,
+                y: a.y + (b.y - a.y) * snap.t,
+                z: a.z + (b.z - a.z) * snap.t,
+              };
+            }
+          }
+          return to3D(snap.pos, depthM);
+        }
+        case 'skeleton':
+          return skeleton ? { ...skeleton.points[snap.point] } : to3D(snap.pos, depthM);
+        case 'anchor':
+          return skeleton ? { ...skeleton.anchors[snap.anchor] } : to3D(snap.pos, depthM);
+        case 'grid':
+          return to3D(snap.pos, depthM);
+      }
+    },
+    [mech, renderPositions, skeleton, to3D],
+  );
+
+  /** Depth a snap implies for the work plane: existing geometry and wearer
+   * points adopt their own depth; the grid keeps the current one. */
+  const depthOfSnap = useCallback(
+    (snap: Snap, fallback: number): number =>
+      snap.kind === 'grid' ? fallback : panelDepthOf(vec3OfSnap(snap, fallback), frame),
+    [vec3OfSnap, frame],
+  );
+
+  const snapToEndSpec = useCallback(
+    (snap: Snap, connect: 'pivot' | 'weld' | 'slider' | 'detach', depthM: number): EndSpec => {
+      if (connect === 'detach') return { kind: 'newNode', pos: vec3OfSnap(snap, depthM) };
+      switch (snap.kind) {
+        case 'node':
+          return {
+            kind: 'existingNode',
+            nodeId: snap.nodeId,
+            connect: connect === 'weld' ? 'weld' : 'pivot',
+          };
+        case 'onPipe':
+          return {
+            kind: 'onPipe',
+            elementId: snap.elementId,
+            t: snap.t,
+            connect: connect === 'slider' ? 'slider' : connect === 'weld' ? 'weld' : 'pivot',
+          };
+        case 'skeleton':
+          return { kind: 'boundNode', pos: vec3OfSnap(snap, depthM), point: snap.point };
+        case 'anchor':
+          return { kind: 'anchorNode', pos: vec3OfSnap(snap, depthM), anchor: snap.anchor };
+        case 'grid':
+          return { kind: 'newNode', pos: to3D(snap.pos, depthM) };
+      }
+    },
+    [vec3OfSnap, to3D],
+  );
+
+  /** Clicking existing geometry retunes the panel's work plane to it. */
+  const adoptDepth = useCallback(
+    (snap: Snap) => {
+      if (snap.kind === 'grid') return;
+      const d = depthOfSnap(snap, workDepthM);
+      if (Math.abs(d - workDepthM) > 1e-9) setPanelDepth(panelId, d);
+    },
+    [depthOfSnap, workDepthM, setPanelDepth, panelId],
   );
 
   const commitPipe = useCallback(
     (d: Draft, endSnap: Snap, endConnect: 'pivot' | 'weld' | 'slider' | 'detach') => {
       if (!doc || !mech) return;
-      const startSpec = snapToEndSpec(d.start, 'pivot');
-      const endSpec = snapToEndSpec(endSnap, endConnect);
-      const vertices =
+      const startSpec = snapToEndSpec(d.start, 'pivot', d.depthM);
+      const endSpec = snapToEndSpec(endSnap, endConnect, d.depthM);
+      const flat2 =
         d.mode === 'freehand'
           ? rdp([d.start.pos, ...d.vertices, endSnap.pos], 0.015)
           : [d.start.pos, ...d.vertices, endSnap.pos];
-      if (vertices.length < 2) return;
-      updateCurrent((cur) => addPipe(cur, mech.id, vertices, startSpec, endSpec).doc);
+      if (flat2.length < 2) return;
+      // endpoints take their snap's true 3D position; interior vertices lift
+      // at the stroke's work-plane depth (bentLinks draw planar, planfile)
+      const vertices: Vec3[] = flat2.map((p, i) =>
+        i === 0
+          ? vec3OfSnap(d.start, d.depthM)
+          : i === flat2.length - 1
+            ? vec3OfSnap(endSnap, d.depthM)
+            : to3D(p, d.depthM),
+      );
+      updateCurrent((cur) => addPipe(cur, vertices, startSpec, endSpec, panelHinge).doc);
     },
-    [doc, mech, updateCurrent],
+    [doc, mech, updateCurrent, snapToEndSpec, vec3OfSnap, to3D, panelHinge],
   );
 
   const finishPipe = useCallback(
@@ -559,8 +576,9 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
 
   const onMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
-    if (!screen || !mech) return;
+    if (!screen || !mech || !doc) return;
     mouseDownScreenRef.current = screen;
+    setActivePanel(panelId);
     // canvas mousedown dismisses floating popovers and inline edits
     const editor = useEditorStore.getState();
     if (editor.openPopover) editor.setOpenPopover(null);
@@ -575,6 +593,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         return;
       }
       if (snap.kind === 'node') {
+        adoptDepth(snap);
+        const depthM = depthOfSnap(snap, workDepthM);
         // an endpoint of a selected, unlocked pipe drags as a LENGTH edit
         // (direct geometry move); any other node drags as a pose
         const owner = mech.elements.find(
@@ -585,9 +605,11 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
             (el.nodeA === snap.nodeId || el.nodeB === snap.nodeId),
         );
         if (owner && (owner.type === 'link' || owner.type === 'telescope')) {
-          const a = renderPositions[owner.nodeA];
-          const b = renderPositions[owner.nodeB];
-          if (a && b) {
+          const a = projected[owner.nodeA];
+          const b = projected[owner.nodeB];
+          const a3 = renderPositions[owner.nodeA];
+          const b3 = renderPositions[owner.nodeB];
+          if (a && b && a3 && b3) {
             const nodeId = snap.nodeId;
             const incident = new Set<string>();
             for (const el of mech.elements) {
@@ -603,9 +625,13 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
             setEndpointDrag({
               nodeId,
               elementId: owner.id,
+              depthM,
               ghost: [a, b],
               incidentElementIds: incident,
-              readout: { lengthM: Math.hypot(b.x - a.x, b.y - a.y), snapped: false },
+              readout: {
+                lengthM: Math.hypot(b3.x - a3.x, b3.y - a3.y, b3.z - a3.z),
+                snapped: false,
+              },
             });
             return;
           }
@@ -617,7 +643,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           mech.anchorBindings.some((b) => b.nodeId === snap.nodeId);
         dragTetherRef.current = connected ? { torn: false } : null;
         beginGesture();
-        setDragNode(snap.nodeId);
+        setDragNode({ nodeId: snap.nodeId, depthM });
+        setDragNode3(snap.nodeId);
         useEditorStore.getState().clearTrace();
       } else {
         setMarquee({ start: screen, cursor: screen });
@@ -625,24 +652,43 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       return;
     }
     if (tool === 'pipe' || tool === 'freehand') {
-      setDraft({ mode: tool, start: snap, vertices: [], cursor: snap.pos });
+      adoptDepth(snap);
+      setDraft({
+        mode: tool,
+        start: snap,
+        vertices: [],
+        cursor: snap.pos,
+        depthM: depthOfSnap(snap, workDepthM),
+      });
       return;
     }
     if (tool === 'polyline') {
-      if (!draft) setDraft({ mode: 'polyline', start: snap, vertices: [], cursor: snap.pos });
-      else setDraft({ ...draft, vertices: [...draft.vertices, snap.pos] });
+      if (!draft) {
+        adoptDepth(snap);
+        setDraft({
+          mode: 'polyline',
+          start: snap,
+          vertices: [],
+          cursor: snap.pos,
+          depthM: depthOfSnap(snap, workDepthM),
+        });
+      } else setDraft({ ...draft, vertices: [...draft.vertices, snap.pos] });
       return;
     }
     if (tool === 'rope') {
       // click waypoints; double-click (two clicks on one spot) finishes.
       // Points landing on a pipe become eyelets.
+      adoptDepth(snap);
       setRopeDraft((d) =>
-        d ? { ...d, points: [...d.points, snap] } : { points: [snap], cursor: snap.pos },
+        d
+          ? { ...d, points: [...d.points, snap] }
+          : { points: [snap], cursor: snap.pos, depthM: depthOfSnap(snap, workDepthM) },
       );
       return;
     }
     if (tool === 'elastic' || tool === 'bowden') {
-      setDragCord({ tool, start: snap, cursor: snap.pos });
+      adoptDepth(snap);
+      setDragCord({ tool, start: snap, cursor: snap.pos, depthM: depthOfSnap(snap, workDepthM) });
       return;
     }
     if (tool === 'torsionCable') {
@@ -653,7 +699,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         setTorsionA({ pivotId, nodeId: snap.nodeId });
       } else {
         if (torsionA.pivotId !== pivotId) {
-          updateCurrent((cur) => addTorsionCable(cur, mech.id, torsionA.pivotId, pivotId).doc);
+          updateCurrent((cur) => addTorsionCable(cur, torsionA.pivotId, pivotId).doc);
         }
         setTorsionA(null);
       }
@@ -662,7 +708,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     if (tool === 'bind') {
       if (snap.kind === 'node') setBindFrom(snap.nodeId);
       else if (snap.kind === 'skeleton' && bindFrom) {
-        updateCurrent((cur) => addSkeletonBinding(cur, mech.id, snap.point, bindFrom));
+        updateCurrent((cur) => addSkeletonBinding(cur, snap.point, bindFrom));
         setBindFrom(null);
       }
       return;
@@ -671,7 +717,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
 
   const onMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
-    if (!screen || !mech) return;
+    if (!screen || !mech || !doc) return;
 
     if (panRef.current) {
       setView((v) => panBy(v, screen.x - panRef.current!.x, screen.y - panRef.current!.y));
@@ -686,35 +732,48 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
 
     if (tool === 'select' && endpointDrag) {
       // direct geometry edit: move ONE node; node/skeleton/anchor snaps win,
-      // then length ticks (½ in / 1 cm), else the raw pointer position
-      const world = toWorld(view, screen);
+      // then length ticks (½ in / 1 cm), else the raw pointer lifted at the
+      // node's own depth
+      const world2 = toWorld(view, screen);
       const liveDoc = useAppStore.getState().current;
-      const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
+      const liveMech = liveDoc?.mechanism;
       const el = liveMech?.elements.find((x) => x.id === endpointDrag.elementId);
       if (!liveMech || !el || (el.type !== 'link' && el.type !== 'telescope')) return;
       const otherId = el.nodeA === endpointDrag.nodeId ? el.nodeB : el.nodeA;
       const other = liveMech.nodes.find((n) => n.id === otherId)?.position;
       if (!other) return;
       const snap = snapAt(screen, new Set([endpointDrag.nodeId]), endpointDrag.incidentElementIds);
-      let pos = snap.pos;
-      let snapped = snap.kind !== 'grid';
-      if (snap.kind === 'grid') {
-        const raw = Math.hypot(world.x - other.x, world.y - other.y);
-        const step = lengthStepM(doc?.unitsPreference ?? 'imperial');
+      let pos: Vec3;
+      let snapped: boolean;
+      if (snap.kind !== 'grid') {
+        pos = vec3OfSnap(snap, endpointDrag.depthM);
+        snapped = true;
+      } else {
+        const raw3 = to3D(world2, endpointDrag.depthM);
+        const d = {
+          x: raw3.x - other.x,
+          y: raw3.y - other.y,
+          z: raw3.z - other.z,
+        };
+        const raw = Math.hypot(d.x, d.y, d.z);
+        const step = lengthStepM(doc.unitsPreference ?? 'imperial');
         const tick = Math.round(raw / step) * step;
         if (raw > 1e-9 && Math.abs(tick - raw) < (SNAP_TOL_PX * 0.5) / view.scale && tick > 0) {
-          const dir = { x: (world.x - other.x) / raw, y: (world.y - other.y) / raw };
-          pos = { x: other.x + dir.x * tick, y: other.y + dir.y * tick };
+          const s = tick / raw;
+          pos = { x: other.x + d.x * s, y: other.y + d.y * s, z: other.z + d.z * s };
           snapped = true;
         } else {
-          pos = world;
+          pos = raw3;
           snapped = false;
         }
       }
-      updateCurrent((cur) => moveNodes(cur, mech.id, { [endpointDrag.nodeId]: pos }));
+      updateCurrent((cur) => moveNodes(cur, { [endpointDrag.nodeId]: pos }));
       setEndpointDrag({
         ...endpointDrag,
-        readout: { lengthM: Math.hypot(pos.x - other.x, pos.y - other.y), snapped },
+        readout: {
+          lengthM: Math.hypot(pos.x - other.x, pos.y - other.y, pos.z - other.z),
+          snapped,
+        },
       });
       return;
     }
@@ -729,52 +788,62 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
         if (movedPx < TEAR_OFF_PX) return;
         tether.torn = true;
-        updateCurrent((cur) => releaseNodeConnection(cur, mech.id, dragNode));
+        updateCurrent((cur) => releaseNodeConnection(cur, dragNode.nodeId));
       }
       // solve from the LIVE document, not this render's closure — fast event
       // bursts can outrun React renders, and a stale mechanism here would
       // solve from outdated geometry
-      const world = toWorld(view, screen);
+      const world2 = toWorld(view, screen);
       const liveDoc = useAppStore.getState().current;
-      const liveMech = liveDoc?.mechanisms.find((m) => m.id === mech.id);
+      const liveMech = liveDoc?.mechanism;
       if (!liveDoc || !liveMech) return;
       // a drag that lands on a skeleton point snaps to it and binds on
       // release (planfile §7.3: bind silhouette points to nodes — available
       // in select); a pack-frame anchor attracts the same way and grounds
-      const dropSnap = snapAt(screen, new Set([dragNode]));
+      const dropSnap = snapAt(screen, new Set([dragNode.nodeId]));
       const bindSnap = dropSnap.kind === 'skeleton' || dropSnap.kind === 'anchor' ? dropSnap : null;
       setHoverSnap(bindSnap);
+      // panel-plane-constrained target: the pointer moves the node in this
+      // panel's plane at the node's own out-of-plane depth
+      const target: Vec3 = bindSnap
+        ? vec3OfSnap(bindSnap, dragNode.depthM)
+        : to3D(world2, dragNode.depthM);
       const targets = {
         ...bindingTargets(liveMech, liveDoc.wearer, pose),
-        [dragNode]: bindSnap ? bindSnap.pos : world,
+        [dragNode.nodeId]: target,
       };
       const channelValues = Object.fromEntries(liveMech.inputs.map((c) => [c.name, c.value]));
-      const result = solve(
-        liveMech,
-        {
-          channelValues,
-          dragTargets: targets,
-          groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
-        },
-        'kinematic',
-      );
-      setDiagnostics(
-        { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
-        result.diagnostics.violated,
-      );
-      // never write a non-converged pose back into the document — rest
-      // lengths are recomputed from it, so residual violation would compound
-      if (result.diagnostics.converged) {
-        updateCurrent((cur) => moveNodes(cur, mech.id, result.positions));
-        if (tracing) {
-          const p = result.positions[dragNode];
-          if (p) appendTrace(p);
+      try {
+        const result = solve(
+          liveMech,
+          {
+            channelValues,
+            dragTargets: targets,
+            groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+          },
+          'kinematic',
+        );
+        setDiagnostics(
+          { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
+          result.diagnostics.violated,
+        );
+        // never write a non-converged pose back into the document — rest
+        // lengths are recomputed from it, so residual violation would compound
+        if (result.diagnostics.converged) {
+          updateCurrent((cur) => moveNodes(cur, result.positions));
+          if (tracing) {
+            const p = result.positions[dragNode.nodeId];
+            if (p) appendTrace(p);
+          }
         }
+      } catch {
+        // the solver is rewritten in a parallel worktree — a throw here must
+        // not break the drag gesture (the node simply doesn't move)
       }
       return;
     }
 
-    const snap = snapAt(screen, dragNode ? new Set([dragNode]) : undefined);
+    const snap = snapAt(screen, dragNode ? new Set([dragNode.nodeId]) : undefined);
     setHoverSnap(tool === 'select' ? (snap.kind === 'node' ? snap : null) : snap);
 
     if (draft) {
@@ -806,8 +875,10 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       const movedPx = Math.hypot(screen.x - marquee.start.x, screen.y - marquee.start.y);
       // a stationary click stays a click (onStageClick clears the selection)
       if (movedPx < 4) return;
+      // the marquee is 2D by design (src/design/marquee.ts): hit-test this
+      // panel's projected coordinates
       const rect = normalizedRect(toWorld(view, marquee.start), toWorld(view, screen));
-      const ids = elementIdsInRect(mech, renderPositions, rect);
+      const ids = elementIdsInRect(mech, projected, rect);
       const editor = useEditorStore.getState();
       // shift/cmd at release adds to the selection; plain drag replaces it
       editor.setSelection(
@@ -833,9 +904,10 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     if (tool === 'select' && dragNode) {
       const start = mouseDownScreenRef.current;
       const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
-      const nodeId = dragNode;
+      const { nodeId, depthM } = dragNode;
       const tether = dragTetherRef.current;
       setDragNode(null);
+      setDragNode3(null);
       dragTetherRef.current = null;
       endGesture();
       setHoverSnap(null);
@@ -854,10 +926,16 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       // on a pack-frame anchor → ground it there, same as drawing onto one
       const dropSnap = snapAt(screen, new Set([nodeId]));
       if (dropSnap.kind === 'skeleton') {
-        updateCurrent((cur) => addSkeletonBinding(cur, mech.id, dropSnap.point, nodeId));
+        updateCurrent((cur) => addSkeletonBinding(cur, dropSnap.point, nodeId));
       } else if (dropSnap.kind === 'anchor') {
         updateCurrent((cur) =>
-          groundNodeAtAnchor(cur, mech.id, nodeId, dropSnap.anchor, dropSnap.pos),
+          groundNodeAtAnchor(
+            cur,
+            nodeId,
+            dropSnap.anchor,
+            vec3OfSnap(dropSnap, depthM),
+            panelHinge,
+          ),
         );
       }
       return;
@@ -869,17 +947,17 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         setDragCord(null); // too short — cancelled click
         return;
       }
-      const a = snapToEndSpec(dragCord.start, 'pivot');
-      const b = snapToEndSpec(endSnap, 'pivot');
+      const a = snapToEndSpec(dragCord.start, 'pivot', dragCord.depthM);
+      const b = snapToEndSpec(endSnap, 'pivot', dragCord.depthM);
       if (tool === 'elastic') {
-        updateCurrent((cur) => addElastic(cur, mech.id, a, b).doc);
+        updateCurrent((cur) => addElastic(cur, a, b).doc);
       } else if (!bowdenA) {
         // first stroke: remember segment A, prompt for segment B
-        setBowdenA({ start: dragCord.start, end: endSnap });
+        setBowdenA({ start: dragCord.start, end: endSnap, depthM: dragCord.depthM });
       } else {
-        const a0 = snapToEndSpec(bowdenA.start, 'pivot');
-        const a1 = snapToEndSpec(bowdenA.end, 'pivot');
-        updateCurrent((cur) => addBowden(cur, mech.id, a0, a1, a, b).doc);
+        const a0 = snapToEndSpec(bowdenA.start, 'pivot', bowdenA.depthM);
+        const a1 = snapToEndSpec(bowdenA.end, 'pivot', bowdenA.depthM);
+        updateCurrent((cur) => addBowden(cur, a0, a1, a, b).doc);
         setBowdenA(null);
       }
       setDragCord(null);
@@ -939,8 +1017,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           i === 0 || Math.hypot(s.pos.x - pts[i - 1]!.pos.x, s.pos.y - pts[i - 1]!.pos.y) > 1e-6,
       );
       if (dedup.length >= 2) {
-        const specs = dedup.map((s) => snapToEndSpec(s, 'pivot'));
-        updateCurrent((cur) => addRope(cur, mech.id, specs).doc);
+        const specs = dedup.map((s) => snapToEndSpec(s, 'pivot', ropeDraft.depthM));
+        updateCurrent((cur) => addRope(cur, specs).doc);
       }
       setRopeDraft(null);
       return;
@@ -950,8 +1028,10 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       if (snap.kind === 'node') {
         const node = mech.nodes.find((n) => n.id === snap.nodeId);
         if (node) {
+          // anchoring materializes a ground hinge about this panel's normal
+          // (setNodeKind), so the anchored chain end stays in-plane
           updateCurrent((cur) =>
-            setNodeKind(cur, mech.id, snap.nodeId, node.kind === 'anchor' ? 'free' : 'anchor'),
+            setNodeKind(cur, snap.nodeId, node.kind === 'anchor' ? 'free' : 'anchor', panelHinge),
           );
         }
       }
@@ -992,7 +1072,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
     };
   }, []);
 
-  // keyboard: delete selection, escape cancels draft/bind
+  // keyboard: delete selection (active panel only — one deleter for a global
+  // selection), escape cancels this panel's draft/bind
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
@@ -1006,14 +1087,13 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         selectedElementIds.length > 0 &&
-        mech
+        mech &&
+        activePanel === panelId
       ) {
         const target = ev.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
         // one updateCurrent = one undo entry for the whole selection
-        updateCurrent((cur) =>
-          selectedElementIds.reduce((d, id) => deleteElement(d, mech.id, id), cur),
-        );
+        updateCurrent((cur) => selectedElementIds.reduce((d, id) => deleteElement(d, id), cur));
         clearSelection();
       }
     };
@@ -1022,6 +1102,8 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   }, [
     selectedElementIds,
     mech,
+    activePanel,
+    panelId,
     updateCurrent,
     clearSelection,
     setPendingConnect,
@@ -1029,19 +1111,14 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   ]);
 
   if (!doc || !mech) {
-    return (
-      <div
-        ref={containerRef}
-        style={{ flex: 1, display: 'grid', placeItems: 'center', color: T.muted }}
-      >
-        <p>Create a mechanism to start sketching.</p>
-      </div>
-    );
+    return <div ref={containerRef} style={{ flex: 1 }} data-testid="sketch-canvas" />;
   }
 
   const S = (p: Vec2) => toScreen(view, p);
-  const nodePos = (id: string): Vec2 => renderPositions[id] ?? { x: 0, y: 0 };
+  const nodePos = (id: string): Vec2 => projected[id] ?? { x: 0, y: 0 };
   const flat = (pts: Vec2[]) => pts.flatMap((p) => [S(p).x, S(p).y]);
+  const seg3 = (a?: Vec3, b?: Vec3): number =>
+    a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0;
 
   // adaptive grid: 0.1 m lines, plus 0.5" when zoomed in
   const gridLines: Array<{ pts: number[]; strong: boolean }> = [];
@@ -1119,6 +1196,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
   const showForces =
     equilibriumOn && (equilibrium.status === 'converged' || equilibrium.status === 'nonConverged');
   const units = doc.unitsPreference;
+  const isActive = activePanel === panelId;
 
   return (
     <div
@@ -1134,7 +1212,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         position: 'relative',
         touchAction: 'none',
       }}
-      data-testid="sketch-canvas"
+      data-testid={`sketch-canvas-${panelId}`}
     >
       <Stage
         width={size.w}
@@ -1159,7 +1237,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           {/* ground plane at world y = 0 (slice C): the solver's floor —
               free nodes cannot be dragged or settle below it. Not in `top`
               (that view maps the ground plane itself). */}
-          {mech.viewOrientation !== 'top' && (
+          {panelId !== 'top' && (
             <Line
               points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
               stroke={C.silhouette}
@@ -1205,42 +1283,6 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
               />
             ))}
         </Layer>
-
-        {/* quad-workspace ghost overlay: other mechanisms in this plane,
-            projected into the active mechanism's frame; click to activate */}
-        {overlay && overlay.items.length > 0 && (
-          <Layer>
-            {overlay.items.map((item, gi) => (
-              <Group
-                // biome-ignore lint/suspicious/noArrayIndexKey: a mechanism can ghost twice (mirrored instances); items regenerate wholesale
-                key={`${item.mechanismId}:${gi}`}
-                onClick={() => overlay.onPick(item.mechanismId)}
-                onTap={() => overlay.onPick(item.mechanismId)}
-                onMouseEnter={(e) => {
-                  const stage = e.target.getStage();
-                  if (stage) stage.container().style.cursor = 'pointer';
-                }}
-                onMouseLeave={(e) => {
-                  const stage = e.target.getStage();
-                  if (stage) stage.container().style.cursor = '';
-                }}
-              >
-                {item.segments.map((seg, i) => (
-                  <Line
-                    // biome-ignore lint/suspicious/noArrayIndexKey: ghost segments are positional, regenerated wholesale
-                    key={i}
-                    points={flat(seg)}
-                    stroke={C.silhouette}
-                    strokeWidth={3.5}
-                    opacity={0.55}
-                    lineCap="round"
-                    hitStrokeWidth={12}
-                  />
-                ))}
-              </Group>
-            ))}
-          </Layer>
-        )}
 
         <Layer>
           {mech.elements.map((el) => {
@@ -1367,7 +1409,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           {/* binding leader lines */}
           {silhouette &&
             mech.skeletonBindings.map((b) => {
-              const from = renderPositions[b.nodeId];
+              const from = projected[b.nodeId];
               const to = silhouette.points[b.point];
               if (!from || !to) return null;
               return (
@@ -1395,7 +1437,12 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           )}
 
           {tracePath.length > 1 && (
-            <Line points={flat(tracePath)} stroke="#e80" strokeWidth={1.5} listening={false} />
+            <Line
+              points={flat(tracePath.map((p) => projectToPanel(p, frame)))}
+              stroke="#e80"
+              strokeWidth={1.5}
+              listening={false}
+            />
           )}
 
           {draft && (
@@ -1446,10 +1493,10 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
               listening={false}
             />
           )}
-          {torsionA && renderPositions[torsionA.nodeId] && (
+          {torsionA && projected[torsionA.nodeId] && (
             <Circle
-              x={S(renderPositions[torsionA.nodeId]!).x}
-              y={S(renderPositions[torsionA.nodeId]!).y}
+              x={S(projected[torsionA.nodeId]!).x}
+              y={S(projected[torsionA.nodeId]!).y}
               radius={10}
               stroke="#c0459a"
               strokeWidth={2}
@@ -1460,7 +1507,7 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
           {/* equilibrium force readouts + rope-compression warnings (§5.2) */}
           {showForces &&
             mech.elements.filter(carriesForceLabel).map((el) => {
-              const anchor = forceLabelAnchor(el, (id) => renderPositions[id]);
+              const anchor = forceLabelAnchor(el, (id) => projected[id]);
               if (!anchor) return null;
               const p = S(anchor);
               const compression = compressionRopes.has(el.id);
@@ -1577,7 +1624,9 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
                   y={p.y}
                   radius={7.5}
                   fill={C.nodeFill}
-                  stroke={bindFrom === n.id ? '#d80' : '#28d'}
+                  stroke={
+                    bindFrom === n.id ? '#d80' : pivot?.joint.kind === 'spherical' ? '#a6c' : '#28d'
+                  }
                   strokeWidth={3}
                 />
               );
@@ -1638,22 +1687,27 @@ export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}
         </Layer>
       </Stage>
 
-      {/* HTML overlays above the stage: dimension chips, joint popover, and
-          the selection card — all positioned through the same view transform */}
+      {/* HTML overlays above the stage: dimension chips per panel; the joint
+          popover and selection card only in the last-touched (active) panel */}
       <DimensionChips
         doc={doc}
         mech={mech}
         view={view}
-        positions={renderPositions}
+        positions={projected}
+        lengths={{
+          of: (a, b) => seg3(renderPositions[a], renderPositions[b]),
+        }}
         hoveredElementId={hoveredElementId}
         endpointDrag={
           endpointDrag ? { elementId: endpointDrag.elementId, ...endpointDrag.readout } : null
         }
         dragging={endpointDrag !== null || dragNode !== null}
       />
-      <JointPopover mech={mech} view={view} positions={renderPositions} size={size} />
-      {tool === 'select' && !endpointDrag && !dragNode && (
-        <SelectionCard doc={doc} mech={mech} view={view} positions={renderPositions} size={size} />
+      {isActive && (
+        <JointPopover mech={mech} view={view} positions={projected} size={size} frame={frame} />
+      )}
+      {isActive && tool === 'select' && !endpointDrag && !dragNode && (
+        <SelectionCard doc={doc} mech={mech} view={view} positions={projected} size={size} />
       )}
     </div>
   );

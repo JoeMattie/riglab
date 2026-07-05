@@ -1,10 +1,11 @@
-// Actions chip (design handoff §4): undo/redo · Sketch/Design segmented
-// control · units · Export. Replaces the old header strip's right half.
+// Actions chip (design handoff §4, v7): undo/redo · Sketch/Design segmented
+// control · units · Export. The 2D/3D/Quad mode toggle is gone — the quad
+// workspace IS the app (PLANFILE-3d-conversion.md decision 3).
 import { exportProjectJson, suggestedFileName } from '../../persistence/exportImport';
 import { setUnitsPref } from '../../persistence/prefs';
 import type { UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { type Face, type Mode, useEditorStore } from '../../state/editorStore';
+import { type Face, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import { ThemeIcon } from './icons';
 import { dividerStyle, EDGE, panelStyle, T } from './theme';
@@ -16,8 +17,6 @@ export function ActionsChip() {
   const redo = useAppStore((s) => s.redo);
   const face = useEditorStore((s) => s.face);
   const setFace = useEditorStore((s) => s.setFace);
-  const mode = useEditorStore((s) => s.mode);
-  const setMode = useEditorStore((s) => s.setMode);
   const night = useThemeStore((s) => s.night);
   const toggleNight = useThemeStore((s) => s.toggleNight);
 
@@ -62,18 +61,6 @@ export function ActionsChip() {
     </button>
   );
 
-  const modeSegment = (value: Mode, label: string) => (
-    <button
-      type="button"
-      data-testid={`mode-${value}`}
-      aria-pressed={mode === value}
-      onClick={() => setMode(value)}
-      style={segStyle(mode === value)}
-    >
-      {label}
-    </button>
-  );
-
   const iconButton: React.CSSProperties = {
     border: 'none',
     background: 'none',
@@ -105,22 +92,12 @@ export function ActionsChip() {
       </button>
       <span style={dividerStyle} />
       <span
-        data-testid="mode-toggle"
+        data-testid="face-toggle"
         style={{ display: 'inline-flex', background: T.chip, borderRadius: 8, padding: 2 }}
       >
-        {modeSegment('2d', '2D')}
-        {modeSegment('3d', '3D')}
-        {modeSegment('quad', 'Quad')}
+        {segment('sketch', 'Sketch')}
+        {segment('design', 'Design')}
       </span>
-      {mode === '2d' && (
-        <span
-          data-testid="face-toggle"
-          style={{ display: 'inline-flex', background: T.chip, borderRadius: 8, padding: 2 }}
-        >
-          {segment('sketch', 'Sketch')}
-          {segment('design', 'Design')}
-        </span>
-      )}
       <span style={dividerStyle} />
       <button
         type="button"

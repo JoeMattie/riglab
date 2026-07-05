@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_WEARER } from '../schema';
+import { orientationFrame } from '../geometry/placement';
+import { DEFAULT_WEARER, type Mechanism } from '../schema';
+import { anchorTargets, bindingTargets } from './bindings';
 import { CLIPS, getClip } from './clips';
 import { samplePose } from './playback';
-import { computeSilhouette, projectPoint } from './projection';
-import { computeSkeleton, REST_POSE } from './skeleton';
+import { computeSilhouette, projectPoint, projectSilhouette } from './projection';
+import { computeSkeleton, headRadiusM, REST_POSE } from './skeleton';
 
 describe('parametric skeleton', () => {
   it('is left/right symmetric at rest (mirrored z, equal x/y)', () => {
@@ -45,23 +47,84 @@ describe('parametric skeleton', () => {
   });
 });
 
-describe('view projections', () => {
+describe('panel projections', () => {
   const p = { x: 0.1, y: 1.2, z: 0.2 };
-  it('elevation views keep world y as 2D y; top drops it', () => {
-    expect(projectPoint('side-left', p)).toEqual({ x: 0.1, y: 1.2 });
-    expect(projectPoint('side-right', p)).toEqual({ x: -0.1, y: 1.2 });
-    expect(projectPoint('front', p)).toEqual({ x: 0.2, y: 1.2 });
-    expect(projectPoint('back', p)).toEqual({ x: -0.2, y: 1.2 });
-    expect(projectPoint('top', p)).toEqual({ x: 0.1, y: 0.2 });
+  it('projects along the panel basis axes (ortho frames from placement)', () => {
+    expect(projectPoint(orientationFrame('side-left'), p)).toEqual({ x: 0.1, y: 1.2 });
+    expect(projectPoint(orientationFrame('side-right'), p)).toEqual({ x: -0.1, y: 1.2 });
+    expect(projectPoint(orientationFrame('front'), p)).toEqual({ x: -0.2, y: 1.2 });
+    expect(projectPoint(orientationFrame('back'), p)).toEqual({ x: 0.2, y: 1.2 });
+    expect(projectPoint(orientationFrame('top'), p)).toEqual({ x: 0.1, y: 0.2 });
+  });
+
+  it('accepts an arbitrary (non-axis-aligned) plane basis', () => {
+    const s = Math.SQRT1_2;
+    const basis = { xAxis: { x: s, y: 0, z: s }, yAxis: { x: 0, y: 1, z: 0 } };
+    const q = projectPoint(basis, p);
+    expect(q.x).toBeCloseTo(s * (p.x + p.z), 12);
+    expect(q.y).toBeCloseTo(1.2, 12);
   });
 
   it('silhouette provides outlines and all snappable points', () => {
-    const s = computeSilhouette(DEFAULT_WEARER, REST_POSE, 'side-left');
+    const s = computeSilhouette(DEFAULT_WEARER, REST_POSE, orientationFrame('side-left'));
     expect(s.outlines.length).toBeGreaterThan(5);
     expect(Object.keys(s.points)).toContain('handR');
     expect(Object.keys(s.anchors)).toContain('hipRectFrontL');
-    // side view: left and right hands project to the same 2D point at rest
+    // side panel: left and right hands project to the same 2D point at rest
     expect(s.points.handL).toEqual(s.points.handR);
+  });
+
+  it('computeSilhouette matches projecting a precomputed frame', () => {
+    const frame = computeSkeleton(DEFAULT_WEARER, REST_POSE);
+    const basis = orientationFrame('front');
+    expect(projectSilhouette(frame, headRadiusM(DEFAULT_WEARER), basis)).toEqual(
+      computeSilhouette(DEFAULT_WEARER, REST_POSE, basis),
+    );
+  });
+});
+
+describe('binding targets are direct 3D wearer points', () => {
+  const mech: Mechanism = {
+    id: 'm',
+    name: 'm',
+    nodes: [
+      { id: 'n1', kind: 'free', position: { x: 0, y: 0, z: 0 } },
+      { id: 'n2', kind: 'anchor', position: { x: 0, y: 1, z: 0 } },
+    ],
+    elements: [],
+    pointMasses: [],
+    skeletonBindings: [{ id: 'sb', point: 'handR', nodeId: 'n1' }],
+    anchorBindings: [{ id: 'ab', anchor: 'beltR', nodeId: 'n2' }],
+    inputs: [],
+    namedStates: [],
+  };
+
+  it('skeleton bindings resolve to the 3D skeleton point (soft drag target)', () => {
+    const frame = computeSkeleton(DEFAULT_WEARER, REST_POSE);
+    expect(bindingTargets(mech, DEFAULT_WEARER, REST_POSE)).toEqual({
+      n1: frame.points.handR,
+    });
+  });
+
+  it('anchor bindings resolve to the 3D wearer anchor (prescribed ground)', () => {
+    const frame = computeSkeleton(DEFAULT_WEARER, REST_POSE);
+    expect(anchorTargets(mech, DEFAULT_WEARER, REST_POSE)).toEqual({
+      n2: frame.anchors.beltR,
+    });
+  });
+
+  it('targets move with the pose (they ride the skeleton, not the document)', () => {
+    const walk = getClip('walk')!;
+    const a = bindingTargets(mech, DEFAULT_WEARER, samplePose(walk, 0.1));
+    const b = bindingTargets(mech, DEFAULT_WEARER, samplePose(walk, walk.durationS / 2 + 0.1));
+    const d = Math.hypot(a.n1!.x - b.n1!.x, a.n1!.y - b.n1!.y, a.n1!.z - b.n1!.z);
+    expect(d).toBeGreaterThan(0.02);
+  });
+
+  it('mechanisms without bindings resolve to empty target maps', () => {
+    const bare = { ...mech, skeletonBindings: [], anchorBindings: [] };
+    expect(bindingTargets(bare, DEFAULT_WEARER, REST_POSE)).toEqual({});
+    expect(anchorTargets(bare, DEFAULT_WEARER, REST_POSE)).toEqual({});
   });
 });
 

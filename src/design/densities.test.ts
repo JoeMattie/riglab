@@ -2,9 +2,9 @@
 // integration): engineered elements weigh what their assigned pipe weighs;
 // everything else falls back to the generic density inside the solver.
 import { describe, expect, it } from 'vitest';
-import { mech, node, testMaterials } from '../bom/testHelpers';
 import type { BentLinkElement, LinkElement, TelescopeElement } from '../schema';
 import { elementLinearDensities } from './densities';
+import { mech, node, testMaterials } from './testFixtures';
 
 const materials = testMaterials(); // PA 0.5 kg/m · TO 0.5 · TI 0.3 (OD 22 mm)
 

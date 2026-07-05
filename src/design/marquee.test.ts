@@ -40,7 +40,10 @@ describe('normalizedRect', () => {
   });
 });
 
-/** Minimal mechanism exercising every hit-testable element type.
+/** Minimal v7 mechanism exercising every hit-testable element type. The node
+ * positions here are Vec3 (document space); the `positions` record handed to
+ * elementIdsInRect is the PROJECTED panel-plane view of them (z dropped —
+ * exactly what the quad panel's projection produces for the side panel).
  * Layout (metres):  n1(0,0) — link l1 — n2(1,0);  n3(2,2) — link l2 — n4(3,2)
  * pivot p1 at n2; slider s1 at n3; rope through n1→n3→n4;
  * elastic n1–n2; bowden (n1,n2 | n3,n4); torsion cable p1↔p2 (p2 at n4). */
@@ -48,14 +51,13 @@ function testMech(): Mechanism {
   const node = (id: string, x: number, y: number) => ({
     id,
     kind: 'free' as const,
-    position: { x, y },
+    position: { x, y, z: 0.25 },
   });
   const base = { maturity: 'sketch' as const, pointMasses: [] };
+  const hinge = { kind: 'hinge' as const, axis: { x: 0, y: 0, z: 1 } };
   return {
     id: 'm1',
     name: 'test',
-    viewOrientation: 'side-left',
-    gravityOn: false,
     nodes: [node('n1', 0, 0), node('n2', 1, 0), node('n3', 2, 2), node('n4', 3, 2)],
     elements: [
       { ...base, id: 'l1', type: 'link', nodeA: 'n1', nodeB: 'n2' },
@@ -65,6 +67,7 @@ function testMech(): Mechanism {
         type: 'pivot',
         maturity: 'sketch',
         nodeId: 'n2',
+        joint: hinge,
         memberIds: ['l1', 'l2'],
         welds: [],
       },
@@ -73,6 +76,7 @@ function testMech(): Mechanism {
         type: 'pivot',
         maturity: 'sketch',
         nodeId: 'n4',
+        joint: hinge,
         memberIds: ['l1', 'l2'],
         welds: [],
       },
@@ -125,8 +129,10 @@ function testMech(): Mechanism {
   };
 }
 
+/** Project the Vec3 document positions into the side panel's plane (drop z) —
+ * what the quad UI does before calling elementIdsInRect. */
 const positionsOf = (m: Mechanism): Record<string, Vec2> =>
-  Object.fromEntries(m.nodes.map((n) => [n.id, n.position]));
+  Object.fromEntries(m.nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]));
 
 describe('elementIdsInRect', () => {
   const mech = testMech();

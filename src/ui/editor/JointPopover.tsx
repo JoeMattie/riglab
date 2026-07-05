@@ -2,12 +2,20 @@
 // any node — rows re-realize the joint via docOps. The same component is the
 // snap-connect menu when a drawn pipe end lands on existing geometry
 // (pendingConnect): Pivot is the default, Enter accepts it, Esc cancels.
-// Replaces ConnectMenu.tsx.
-import { useEffect, useRef } from 'react';
-import type { JointRealization, Mechanism, Vec2 } from '../../schema';
+// v7 (PLANFILE-3d-conversion.md): a pivot additionally carries its 3D joint —
+// hinge (with an editable axis + ⊥-panel presets) or spherical.
+import { useEffect, useRef, useState } from 'react';
+import type { OrientationFrame } from '../../geometry/placement';
+import type { JointRealization, Mechanism, PivotElement, PivotJoint, Vec2 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { assignNodeRealization, detachNode, setNodeJoint } from '../../state/docOps';
+import {
+  assignNodeRealization,
+  detachNode,
+  setNodeJoint,
+  setNodePivotJoint,
+} from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
+import { PANEL_FRAME } from '../quad/panelProject';
 import { JointGlyph, type JointGlyphName } from './icons';
 import { REALIZATION_OPTIONS } from './infopanel/fields';
 import { captionStyle, menuStyle, rowStyle, T } from './theme';
@@ -49,11 +57,15 @@ export function JointPopover({
   view,
   positions,
   size,
+  frame,
 }: {
   mech: Mechanism;
   view: ViewTransform;
+  /** node positions projected into the hosting panel's plane */
   positions: Record<string, Vec2>;
   size: Size;
+  /** the hosting panel's frame — its normal is the default hinge axis */
+  frame: OrientationFrame;
 }) {
   const pending = useEditorStore((s) => s.pendingConnect);
   const openPopover = useEditorStore((s) => s.openPopover);
@@ -63,7 +75,9 @@ export function JointPopover({
   if (openPopover?.kind !== 'joint') return null;
   const node = mech.nodes.find((n) => n.id === openPopover.nodeId);
   if (!node) return null;
-  const p = toScreen(view, positions[node.id] ?? node.position);
+  const p2 = positions[node.id];
+  if (!p2) return null;
+  const p = toScreen(view, p2);
   const anchor = { x: p.x - 33, y: p.y + 20 };
   // design face: every pivot-like joint (pivot, weld, or slider) gets the
   // realization picker — the engineering question at that point — even when
@@ -71,9 +85,18 @@ export function JointPopover({
   // ends, and the whole sketch face, still get the joint-type menu.
   const kind = jointKindAtNode(mech, node.id);
   if (face === 'design' && (kind === 'pivot' || kind === 'weld' || kind === 'slider')) {
-    return <RealizationMenu mech={mech} nodeId={node.id} kind={kind} anchor={anchor} size={size} />;
+    return (
+      <RealizationMenu
+        mech={mech}
+        nodeId={node.id}
+        kind={kind}
+        anchor={anchor}
+        size={size}
+        frame={frame}
+      />
+    );
   }
-  return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} size={size} />;
+  return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} size={size} frame={frame} />;
 }
 
 /** Which physical realizations can actually produce each joint kind's
@@ -104,12 +127,14 @@ function RealizationMenu({
   kind,
   anchor,
   size,
+  frame,
 }: {
   mech: Mechanism;
   nodeId: string;
   kind: 'pivot' | 'weld' | 'slider';
   anchor: Vec2;
   size: Size;
+  frame: OrientationFrame;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
@@ -130,7 +155,10 @@ function RealizationMenu({
 
   const choose = (realization: JointRealization | undefined) => {
     setOpenPopover(null);
-    updateCurrent((cur) => assignNodeRealization(cur, mech.id, nodeId, realization));
+    // a materialized free pin hinges about the hosting panel's normal
+    updateCurrent((cur) =>
+      assignNodeRealization(cur, nodeId, realization, { kind: 'hinge', axis: { ...frame.zAxis } }),
+    );
   };
 
   const pos = clampedPos(anchor, size);
@@ -228,6 +256,154 @@ function ConnectMenu({ size }: { size: Size }) {
 
 type JointChoice = 'pivot' | 'weld' | 'slider' | 'anchor' | 'detach';
 
+/** Quick hinge-axis presets: perpendicular to each ortho panel. */
+export const AXIS_PRESETS: Array<{ key: string; label: string; axis: () => PivotJoint }> = [
+  {
+    key: 'top',
+    label: '⊥ Top',
+    axis: () => ({ kind: 'hinge', axis: { ...PANEL_FRAME.top.zAxis } }),
+  },
+  {
+    key: 'front',
+    label: '⊥ Front',
+    axis: () => ({ kind: 'hinge', axis: { ...PANEL_FRAME.front.zAxis } }),
+  },
+  {
+    key: 'side',
+    label: '⊥ Side',
+    axis: () => ({ kind: 'hinge', axis: { ...PANEL_FRAME.side.zAxis } }),
+  },
+];
+
+const fmtAxis = (v: number): string => String(Number(v.toFixed(3)));
+
+/** Hinge/spherical section shared by the joint popover and the pivot
+ * inspector: kind toggle, ⊥-panel presets, numeric axis entry. Edits go
+ * through setNodePivotJoint (normalizes and preserves welds/limits). */
+export function PivotJointControls({ pivot }: { pivot: PivotElement }) {
+  const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const joint = pivot.joint;
+  const [draftAxis, setDraftAxis] = useState<{ x: string; y: string; z: string } | null>(null);
+
+  const apply = (j: PivotJoint) => {
+    setDraftAxis(null);
+    updateCurrent((cur) => setNodePivotJoint(cur, pivot.nodeId, j));
+  };
+
+  const axis = joint.kind === 'hinge' ? joint.axis : null;
+  const shown =
+    draftAxis ?? (axis ? { x: fmtAxis(axis.x), y: fmtAxis(axis.y), z: fmtAxis(axis.z) } : null);
+
+  const commitDraft = () => {
+    if (!draftAxis) return;
+    const x = Number.parseFloat(draftAxis.x);
+    const y = Number.parseFloat(draftAxis.y);
+    const z = Number.parseFloat(draftAxis.z);
+    const len = Math.hypot(x, y, z);
+    if (![x, y, z].every(Number.isFinite) || len < 1e-9) {
+      setDraftAxis(null);
+      return;
+    }
+    // the schema stores a unit axis — normalize typed input here
+    apply({ kind: 'hinge', axis: { x: x / len, y: y / len, z: z / len } });
+  };
+
+  const segStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    border: 'none',
+    borderRadius: 6,
+    padding: '3px 0',
+    cursor: 'pointer',
+    fontSize: 11.5,
+    fontFamily: T.sans,
+    background: active ? T.accentTint : T.chip,
+    color: active ? T.accentText : T.muted,
+  });
+
+  const isPreset = (j: PivotJoint): boolean =>
+    axis !== null &&
+    j.kind === 'hinge' &&
+    Math.abs(j.axis.x - axis.x) < 1e-6 &&
+    Math.abs(j.axis.y - axis.y) < 1e-6 &&
+    Math.abs(j.axis.z - axis.z) < 1e-6;
+
+  return (
+    <div
+      data-testid="pivot-joint-controls"
+      style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 8px' }}
+    >
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          type="button"
+          data-testid="joint-kind-hinge"
+          aria-pressed={joint.kind === 'hinge'}
+          onClick={() =>
+            joint.kind !== 'hinge' && apply({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } })
+          }
+          style={segStyle(joint.kind === 'hinge')}
+        >
+          Hinge
+        </button>
+        <button
+          type="button"
+          data-testid="joint-kind-spherical"
+          aria-pressed={joint.kind === 'spherical'}
+          onClick={() => joint.kind !== 'spherical' && apply({ kind: 'spherical' })}
+          style={segStyle(joint.kind === 'spherical')}
+        >
+          Spherical
+        </button>
+      </div>
+      {joint.kind === 'hinge' && shown && (
+        <>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {AXIS_PRESETS.map((p) => {
+              const j = p.axis();
+              return (
+                <button
+                  type="button"
+                  key={p.key}
+                  data-testid={`axis-preset-${p.key}`}
+                  onClick={() => apply(j)}
+                  style={segStyle(isPreset(j))}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 11, color: T.muted }}>axis</span>
+            {(['x', 'y', 'z'] as const).map((k) => (
+              <input
+                key={k}
+                data-testid={`axis-${k}`}
+                value={shown[k]}
+                onChange={(e) => setDraftAxis({ ...(draftAxis ?? shown), [k]: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitDraft();
+                  if (e.key === 'Escape') setDraftAxis(null);
+                }}
+                onBlur={commitDraft}
+                style={{
+                  width: 0,
+                  flex: 1,
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 5,
+                  padding: '2px 4px',
+                  font: `500 11.5px ${T.mono}`,
+                  color: T.text,
+                  background: T.raised,
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Joint-change variant: current type checked; rows that cannot apply to
  * this node are disabled rather than hidden, keeping the menu stable. */
 function JointMenu({
@@ -235,11 +411,13 @@ function JointMenu({
   nodeId,
   anchor,
   size,
+  frame,
 }: {
   mech: Mechanism;
   nodeId: string;
   anchor: Vec2;
   size: Size;
+  frame: OrientationFrame;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
@@ -252,16 +430,29 @@ function JointMenu({
   const members = memberCountAtNode(mech, nodeId);
   const kind = jointKindAtNode(mech, nodeId);
   const current: JointChoice = kind === 'end' ? 'pivot' : kind;
+  const pivot = mech.elements.find(
+    (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
+  );
 
   const choose = (kind: JointChoice) => {
     setOpenPopover(null);
     if (kind === 'slider') return; // shown only as the current state
     if (kind === 'detach') {
-      updateCurrent((cur) => detachNode(cur, mech.id, nodeId));
+      updateCurrent((cur) => detachNode(cur, nodeId));
       useEditorStore.getState().clearSelection();
       return;
     }
-    updateCurrent((cur) => setNodeJoint(cur, mech.id, nodeId, kind));
+    if (kind === 'anchor') {
+      // grounding materializes a ground hinge about this panel's normal
+      updateCurrent((cur) =>
+        setNodeJoint(cur, nodeId, kind, { kind: 'hinge', axis: { ...frame.zAxis } }),
+      );
+      return;
+    }
+    // pivot/weld materialized here hinge about the hosting panel's normal
+    updateCurrent((cur) =>
+      setNodeJoint(cur, nodeId, kind, { kind: 'hinge', axis: { ...frame.zAxis } }),
+    );
   };
 
   const rows: Array<{ kind: JointChoice; glyph: JointGlyphName; disabled: boolean }> = [
@@ -289,7 +480,7 @@ function JointMenu({
         if (e.key === 'Escape') setOpenPopover(null);
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'absolute', ...pos, width: WIDTH, zIndex: 30 }}
+      style={{ ...menuStyle, position: 'absolute', ...pos, width: WIDTH + 26, zIndex: 30 }}
     >
       <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
         Joint · node {nodeId.slice(0, 4)}
@@ -313,6 +504,13 @@ function JointMenu({
           {current === r.kind && <span style={{ marginLeft: 'auto' }}>✓</span>}
         </button>
       ))}
+      {/* hinge / spherical choice + axis for the pivot living here (v7) */}
+      {pivot && (
+        <>
+          <div style={{ borderTop: `1px solid ${T.hairline}`, margin: '5px 4px' }} />
+          <PivotJointControls pivot={pivot} />
+        </>
+      )}
     </div>
   );
 }

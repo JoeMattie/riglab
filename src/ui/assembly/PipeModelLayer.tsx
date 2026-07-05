@@ -1,7 +1,7 @@
 // r3f renderer for the pipe-and-fittings model (PLANFILE-quad-workspace
 // slice 3): dumb mapping from the pure buildPipeModel primitives to meshes.
-import type { PipeCylinder, PipeModel, PipeRole } from '../../assembly';
 import { placeAxis } from './axis';
+import type { PipeCylinder, PipeModel, PipeRole } from './pipeModel';
 
 /** PVC-ish palette: white pipe, gray fitting bodies, dark wrap bands. */
 const ROLE_COLOR: Record<PipeRole, string> = {

@@ -10,7 +10,9 @@ import type { Mechanism, MechanismElement, Project, Vec2 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import {
   deleteElement,
+  mirrorDuplicate,
   reverseLink,
+  SAGITTAL_PLANE,
   setLengthLocked,
   splitLinkAtMidpoint,
 } from '../../state/docOps';
@@ -149,7 +151,7 @@ export function SelectionCard({
       </div>
 
       {isPipe && single && (single.type === 'link' || single.type === 'telescope') ? (
-        <PipeRows doc={doc} mech={mech} el={single} positions={positions} />
+        <PipeRows doc={doc} mech={mech} el={single} />
       ) : (
         <div style={{ maxHeight: 320, overflowY: 'auto', padding: '4px 8px' }}>
           {single ? (
@@ -161,7 +163,7 @@ export function SelectionCard({
               diagnostics={diagnostics}
             />
           ) : (
-            <MultiInspector doc={doc} mech={mech} els={selected} face={face} />
+            <MultiInspector doc={doc} els={selected} face={face} />
           )}
         </div>
       )}
@@ -179,7 +181,7 @@ export function SelectionCard({
           <button
             type="button"
             data-testid="selection-split"
-            onClick={() => updateCurrent((cur) => splitLinkAtMidpoint(cur, mech.id, single.id))}
+            onClick={() => updateCurrent((cur) => splitLinkAtMidpoint(cur, single.id))}
             style={footerAction(T.accent)}
           >
             Split
@@ -190,7 +192,7 @@ export function SelectionCard({
             <button
               type="button"
               data-testid="selection-reverse"
-              onClick={() => updateCurrent((cur) => reverseLink(cur, mech.id, single.id))}
+              onClick={() => updateCurrent((cur) => reverseLink(cur, single.id))}
               style={footerAction(T.accent)}
             >
               Reverse
@@ -198,12 +200,27 @@ export function SelectionCard({
           )}
         <button
           type="button"
+          data-testid="selection-mirror"
+          title="duplicate the selection mirrored across the sagittal (z = 0) plane"
+          onClick={() => {
+            let created: string[] = [];
+            updateCurrent((cur) => {
+              const r = mirrorDuplicate(cur, selectedElementIds, SAGITTAL_PLANE);
+              created = r.newElementIds;
+              return r.doc;
+            });
+            if (created.length > 0) useEditorStore.getState().setSelection(created);
+          }}
+          style={footerAction(T.accent)}
+        >
+          Mirror
+        </button>
+        <button
+          type="button"
           data-testid="selection-delete"
           onClick={() => {
             // one updateCurrent = one undo entry for the whole selection
-            updateCurrent((cur) =>
-              selected.reduce((d, el) => deleteElement(d, mech.id, el.id), cur),
-            );
+            updateCurrent((cur) => selected.reduce((d, el) => deleteElement(d, el.id), cur));
             clearSelection();
           }}
           style={{ ...footerAction(T.danger), marginLeft: 'auto' }}
@@ -230,19 +247,18 @@ function PipeRows({
   doc,
   mech,
   el,
-  positions,
 }: {
   doc: Project;
   mech: Mechanism;
   el: Extract<MechanismElement, { type: 'link' | 'telescope' }>;
-  positions: Record<string, Vec2>;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const units = doc.unitsPreference;
-  const a = positions[el.nodeA];
-  const b = positions[el.nodeB];
-  const lengthM = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+  // true 3D length from the document — the panel projection foreshortens
+  const a = mech.nodes.find((n) => n.id === el.nodeA)?.position;
+  const b = mech.nodes.find((n) => n.id === el.nodeB)?.position;
+  const lengthM = a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0;
   const locked = el.lengthLocked === true;
 
   const endChip = (nodeId: string, testId: string) => {
@@ -293,7 +309,7 @@ function PipeRows({
             type="button"
             data-testid="card-length-lock"
             title={locked ? 'unlock length' : 'lock length'}
-            onClick={() => updateCurrent((cur) => setLengthLocked(cur, mech.id, el.id, !locked))}
+            onClick={() => updateCurrent((cur) => setLengthLocked(cur, el.id, !locked))}
             style={{
               border: 'none',
               background: locked ? T.accent : 'none',

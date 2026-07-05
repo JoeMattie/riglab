@@ -2,8 +2,10 @@
 // Component tests for the interface-overhaul chrome (test-pyramid rule:
 // behavior assertable against components stays in Vitest, not e2e):
 // tool pill + shortcuts, dimension chips (edit/lock), joint popover
-// (type change), selection card (pipe rows, delete), transport pill
-// (gravity/forces chips), and the DOF pill conflict list.
+// (type change + hinge/spherical), selection card (pipe rows, delete,
+// mirror-duplicate), transport pill (forces chip), and the DOF pill
+// conflict list. v7: one compound Vec3 mechanism; panel positions are
+// projected 2D (side panel = world x-y).
 import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +14,7 @@ import type { LinkElement, Project, RopeElement } from '../../schema';
 import { createEmptyProject } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
+import { PANEL_FRAME, projectPositions } from '../quad/panelProject';
 import { DimensionChips } from './DimensionChips';
 import { DofPill } from './DofPill';
 import { JointPopover } from './JointPopover';
@@ -43,23 +46,30 @@ function project(): Project {
     ...p,
     unitsPreference: 'metric',
     materials: testMaterials(),
-    mechanisms: [mech([L1, L2, R1], [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 4)])],
+    mechanism: mech([L1, L2, R1], [node('n1', 0, 0), node('n2', 3, 4), node('n3', 6, 4)]),
   };
 }
 
 const doc = () => useAppStore.getState().current!;
-const mech0 = () => doc().mechanisms[0]!;
+const mech0 = () => doc().mechanism;
 const view = () => initialView(800, 600);
+const FRAME = PANEL_FRAME.side; // world x-y plane — matches the old 2D canvas
 const positions = () => {
-  const out: Record<string, { x: number; y: number }> = {};
+  const out: Record<string, { x: number; y: number; z: number }> = {};
   for (const n of mech0().nodes) out[n.id] = n.position;
-  return out;
+  return projectPositions(out, FRAME);
 };
+const lengths = () => ({
+  of: (a: string, b: string) => {
+    const pa = mech0().nodes.find((n) => n.id === a)!.position;
+    const pb = mech0().nodes.find((n) => n.id === b)!.position;
+    return Math.hypot(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
+  },
+});
 
 beforeEach(() => {
   useAppStore.setState({ current: project() });
   useEditorStore.setState({
-    activeMechanismId: 'm1',
     tool: 'select',
     face: 'sketch',
     selectedElementIds: [],
@@ -120,6 +130,7 @@ describe('DimensionChips', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
+        lengths={lengths()}
         hoveredElementId={null}
         endpointDrag={null}
       />,
@@ -158,6 +169,7 @@ describe('DimensionChips', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
+        lengths={lengths()}
         hoveredElementId="L2"
         endpointDrag={null}
       />,
@@ -174,6 +186,7 @@ describe('JointPopover', () => {
         view={view()}
         positions={positions()}
         size={{ w: 800, h: 600 }}
+        frame={FRAME}
       />,
     );
 
@@ -340,12 +353,94 @@ describe('SelectionCard', () => {
   });
 });
 
+describe('JointPopover hinge controls (v7)', () => {
+  const renderPopover = () =>
+    render(
+      <JointPopover
+        mech={mech0()}
+        view={view()}
+        positions={positions()}
+        size={{ w: 800, h: 600 }}
+        frame={FRAME}
+      />,
+    );
+
+  it('a pivot node shows hinge/spherical controls; spherical writes the joint', () => {
+    // materialize a pivot at n2 (hinge ⊥ side panel = +z)
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-pivot'));
+    r.unmount();
+    const pivot = () => mech0().elements.find((e) => e.type === 'pivot')!;
+    expect(pivot()).toMatchObject({ joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } } });
+
+    // the popover reads `mech` as a prop, so re-render between edits (the
+    // hosting panel re-renders on every document change in the app)
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r2 = renderPopover();
+    expect(screen.getByTestId('pivot-joint-controls')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('joint-kind-spherical'));
+    expect(pivot()).toMatchObject({ joint: { kind: 'spherical' } });
+    r2.unmount();
+    // back to hinge, then snap the axis to ⊥ Top (the top panel's normal)
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r3 = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-kind-hinge'));
+    expect(pivot().joint.kind).toBe('hinge');
+    r3.unmount();
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    fireEvent.click(screen.getByTestId('axis-preset-top'));
+    expect(pivot()).toMatchObject({ joint: { kind: 'hinge', axis: { x: 0, y: -1, z: 0 } } });
+  });
+
+  it('numeric axis entry normalizes before writing the joint', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-pivot'));
+    r.unmount();
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    const ax = screen.getByTestId('axis-x') as HTMLInputElement;
+    fireEvent.change(ax, { target: { value: '2' } });
+    fireEvent.keyDown(ax, { key: 'Enter' });
+    const pivot = mech0().elements.find((e) => e.type === 'pivot')!;
+    expect(pivot.type === 'pivot' && pivot.joint.kind === 'hinge').toBe(true);
+    if (pivot.type === 'pivot' && pivot.joint.kind === 'hinge') {
+      // (2, 0, 1) normalized
+      expect(pivot.joint.axis.x).toBeCloseTo(2 / Math.hypot(2, 0, 1), 6);
+      expect(pivot.joint.axis.z).toBeCloseTo(1 / Math.hypot(2, 0, 1), 6);
+    }
+  });
+});
+
+describe('SelectionCard mirror-duplicate (v7)', () => {
+  it('Mirror duplicates the selection across the sagittal plane and selects the copies', () => {
+    useEditorStore.setState({ selectedElementIds: ['L1'] });
+    render(
+      <SelectionCard
+        doc={doc()}
+        mech={mech0()}
+        view={view()}
+        positions={positions()}
+        size={{ w: 800, h: 600 }}
+      />,
+    );
+    const before = mech0().elements.length;
+    fireEvent.click(screen.getByTestId('selection-mirror'));
+    expect(mech0().elements.length).toBe(before + 1);
+    const newIds = useEditorStore.getState().selectedElementIds;
+    expect(newIds).toHaveLength(1);
+    expect(newIds[0]).not.toBe('L1');
+    // a group over the copies was created
+    expect(doc().groups.length).toBe(1);
+  });
+});
+
 describe('TransportPill', () => {
-  it('gravity chip writes the document; forces chip toggles equilibrium', () => {
+  it('gravity chip is gone (global −y, PLANFILE-3d decision 4); forces chip toggles equilibrium', () => {
     render(<TransportPill />);
-    expect(mech0().gravityOn).toBe(true);
-    fireEvent.click(screen.getByTestId('gravity-toggle'));
-    expect(mech0().gravityOn).toBe(false);
+    expect(screen.queryByTestId('gravity-toggle')).toBeNull();
     fireEvent.click(screen.getByTestId('equilibrium-toggle'));
     expect(useEditorStore.getState().equilibriumOn).toBe(true);
     expect(screen.getByTestId('solver-status')).toBeTruthy();

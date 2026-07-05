@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-tail",
   "name": "Example — tail",
   "unitsPreference": "imperial",
@@ -622,165 +622,192 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
+  "mechanism": {
+    "id": "tail-boom",
+    "name": "Tail",
+    "nodes": [
+      {
+        "id": "rootA",
+        "kind": "anchor",
+        "position": {
+          "x": -0.18,
+          "y": 0.95,
+          "z": 0
+        }
+      },
+      {
+        "id": "spineTopA",
+        "kind": "anchor",
+        "position": {
+          "x": -0.22,
+          "y": 1.42,
+          "z": 0
+        }
+      },
+      {
+        "id": "j1",
+        "kind": "free",
+        "position": {
+          "x": -0.66,
+          "y": 1,
+          "z": 0
+        }
+      },
+      {
+        "id": "j2",
+        "kind": "free",
+        "position": {
+          "x": -1.1,
+          "y": 1.06,
+          "z": 0
+        }
+      },
+      {
+        "id": "tailTip",
+        "kind": "free",
+        "position": {
+          "x": -1.52,
+          "y": 1.13,
+          "z": 0
+        }
+      }
+    ],
+    "elements": [
+      {
+        "id": "tailBoom1",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeA": "rootA",
+        "nodeB": "j1",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "clickDetachable",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "tailBoom2",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeA": "j1",
+        "nodeB": "j2",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "nestedSleeve",
+        "endRealizationB": "nestedSleeve",
+        "pointMasses": []
+      },
+      {
+        "id": "tailBoom3",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeA": "j2",
+        "nodeB": "tailTip",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "nestedSleeve",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "tailFlex1",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeId": "j1",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": ["tailBoom1", "tailBoom2"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "tailBoom1",
+          "memberB": "tailBoom2",
+          "minRad": -0.6,
+          "maxRad": 0.6
+        },
+        "torsionSpring": {
+          "memberA": "tailBoom1",
+          "memberB": "tailBoom2",
+          "stiffnessNmPerRad": 25,
+          "restAngleRad": 0
+        },
+        "realization": "nestedSleeve"
+      },
+      {
+        "id": "tailFlex2",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "nodeId": "j2",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": ["tailBoom2", "tailBoom3"],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "tailBoom2",
+          "memberB": "tailBoom3",
+          "minRad": -0.7,
+          "maxRad": 0.7
+        },
+        "torsionSpring": {
+          "memberA": "tailBoom2",
+          "memberB": "tailBoom3",
+          "stiffnessNmPerRad": 18,
+          "restAngleRad": 0
+        },
+        "realization": "nestedSleeve"
+      },
+      {
+        "id": "tailHoldRope",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "tail",
+        "path": ["spineTopA", "j1"],
+        "lengthM": 0.6083,
+        "cordageMaterialId": "cord-paracord550"
+      }
+    ],
+    "pointMasses": [
+      {
+        "id": "tailTipMass",
+        "name": "tail tip",
+        "massKg": 0.5,
+        "nodeId": "tailTip"
+      }
+    ],
+    "skeletonBindings": [],
+    "anchorBindings": [],
+    "inputs": [],
+    "namedStates": []
+  },
+  "groups": [
     {
-      "id": "tail-boom",
+      "id": "grp-tail",
       "name": "Tail",
-      "viewOrientation": "side-left",
-      "gravityOn": true,
-      "nodes": [
-        {
-          "id": "rootA",
-          "kind": "anchor",
-          "position": {
-            "x": -0.18,
-            "y": 0.95
-          }
-        },
-        {
-          "id": "spineTopA",
-          "kind": "anchor",
-          "position": {
-            "x": -0.22,
-            "y": 1.42
-          }
-        },
-        {
-          "id": "j1",
-          "kind": "free",
-          "position": {
-            "x": -0.66,
-            "y": 1
-          }
-        },
-        {
-          "id": "j2",
-          "kind": "free",
-          "position": {
-            "x": -1.1,
-            "y": 1.06
-          }
-        },
-        {
-          "id": "tailTip",
-          "kind": "free",
-          "position": {
-            "x": -1.52,
-            "y": 1.13
-          }
-        }
-      ],
-      "elements": [
-        {
-          "id": "tailBoom1",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeA": "rootA",
-          "nodeB": "j1",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "clickDetachable",
-          "endRealizationB": "nestedSleeve",
-          "pointMasses": []
-        },
-        {
-          "id": "tailBoom2",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeA": "j1",
-          "nodeB": "j2",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "nestedSleeve",
-          "endRealizationB": "nestedSleeve",
-          "pointMasses": []
-        },
-        {
-          "id": "tailBoom3",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeA": "j2",
-          "nodeB": "tailTip",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "nestedSleeve",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "tailFlex1",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeId": "j1",
-          "memberIds": ["tailBoom1", "tailBoom2"],
-          "welds": [],
-          "angleLimit": {
-            "memberA": "tailBoom1",
-            "memberB": "tailBoom2",
-            "minRad": -0.6,
-            "maxRad": 0.6
-          },
-          "torsionSpring": {
-            "memberA": "tailBoom1",
-            "memberB": "tailBoom2",
-            "stiffnessNmPerRad": 25,
-            "restAngleRad": 0
-          },
-          "realization": "nestedSleeve"
-        },
-        {
-          "id": "tailFlex2",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "nodeId": "j2",
-          "memberIds": ["tailBoom2", "tailBoom3"],
-          "welds": [],
-          "angleLimit": {
-            "memberA": "tailBoom2",
-            "memberB": "tailBoom3",
-            "minRad": -0.7,
-            "maxRad": 0.7
-          },
-          "torsionSpring": {
-            "memberA": "tailBoom2",
-            "memberB": "tailBoom3",
-            "stiffnessNmPerRad": 18,
-            "restAngleRad": 0
-          },
-          "realization": "nestedSleeve"
-        },
-        {
-          "id": "tailHoldRope",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "tail",
-          "path": ["spineTopA", "j1"],
-          "lengthM": 0.6083,
-          "cordageMaterialId": "cord-paracord550"
-        }
-      ],
-      "pointMasses": [
-        {
-          "id": "tailTipMass",
-          "name": "tail tip",
-          "massKg": 0.5,
-          "nodeId": "tailTip"
-        }
-      ],
-      "skeletonBindings": [],
-      "anchorBindings": [],
-      "inputs": [],
-      "namedStates": []
+      "elementIds": [
+        "tailBoom1",
+        "tailBoom2",
+        "tailBoom3",
+        "tailFlex1",
+        "tailFlex2",
+        "tailHoldRope"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

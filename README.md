@@ -18,63 +18,34 @@ bundled example content only.
 
 ## Status
 
-**Phase 5 examples slice done** (out of order, ahead of Phases 4/4.5): all
-seven §9 example projects now ship as bundled, builder-generated JSON —
-seesaw spine, neck truss (pitch), steer mirror (plan) with crossed ropes,
-jaw + Bowden with lockable trigger, gait-driven leg exoskeleton, tail, and
-the full-creature Project Raptor recreation (2D scope: its yoke control,
-control clip, and 3D placement wait on Phases 4/4.5). The movement-clip
-library is complete (`walk`, `arm swing`, `lean`, `dance`,
-`sit down / stand up`, `crouch`, `idle sway`; format documented in
-[docs/movement-clips.md](docs/movement-clips.md)). Examples are data-side
-only for now — loaded via the `EXAMPLES` registry in `src/examples/` — the
-"New from example" menu, onboarding, shortcuts, printable BOM, perf pass,
-and visual polish land in a **finishing slice** after the in-flight
-interface overhaul.
+**Fully 3D** (2026-07-04, [PLANFILE-3d-conversion.md](PLANFILE-3d-conversion.md)):
+the project is one compound 3D mechanism edited in a Rhino-style quad
+workspace (Top / Front / Side orthographic panels + perspective). Drawing in
+a panel sketches into that panel's plane at an adjustable work-plane depth;
+pivots default to hinges whose axis is the panel normal (spherical
+optional — the rope-lashed conduit joint); double-click anchoring creates
+frame-fixed ground hinges so panel sketches stay planar. The former
+per-plane mechanisms are now named groups; the assembly/instance layer is
+gone — one global XPBD solve covers the whole creature, so multi-plane
+couplings (neck pan carrying pitch) are real shared geometry instead of
+transform layering. Mass/CG/seesaw balance read from `src/analysis`; the
+bend schedule gained per-vertex dihedral ("twist") angles for out-of-plane
+heat bends.
 
-**Phase 3 complete** (design face): a Sketch/Design face toggle with
-element multi-select; a right dock with a selection inspector (info panel),
-a per-element/mechanism resolution checklist with click-to-fix, an editable
-materials DB with a live pipe-nesting (telescoping) matrix, and a BOM panel
-with partial-data banner and CSV export; material densities now feed the
-equilibrium solve, and a units toggle switches length/mass display between
-imperial and metric. The seesaw-spine example ships as bundled content.
-Canvas pan/zoom/pinch landed via a hand-rolled gesture layer after the
-zoompinch integration spike came back NO-GO (its gesture model was vendored
-with tests — see [DECISIONS.md](DECISIONS.md)).
-
-Phase 2 delivered forces: ropes with eyelet routing, elastics, bowden and
-torsion-cable couplings, gravity + static-equilibrium relaxation, force
-readouts (tensions, pivot reactions, required input force/torque),
-rope-compression warnings, and input channels with lock toggles. Phase 1
-delivered sketch & play (draw pipes on the wearer silhouette, snap-connect,
-drag-to-pose with a live kinematic XPBD solve, skeleton bindings, movement
-clips, undo/redo); Phase 0 the library spike
-([DECISIONS.md](DECISIONS.md) — custom XPBD + Konva), Zod schema with
-migrations, Dexie persistence, and JSON export/import.
-
-| Phase | Scope | Status |
-|---|---|---|
-| 0 | Library spike + scaffold | ✅ done |
-| 1 | Sketch & play: draw pipes, snap-connect, drag-to-pose, movement clips | ✅ done |
-| 2 | Forces: ropes/elastics/bowden/torsion, equilibrium, tension readouts | ✅ done |
-| 3 | Design face: info panel, materials DB, nesting matrix, BOM; panel UI + canvas navigation | ✅ done |
-| 4 | 3D assembly: full mannequin, instance placement, mass/CG/balance | — |
-| 4.5 | Controls: virtual input devices (yoke/lever/trigger) + control clips | — |
-| 5 | Bundled examples + polish (design-handoff visual pass) | 🔶 examples + clips done; menu, onboarding, shortcuts, printable BOM, perf + visual pass pending |
-
-The full specification lives in
-[PLANFILE-pvc-rig-lab.md](PLANFILE-pvc-rig-lab.md) — it is the source of
-truth. Process and engineering rules are in [CLAUDE.md](CLAUDE.md); every
-architectural decision and deviation is logged in
-[DECISIONS.md](DECISIONS.md).
+All five original phases (0–5, incl. 4.5 controls) shipped before the
+conversion: sketch & play, forces (ropes/elastics/bowden/torsion +
+equilibrium readouts), the design face (materials DB, nesting matrix,
+resolution checklist, BOM + CSV + printable view), controls & control
+clips, the seven bundled §9 examples, movement-clip library
+([docs/movement-clips.md](docs/movement-clips.md)), onboarding, and the
+floating-glass interface overhaul.
 
 ## Stack
 
 Vite · React · TypeScript (strict) · Zustand (+ zundo for undo) · Zod
 (schema = single source of truth, versioned with migrations) · Dexie
-(IndexedDB) · Konva (2D editor) · three.js via react-three-fiber (3D
-assembly, Phase 4) · custom XPBD solver behind a pure
+(IndexedDB) · Konva (ortho panel editors) · three.js via
+react-three-fiber (perspective panel) · custom 3D XPBD solver behind a pure
 `solve(mechanism, inputs, mode)` interface · Vitest + Testing Library, with
 a small Playwright smoke suite · Biome (lint + format) · Tailwind v4 +
 shadcn/ui (vendored) for panel UI. Canvas pan/zoom/pinch is hand-rolled in
@@ -108,13 +79,14 @@ Playwright suite stays smoke-level.
 ```
 src/schema/        Zod schemas (z.infer types), schemaVersion + migrations
 src/solver/        solve() — XPBD kinematic + equilibrium modes, acceptance tests
-src/geometry/      shared pipe geometry (diameters, wall, nesting clearance)
-src/bom/           BOM computation, nesting compatibility, CSV export
+src/geometry/      shared 3D math (vec/quat, panel frames) + pipe geometry
+src/bom/           BOM computation, nesting compatibility, bend schedule, CSV export
+src/analysis/      mass inventory, CG, seesaw balance (pure, over solve() output)
 src/design/        pure design-face logic: resolution checklist, element info, densities
 src/persistence/   Dexie store, autosave, revisions, JSON export/import
 src/state/         Zustand app store + document operations
-src/ui/            React UI (project manager shell, sketch editor, design-face panels)
-src/wearer/        mannequin, view projections, movement clips
+src/ui/            React UI (quad workspace, panel editors, perspective view, docks)
+src/wearer/        mannequin, panel-basis silhouette projection, movement clips
 src/examples/      bundled example content (all seven §9 examples, builder-generated)
 e2e/               Playwright smoke suite
 ```

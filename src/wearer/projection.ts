@@ -1,35 +1,27 @@
-// View-orientation projections (§4.2/§7): each mechanism's 2D space is a
-// projection of the wearer's world frame (y up, x forward, z wearer-left).
-// Elevation views keep world y as 2D y (gravity −Y); `top` maps the ground
-// plane; `free` behaves like side-left.
-import type {
-  SkeletonPoint,
-  Vec2,
-  Vec3,
-  ViewOrientation,
-  WearerAnchor,
-  WearerParams,
-} from '../schema';
+// Skeleton → panel projection (PLANFILE-3d-conversion.md): the quad
+// workspace draws the wearer silhouette as a dimmed underlay in each ortho
+// panel. Pure functions parameterized by a panel plane basis — pass an
+// OrientationFrame from src/geometry/placement.ts (the single panel-frame
+// source of truth) or any orthonormal basis. No mechanism/viewOrientation
+// coupling: the document is 3D, projection is a drawing concern only.
+import type { OrientationFrame } from '../geometry/placement';
+import type { SkeletonPoint, Vec2, Vec3, WearerAnchor, WearerParams } from '../schema';
 import { computeSkeleton, headRadiusM, type JointPose, type SkeletonFrame } from './skeleton';
 
-export function projectPoint(view: ViewOrientation, p: Vec3): Vec2 {
-  switch (view) {
-    case 'side-left':
-    case 'free':
-      return { x: p.x, y: p.y };
-    case 'side-right':
-      return { x: -p.x, y: p.y };
-    case 'front':
-      return { x: p.z, y: p.y };
-    case 'back':
-      return { x: -p.z, y: p.y };
-    case 'top':
-      return { x: p.x, y: p.z };
-  }
+/** A panel's drawing plane: `xAxis` → screen-right, `yAxis` → screen-up
+ * (unit, orthogonal). An OrientationFrame satisfies this. */
+export type PanelBasis = Pick<OrientationFrame, 'xAxis' | 'yAxis'>;
+
+const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+
+/** Orthographic projection of a world point into panel 2D coordinates
+ * (world origin projects to the panel's 2D origin). */
+export function projectPoint(basis: PanelBasis, p: Vec3): Vec2 {
+  return { x: dot(p, basis.xAxis), y: dot(p, basis.yAxis) };
 }
 
 export interface Silhouette {
-  /** dimmed underlay polylines (body + schematic pack frame), 2D view space */
+  /** dimmed underlay polylines (body + schematic pack frame), panel 2D space */
   outlines: Vec2[][];
   /** snappable, bindable skeleton points */
   points: Record<SkeletonPoint, Vec2>;
@@ -37,24 +29,23 @@ export interface Silhouette {
   anchors: Record<WearerAnchor, Vec2>;
 }
 
-export function computeSilhouette(
-  params: WearerParams,
-  pose: JointPose,
-  view: ViewOrientation,
+/** Project a computed skeleton frame into a panel plane for drawing. */
+export function projectSilhouette(
+  frame: SkeletonFrame,
+  headRadius: number,
+  basis: PanelBasis,
 ): Silhouette {
-  const frame: SkeletonFrame = computeSkeleton(params, pose);
-  const pr = (p: Vec3): Vec2 => projectPoint(view, p);
+  const pr = (p: Vec3): Vec2 => projectPoint(basis, p);
   const P = frame.points;
   const A = frame.anchors;
 
   const chain = (...pts: Vec3[]): Vec2[] => pts.map(pr);
-  const headR = headRadiusM(params);
   const head: Vec2[] = [];
   for (let i = 0; i <= 12; i++) {
     const a = (i / 12) * 2 * Math.PI;
-    // head circle in the view plane, centered on the projected head point
+    // head circle in the panel plane, centered on the projected head point
     const c = pr(P.head);
-    head.push({ x: c.x + headR * Math.cos(a), y: c.y + headR * Math.sin(a) });
+    head.push({ x: c.x + headRadius * Math.cos(a), y: c.y + headRadius * Math.sin(a) });
   }
 
   const outlines: Vec2[][] = [
@@ -88,4 +79,13 @@ export function computeSilhouette(
   >;
 
   return { outlines, points, anchors };
+}
+
+/** Convenience: compute the skeleton for a pose and project it in one call. */
+export function computeSilhouette(
+  params: WearerParams,
+  pose: JointPose,
+  basis: PanelBasis,
+): Silhouette {
+  return projectSilhouette(computeSkeleton(params, pose), headRadiusM(params), basis);
 }

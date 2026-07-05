@@ -1,40 +1,58 @@
-import type { Mechanism, Vec2, WearerParams } from '../schema';
-import { projectPoint } from './projection';
-import { computeSkeleton, type JointPose } from './skeleton';
+import type { Mechanism, Vec3, WearerParams } from '../schema';
+import { computeSkeleton, type JointPose, type SkeletonFrame } from './skeleton';
 
-/** Resolve a mechanism's skeleton bindings for a pose: each bound node gets
- * the projected position of its skeleton point in the mechanism's view
- * plane. The result feeds solve() as dragTargets — the same machinery as
- * pointer dragging (§7.3), so bound nodes obey the mechanism's constraints. */
-export function bindingTargets(
+// Fully-3D binding resolution (PLANFILE-3d-conversion.md): bindings drive
+// nodes to true 3D wearer points — the per-view projection indirection is
+// gone. The *FromFrame variants let callers that already computed a
+// SkeletonFrame (silhouette drawing, control mounts) reuse it.
+
+/** Resolve the mechanism's skeleton bindings against a computed frame: each
+ * bound node gets its skeleton point's 3D position. Feeds solve() as
+ * dragTargets — the same machinery as pointer dragging (§7.3), so bound
+ * nodes obey the mechanism's constraints (soft pull). */
+export function bindingTargetsFromFrame(
   mechanism: Mechanism,
-  params: WearerParams,
-  pose: JointPose,
-): Record<string, Vec2> {
-  if (mechanism.skeletonBindings.length === 0) return {};
-  const frame = computeSkeleton(params, pose);
-  const out: Record<string, Vec2> = {};
+  frame: SkeletonFrame,
+): Record<string, Vec3> {
+  const out: Record<string, Vec3> = {};
   for (const b of mechanism.skeletonBindings) {
-    out[b.nodeId] = projectPoint(mechanism.viewOrientation, frame.points[b.point]);
+    out[b.nodeId] = { ...frame.points[b.point] };
   }
   return out;
 }
 
-/** Resolve a mechanism's wearer-anchor attachments for a pose: each attached
- * grounded node gets the projected position of its wearer anchor. Feeds
- * solve() as groundTargets — prescribed, unlike bindingTargets' soft pull —
- * so the ground point rides the pack frame / body (PLANFILE-wearer-
- * attachments-and-floor, slice A). */
+/** Resolve the mechanism's wearer-anchor attachments against a computed
+ * frame: each attached grounded node gets its wearer anchor's 3D position.
+ * Feeds solve() as groundTargets — prescribed, unlike bindingTargets' soft
+ * pull — so the ground point rides the pack frame / body
+ * (PLANFILE-wearer-attachments-and-floor, slice A). */
+export function anchorTargetsFromFrame(
+  mechanism: Mechanism,
+  frame: SkeletonFrame,
+): Record<string, Vec3> {
+  const out: Record<string, Vec3> = {};
+  for (const b of mechanism.anchorBindings) {
+    out[b.nodeId] = { ...frame.anchors[b.anchor] };
+  }
+  return out;
+}
+
+/** Resolve skeleton bindings for a pose (computes the skeleton frame). */
+export function bindingTargets(
+  mechanism: Mechanism,
+  params: WearerParams,
+  pose: JointPose,
+): Record<string, Vec3> {
+  if (mechanism.skeletonBindings.length === 0) return {};
+  return bindingTargetsFromFrame(mechanism, computeSkeleton(params, pose));
+}
+
+/** Resolve wearer-anchor attachments for a pose (computes the skeleton frame). */
 export function anchorTargets(
   mechanism: Mechanism,
   params: WearerParams,
   pose: JointPose,
-): Record<string, Vec2> {
+): Record<string, Vec3> {
   if (mechanism.anchorBindings.length === 0) return {};
-  const frame = computeSkeleton(params, pose);
-  const out: Record<string, Vec2> = {};
-  for (const b of mechanism.anchorBindings) {
-    out[b.nodeId] = projectPoint(mechanism.viewOrientation, frame.anchors[b.anchor]);
-  }
-  return out;
+  return anchorTargetsFromFrame(mechanism, computeSkeleton(params, pose));
 }

@@ -2,9 +2,8 @@
 // approximate-flag clearing rule (editing a NUMBER means the user measured
 // it — the "approximate — edit me" badge should go away; renames don't).
 import { describe, expect, it } from 'vitest';
-import { mech, node, testMaterials } from '../bom/testHelpers';
+import { mech, node, projectWith } from '../design/testFixtures';
 import type { LinkElement, Project, RopeElement, TelescopeElement } from '../schema';
-import { createEmptyProject } from '../schema';
 import {
   addMaterialRow,
   deleteMaterialRow,
@@ -45,11 +44,7 @@ function project(): Project {
     lengthM: 2,
     cordageMaterialId: 'rope',
   };
-  return {
-    ...createEmptyProject('p1', 'test'),
-    materials: testMaterials(),
-    mechanisms: [mech([link, tele, rope], [node('n1', 0, 0), node('n2', 3, 4)])],
-  };
+  return projectWith(mech([link, tele, rope], [node('n1', 0, 0), node('n2', 3, 4)]));
 }
 
 describe('updateMaterialRow', () => {

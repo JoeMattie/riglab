@@ -1,60 +1,99 @@
-// Bundled example: "neck truss (pitch)" (planfile §9 item 2). Elevation view.
-// The conduit-box neck base is modeled per spec as slider + limited pivot:
-// the pipe bundle inside the box is a short link whose BOTH endpoints ride
-// point-on-line sliders on the box-axis guide (a sliding prismatic joint),
-// and the neck boom meets the bundle at a rope-lashed pivot with a small
-// angle limit (the lashing compliance). An elastic counterbalances the head
-// mass so the rest pose is neck-up; the "steer pitch" input channel pulls a
-// rope routed through a chin-level eyelet BELOW the boom axis (the offset is
-// what gives the rope a lever arm) to pitch the head down.
-import type { Mechanism, MechanismElement, Vec2 } from '../schema';
-import { BUNGEE_8, CORD, dist, PIPE_075, PIPE_CLS200_075, PIPE_CTS_075 } from './shared';
+// Bundled example: "neck truss (pitch)" (planfile §9 item 2). Formerly a
+// side-left planar mechanism; in v7 the same elevation geometry lives
+// natively in the world x-y plane at z = 0. The conduit-box neck base is
+// modeled per spec as slider + limited pivot: the pipe bundle inside the box
+// is a short link whose BOTH endpoints ride point-on-line sliders on the
+// box-axis guide (a sliding prismatic joint), and the neck boom meets the
+// bundle at a rope-lashed pivot — a hinge about the sagittal normal with a
+// small angle limit (the lashing compliance). An elastic counterbalances the
+// head mass so the rest pose is neck-up; the "steer pitch" input channel
+// pulls a rope routed through a chin-level eyelet BELOW the boom axis (the
+// offset is what gives the rope a lever arm) to pitch the head down.
+//
+// 3D roll keeper: a hinge carried by a 2-node bar keeps a "bracket spin" DOF
+// about the bar's own line (the particle model cannot represent a bar's
+// torsion), so the boom — an inverted pendulum over the rail — would fall
+// sideways. The real conduit box cannot roll on the mast, so the model says
+// so: the box carries a short keel post riding a second, parallel rail (the
+// box straddles twin rails). The keel is a member of the lashing pivot, which
+// ties the hinge axis to an off-rail point and kills the roll while leaving
+// the slide (both sliders translate together) and the pitch free.
+import type { MechanismElement, Vec3 } from '../schema';
+import {
+  BUNGEE_8,
+  CORD,
+  dist,
+  HINGE_SAGITTAL,
+  type MechParts,
+  PIPE_075,
+  PIPE_CLS200_075,
+  PIPE_CTS_075,
+  v3,
+} from './shared';
 
-const P: Record<string, Vec2> = {
-  guideA: { x: 0.05, y: 1.32 },
-  guideB: { x: 0.23, y: 1.41 },
-  boxBack: { x: 0.104, y: 1.347 },
-  neckBase: { x: 0.185, y: 1.3875 },
-  head: { x: 0.95, y: 1.72 },
-  mastTop: { x: 0.05, y: 1.55 },
-  chinGuide: { x: 0.28, y: 1.25 },
-  handleBase: { x: 0.25, y: 0.85 },
-  pull: { x: 0.25, y: 1.0 },
+const P: Record<string, Vec3> = {
+  guideA: v3(0.05, 1.32, 0),
+  guideB: v3(0.23, 1.41, 0),
+  // second rail: the guide translated straight up by the keel height, so the
+  // keel node rides it at the same parameter as neckBase rides the guide
+  guideA2: v3(0.05, 1.44, 0),
+  guideB2: v3(0.23, 1.53, 0),
+  boxBack: v3(0.104, 1.347, 0),
+  neckBase: v3(0.185, 1.3875, 0),
+  keel: v3(0.185, 1.5075, 0),
+  head: v3(0.95, 1.72, 0),
+  mastTop: v3(0.05, 1.55, 0),
+  chinGuide: v3(0.28, 1.25, 0),
+  handleBase: v3(0.25, 0.85, 0),
+  pull: v3(0.25, 1.0, 0),
 };
 
-export function buildNeckTrussMechanism(): Mechanism {
+export function buildNeckTrussParts(prefix = ''): MechParts {
+  const n = (id: string) => prefix + id;
   const elements: MechanismElement[] = [
     {
-      id: 'aGuide',
+      id: n('aGuide'),
       type: 'link',
       maturity: 'engineered',
       subsystemTag: 'frame',
-      nodeA: 'guideA',
-      nodeB: 'guideB',
+      nodeA: n('guideA'),
+      nodeB: n('guideB'),
       pipeMaterialId: PIPE_075,
       endRealizationA: 'fitting',
       endRealizationB: 'fitting',
       pointMasses: [],
     },
     {
-      id: 'bundleCore',
+      id: n('bGuide'),
+      type: 'link',
+      maturity: 'engineered',
+      subsystemTag: 'frame',
+      nodeA: n('guideA2'),
+      nodeB: n('guideB2'),
+      pipeMaterialId: PIPE_075,
+      endRealizationA: 'fitting',
+      endRealizationB: 'fitting',
+      pointMasses: [],
+    },
+    {
+      id: n('bundleCore'),
       type: 'link',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeA: 'boxBack',
-      nodeB: 'neckBase',
+      nodeA: n('boxBack'),
+      nodeB: n('neckBase'),
       pipeMaterialId: PIPE_075,
       endRealizationA: 'ropeLashing',
       endRealizationB: 'ropeLashing',
       pointMasses: [],
     },
     {
-      id: 'neckBoom',
+      id: n('neckBoom'),
       type: 'link',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeA: 'neckBase',
-      nodeB: 'head',
+      nodeA: n('neckBase'),
+      nodeB: n('head'),
       pipeMaterialId: PIPE_075,
       endRealizationA: 'ropeLashing',
       endRealizationB: 'boltThrough',
@@ -63,12 +102,12 @@ export function buildNeckTrussMechanism(): Mechanism {
     // the steer grip slides on the handle pipe: a sliding telescope, so the
     // driven node can travel along the rail instead of fighting a rigid link
     {
-      id: 'zHandle',
+      id: n('zHandle'),
       type: 'telescope',
       maturity: 'engineered',
       subsystemTag: 'frame',
-      nodeA: 'handleBase',
-      nodeB: 'pull',
+      nodeA: n('handleBase'),
+      nodeB: n('pull'),
       minLengthM: 0.05,
       maxLengthM: 0.3,
       lengthM: 0.15,
@@ -77,48 +116,83 @@ export function buildNeckTrussMechanism(): Mechanism {
       innerPipeMaterialId: PIPE_CTS_075,
       pointMasses: [],
     },
+    // the keel post: rigidly part of the conduit box, riding the second rail
+    {
+      id: n('keelPost'),
+      type: 'link',
+      maturity: 'engineered',
+      subsystemTag: 'neck',
+      nodeA: n('neckBase'),
+      nodeB: n('keel'),
+      pipeMaterialId: PIPE_075,
+      endRealizationA: 'ropeLashing',
+      endRealizationB: 'conduitBox',
+      pointMasses: [],
+    },
     // conduit box = two point-on-line sliders on the guide axis
     {
-      id: 'boxSliderBack',
+      id: n('boxSliderBack'),
       type: 'slider',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeId: 'boxBack',
-      alongElementId: 'aGuide',
+      nodeId: n('boxBack'),
+      alongElementId: n('aGuide'),
       travelMin: 0.26,
       travelMax: 0.36,
       realization: 'conduitBox',
     },
     {
-      id: 'boxSliderFront',
+      id: n('boxSliderFront'),
       type: 'slider',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeId: 'neckBase',
-      alongElementId: 'aGuide',
+      nodeId: n('neckBase'),
+      alongElementId: n('aGuide'),
       travelMin: 0.71,
       travelMax: 0.81,
       realization: 'conduitBox',
     },
-    // lashing compliance: boom deviates from the bundle axis within ±20°
+    // the keel's slider on the second rail — the box's wide, roll-proof
+    // footprint on the mast
     {
-      id: 'boxPivot',
+      id: n('boxSliderKeel'),
+      type: 'slider',
+      maturity: 'engineered',
+      subsystemTag: 'neck',
+      nodeId: n('keel'),
+      alongElementId: n('bGuide'),
+      travelMin: 0.71,
+      travelMax: 0.81,
+      realization: 'conduitBox',
+    },
+    // lashing compliance: boom deviates from the bundle axis within ±20°,
+    // hinged about the sketch plane's normal (side-left elevation → +z).
+    // keelPost is a member so the hinge axis is tied to the off-rail keel —
+    // that tie is what kills the bracket-spin roll (see header comment).
+    {
+      id: n('boxPivot'),
       type: 'pivot',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeId: 'neckBase',
-      memberIds: ['bundleCore', 'neckBoom'],
+      nodeId: n('neckBase'),
+      joint: { kind: 'hinge', axis: HINGE_SAGITTAL },
+      memberIds: [n('bundleCore'), n('neckBoom'), n('keelPost')],
       welds: [],
-      angleLimit: { memberA: 'bundleCore', memberB: 'neckBoom', minRad: -0.35, maxRad: 0.35 },
+      angleLimit: {
+        memberA: n('bundleCore'),
+        memberB: n('neckBoom'),
+        minRad: -0.35,
+        maxRad: 0.35,
+      },
       realization: 'ropeLashing',
     },
     {
-      id: 'counterElastic',
+      id: n('counterElastic'),
       type: 'elastic',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      nodeA: 'mastTop',
-      nodeB: 'head',
+      nodeA: n('mastTop'),
+      nodeB: n('head'),
       restLengthM: 0.65,
       stiffnessNPerM: 185,
       tensionOnly: true,
@@ -129,20 +203,20 @@ export function buildNeckTrussMechanism(): Mechanism {
     // the-mast rope, and vice versa — together they pin the head attitude to
     // the grip position bidirectionally
     {
-      id: 'pitchRopeDown',
+      id: n('pitchRopeDown'),
       type: 'rope',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      path: ['pull', 'chinGuide', 'head'],
+      path: [n('pull'), n('chinGuide'), n('head')],
       lengthM: dist(P.pull!, P.chinGuide!) + dist(P.chinGuide!, P.head!) + 0.002,
       cordageMaterialId: CORD,
     },
     {
-      id: 'pitchRopeUp',
+      id: n('pitchRopeUp'),
       type: 'rope',
       maturity: 'engineered',
       subsystemTag: 'neck',
-      path: ['pull', 'handleBase', 'mastTop', 'head'],
+      path: [n('pull'), n('handleBase'), n('mastTop'), n('head')],
       lengthM:
         dist(P.pull!, P.handleBase!) +
         dist(P.handleBase!, P.mastTop!) +
@@ -153,25 +227,23 @@ export function buildNeckTrussMechanism(): Mechanism {
   ];
 
   return {
-    id: 'neck-truss',
-    name: 'Neck truss (pitch)',
-    viewOrientation: 'side-left',
-    gravityOn: true,
     nodes: [
-      { id: 'guideA', kind: 'anchor', position: P.guideA! },
-      { id: 'guideB', kind: 'anchor', position: P.guideB! },
-      { id: 'mastTop', kind: 'anchor', position: P.mastTop! },
-      { id: 'chinGuide', kind: 'anchor', position: P.chinGuide! },
-      { id: 'handleBase', kind: 'anchor', position: P.handleBase! },
-      { id: 'boxBack', kind: 'free', position: P.boxBack! },
-      { id: 'neckBase', kind: 'free', position: P.neckBase! },
-      { id: 'head', kind: 'free', position: P.head! },
-      { id: 'pull', kind: 'driven', position: P.pull!, channelId: 'chSteerPitch' },
+      { id: n('guideA'), kind: 'anchor', position: P.guideA! },
+      { id: n('guideB'), kind: 'anchor', position: P.guideB! },
+      { id: n('guideA2'), kind: 'anchor', position: P.guideA2! },
+      { id: n('guideB2'), kind: 'anchor', position: P.guideB2! },
+      { id: n('mastTop'), kind: 'anchor', position: P.mastTop! },
+      { id: n('chinGuide'), kind: 'anchor', position: P.chinGuide! },
+      { id: n('handleBase'), kind: 'anchor', position: P.handleBase! },
+      { id: n('boxBack'), kind: 'free', position: P.boxBack! },
+      { id: n('neckBase'), kind: 'free', position: P.neckBase! },
+      { id: n('keel'), kind: 'free', position: P.keel! },
+      { id: n('head'), kind: 'free', position: P.head! },
+      { id: n('pull'), kind: 'driven', position: P.pull!, channelId: 'chSteerPitch' },
     ],
     elements,
-    pointMasses: [{ id: 'headMass', name: 'head', massKg: 1.2, nodeId: 'head' }],
+    pointMasses: [{ id: n('headMass'), name: 'head', massKg: 1.2, nodeId: n('head') }],
     skeletonBindings: [],
-    anchorBindings: [],
     inputs: [
       {
         id: 'chSteerPitch',
@@ -184,6 +256,5 @@ export function buildNeckTrussMechanism(): Mechanism {
         locked: false,
       },
     ],
-    namedStates: [],
   };
 }

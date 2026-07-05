@@ -29,7 +29,11 @@ const PIPES = [
   pipe('small', 19.6, 15),
 ];
 
-const node = (id: string, x: number) => ({ id, kind: 'free' as const, position: { x, y: 0 } });
+const node = (id: string, x: number) => ({
+  id,
+  kind: 'free' as const,
+  position: { x, y: 0, z: 0 },
+});
 const link = (
   id: string,
   a: string,
@@ -51,8 +55,6 @@ function makeProject(elements: MechanismElement[], nodeCount = 4): Project {
   const mech: Mechanism = {
     id: 'm1',
     name: 'mech',
-    viewOrientation: 'side-left',
-    gravityOn: false,
     nodes: Array.from({ length: nodeCount }, (_, i) => node(`n${i + 1}`, i)),
     elements,
     pointMasses: [],
@@ -61,7 +63,7 @@ function makeProject(elements: MechanismElement[], nodeCount = 4): Project {
     inputs: [],
     namedStates: [],
   };
-  return { ...doc, mechanisms: [mech] };
+  return { ...doc, mechanism: mech };
 }
 
 const change = (
@@ -78,20 +80,20 @@ describe('autoResolve — pipe material fill', () => {
       link('l2', 'n2', 'n3', { pipeMaterialId: 'mid' }),
       link('l3', 'n3', 'n4'),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'l3', 'pipeMaterial')?.after).toBe('mid');
   });
 
   it('with no assignments anywhere, picks the stock size with the most slip partners', () => {
     const doc = makeProject([link('l1', 'n1', 'n2')]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     // big slips over mid and alt (2 partners); every other pipe has 1 or 0
     expect(change(p, 'l1', 'pipeMaterial')?.after).toBe('big');
   });
 
   it('never touches an assigned material without resolveAssigned', () => {
     const doc = makeProject([link('l1', 'n1', 'n2', { pipeMaterialId: 'small' })]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'l1', 'pipeMaterial')).toBeUndefined();
   });
 });
@@ -103,6 +105,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       type: 'pivot',
       maturity: 'sketch',
       nodeId,
+      joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
       memberIds,
       welds,
     }) as MechanismElement;
@@ -113,7 +116,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l2', 'n2', 'n3', { pipeMaterialId: 'mid' }),
       pivot('p1', 'n2', ['l1', 'l2']),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'p1', 'realization')?.after).toBe('nestedSleeve');
     // l2 is the inner member and terminates at n2 via its A end
     expect(change(p, 'l2', 'endRealizationA')?.after).toBe('nestedSleeve');
@@ -126,7 +129,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l2', 'n2', 'n3'), // unassigned — the fill pass would pick big
       pivot('p1', 'n2', ['l1', 'l2']),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     // instead of big/big + heat-wrap, the run resizes its own fill to nest
     expect(change(p, 'l2', 'pipeMaterial')?.after).toBe('mid');
     expect(change(p, 'p1', 'realization')?.after).toBe('nestedSleeve');
@@ -138,7 +141,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l2', 'n2', 'n3', { pipeMaterialId: 'small' }), // sloppy inside big
       pivot('p1', 'n2', ['l1', 'l2']),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'p1', 'realization')?.after).toBe('heatWrapPivot');
     expect(change(p, 'l2', 'pipeMaterial')).toBeUndefined(); // assigned — untouched
   });
@@ -149,7 +152,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l2', 'n2', 'n3', { pipeMaterialId: 'small' }),
       pivot('p1', 'n2', ['l1', 'l2']),
     ]);
-    const p = autoResolve(doc, 'm1', { resolveAssigned: true });
+    const p = autoResolve(doc, { resolveAssigned: true });
     const resize = change(p, 'l2', 'pipeMaterial');
     expect(resize?.after).toBe('mid');
     expect(resize?.before).toBe('small');
@@ -162,7 +165,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l2', 'n2', 'n3', { pipeMaterialId: 'big' }),
       pivot('p1', 'n2', ['l1', 'l2'], [['l1', 'l2']]),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'p1', 'realization')?.after).toBe('heatWrapRigid');
     const wrapEnds = p.changes.filter(
       (c) => c.after === 'heatWrapRigid' && c.slot.startsWith('endRealization'),
@@ -177,7 +180,7 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
       link('l3', 'n2', 'n4', { pipeMaterialId: 'mid' }),
       pivot('p1', 'n2', ['l1', 'l2', 'l3']),
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 'p1', 'realization')?.after).toBe('heatWrapPivot');
   });
 
@@ -189,8 +192,8 @@ describe('autoResolve — pivots prefer nesting over hardware', () => {
     ];
     (elements[2] as Extract<MechanismElement, { type: 'pivot' }>).realization = 'boltThrough';
     const doc = makeProject(elements);
-    expect(autoResolve(doc, 'm1', {}).changes).toEqual([]);
-    const p = autoResolve(doc, 'm1', { resolveAssigned: true });
+    expect(autoResolve(doc, {}).changes).toEqual([]);
+    const p = autoResolve(doc, { resolveAssigned: true });
     expect(change(p, 'p1', 'realization')?.after).toBe('nestedSleeve');
   });
 });
@@ -209,7 +212,7 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
         travelMax: 1,
       },
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 's1', 'realization')?.after).toBe('conduitBox');
   });
 
@@ -229,7 +232,7 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
         pointMasses: [],
       },
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 't1', 'innerPipeMaterial')?.after).toBe('mid');
   });
 
@@ -249,7 +252,7 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
         pointMasses: [],
       },
     ]);
-    const p = autoResolve(doc, 'm1', {});
+    const p = autoResolve(doc, {});
     expect(change(p, 't1', 'innerPipeMaterial')).toBeUndefined();
   });
 
@@ -259,7 +262,7 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
       link('l2', 'n2', 'n3'),
       link('l3', 'n3', 'n4'),
     ]);
-    const p = autoResolve(doc, 'm1', { elementIds: ['l2'] });
+    const p = autoResolve(doc, { elementIds: ['l2'] });
     expect(p.changes.map((c) => c.elementId)).toEqual(['l2']);
   });
 
@@ -272,11 +275,12 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
         type: 'pivot',
         maturity: 'sketch',
         nodeId: 'n2',
+        joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
         memberIds: ['l1', 'l2'],
         welds: [],
       },
     ]);
-    expect(autoResolve(doc, 'm1', {})).toEqual(autoResolve(doc, 'm1', {}));
+    expect(autoResolve(doc, {})).toEqual(autoResolve(doc, {}));
   });
 
   it('every change carries a human-readable reason', () => {
@@ -288,11 +292,12 @@ describe('autoResolve — sliders, telescopes, scope, determinism', () => {
         type: 'pivot',
         maturity: 'sketch',
         nodeId: 'n2',
+        joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
         memberIds: ['l1', 'l2'],
         welds: [],
       },
     ]);
-    for (const c of autoResolve(doc, 'm1', {}).changes) {
+    for (const c of autoResolve(doc, {}).changes) {
       expect(c.reason.length).toBeGreaterThan(5);
     }
   });
