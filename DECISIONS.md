@@ -1803,3 +1803,33 @@ acceptance tests, and a phase (or feature slice) isn't done until they
 pass — only the required ordering (tests before code) is gone. The
 skip-marked future-phase-test convention above remains valid history but is
 no longer mandated going forward.
+
+## Fully-3D conversion (2026-07-04)
+
+### DECISION: convert to fully-3D — single compound mechanism, hinge-default joints, quad-only workspace
+Joe concluded the strict-2D mechanism model was a mistake: real rigs joint in
+more than one plane, and §5.4's layered composition can't express multi-plane
+connections or force coupling. Agreed direction (plan-mode Q&A, all four
+options Joe-confirmed): (1) the project becomes ONE 3D compound mechanism —
+mechanisms demoted to named groups, the instance/binding/transform-drive layer
+deleted, mirroring becomes a duplicate-at-creation command; (2) pivots default
+to hinges whose axis is the sketch panel's normal (2D intuition carries over),
+with spherical as a per-joint option; (3) the quad workspace becomes the only
+mode (maximized ortho panel = old 2D feel, perspective panel = old assembly
+mode); (4) gravity is global −Y (the plan-view gravity-off hack dies). Full
+spec in PLANFILE-3d-conversion.md, which governs where it overlaps the main
+planfile. Sizing: ~60–70% of the original build; solver (~1.9k lines) and
+editor (~3.5k lines) rewritten; wearer skeleton, quad/3D render stack, BOM
+math survive. The custom-XPBD solver decision pays off: constraints generalize
+to Vec3 mechanically and a hinge is the classic two-shared-points particle
+trick — an engine wrapper would have forced a full re-integration.
+
+### DECISION: review gates waived for the initial autonomous conversion run
+CLAUDE.md pauses for human review after the planfile and solver phases. Joe
+(2026-07-04, heading out): "Use subagents to just gobble up all this shit.
+Don't stop until you run out of token usage or you are done." The run executes
+all phases end-to-end on worktree branch `worktree-3d-conversion` (unmerged;
+Joe reviews the whole branch instead). Per-commit CI green applies to main;
+this branch may carry WIP checkpoints but ends green. Implementation is
+parallelized across subagents with disjoint file ownership; decisions made by
+agents land under this heading's sub-entries.

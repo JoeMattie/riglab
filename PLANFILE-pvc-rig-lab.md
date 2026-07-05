@@ -47,6 +47,7 @@ The primary loop is **sketching and playing**, not CAD. The user selects a view 
 - Save/load designs locally (IndexedDB app database); export/import JSON.
 
 ### Non-goals (v1)
+*(Superseded 2026-07-04: the "no global 3D solve" stance — stated in §5.4 and implicit throughout §4's 2D mechanism model — is reversed by `PLANFILE-3d-conversion.md`, which governs wherever it overlaps this file: single 3D compound mechanism, hinge-default joints, quad-only workspace. §4.2/§4.3/§5.4/§8's planar-mechanism and assembly-composition language is historical.)*
 - No full rigid-body dynamics engine, no collision detection, no inertia/momentum simulation.
 - No FEA or pipe stress analysis. (Stretch goal: closed-form cantilever sag estimate per span — see §10.)
 - No electronics modeling (a speaker/battery is just a user-defined point mass).
