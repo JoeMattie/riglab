@@ -38,6 +38,7 @@ import { formatForce } from '../forces';
 import {
   AssignSelect,
   degrees,
+  FocusTarget,
   kilograms,
   LengthField,
   metres,
@@ -421,13 +422,17 @@ function DesignSections({
     <>
       {(el.type === 'link' || el.type === 'bentLink') && (
         <Section title="Material">
-          <AssignSelect
-            value={el.pipeMaterialId}
-            options={pipeOptions(materials)}
-            placeholder="assign a pipe…"
-            testId="material-select"
-            onChange={(id) => updateCurrent((cur) => assignPipeMaterial(cur, mech.id, [el.id], id))}
-          />
+          <FocusTarget control="material">
+            <AssignSelect
+              value={el.pipeMaterialId}
+              options={pipeOptions(materials)}
+              placeholder="assign a pipe…"
+              testId="material-select"
+              onChange={(id) =>
+                updateCurrent((cur) => assignPipeMaterial(cur, mech.id, [el.id], id))
+              }
+            />
+          </FocusTarget>
           {applyToSimilar.length > 0 && (
             <Button
               type="button"
@@ -450,60 +455,66 @@ function DesignSections({
 
       {el.type === 'telescope' && (
         <Section title="Materials (outer / inner)">
-          <div className="flex flex-col gap-1">
-            <AssignSelect
-              value={el.outerPipeMaterialId}
-              options={pipeOptions(materials)}
-              placeholder="outer pipe…"
-              testId="material-select-outer"
-              onChange={(id) =>
-                updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'outer', id))
-              }
-            />
-            <AssignSelect
-              value={el.innerPipeMaterialId}
-              options={pipeOptions(materials)}
-              placeholder="inner pipe…"
-              testId="material-select-inner"
-              onChange={(id) =>
-                updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'inner', id))
-              }
-            />
-            <NestingBadge el={el} materials={materials} />
-          </div>
+          <FocusTarget control="material">
+            <div className="flex flex-col gap-1">
+              <AssignSelect
+                value={el.outerPipeMaterialId}
+                options={pipeOptions(materials)}
+                placeholder="outer pipe…"
+                testId="material-select-outer"
+                onChange={(id) =>
+                  updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'outer', id))
+                }
+              />
+              <AssignSelect
+                value={el.innerPipeMaterialId}
+                options={pipeOptions(materials)}
+                placeholder="inner pipe…"
+                testId="material-select-inner"
+                onChange={(id) =>
+                  updateCurrent((cur) => assignTelescopeMaterial(cur, mech.id, el.id, 'inner', id))
+                }
+              />
+              <NestingBadge el={el} materials={materials} />
+            </div>
+          </FocusTarget>
         </Section>
       )}
 
       {(el.type === 'rope' || el.type === 'elastic' || el.type === 'bowden') && (
         <Section title="Material">
-          <AssignSelect
-            value={el.cordageMaterialId}
-            options={cordageOptions(
-              materials,
-              el.type === 'rope' ? 'rope' : el.type === 'elastic' ? 'elastic' : 'bowdenCable',
-            )}
-            placeholder="assign cordage…"
-            testId="material-select"
-            onChange={(id) =>
-              updateCurrent((cur) => assignCordageMaterial(cur, mech.id, [el.id], id))
-            }
-          />
+          <FocusTarget control="material">
+            <AssignSelect
+              value={el.cordageMaterialId}
+              options={cordageOptions(
+                materials,
+                el.type === 'rope' ? 'rope' : el.type === 'elastic' ? 'elastic' : 'bowdenCable',
+              )}
+              placeholder="assign cordage…"
+              testId="material-select"
+              onChange={(id) =>
+                updateCurrent((cur) => assignCordageMaterial(cur, mech.id, [el.id], id))
+              }
+            />
+          </FocusTarget>
         </Section>
       )}
 
       {(el.type === 'pivot' || el.type === 'slider') && (
         <Section title="Realization">
-          <AssignSelect
-            value={el.realization}
-            options={REALIZATION_OPTIONS}
-            placeholder="choose a realization…"
-            testId="realization-select"
-            onChange={(r) =>
-              updateCurrent((cur) =>
-                assignRealization(cur, mech.id, [el.id], r as JointRealization | undefined),
-              )
-            }
-          />
+          <FocusTarget control="realization">
+            <AssignSelect
+              value={el.realization}
+              options={REALIZATION_OPTIONS}
+              placeholder="choose a realization…"
+              testId="realization-select"
+              onChange={(r) =>
+                updateCurrent((cur) =>
+                  assignRealization(cur, mech.id, [el.id], r as JointRealization | undefined),
+                )
+              }
+            />
+          </FocusTarget>
         </Section>
       )}
 

@@ -19,6 +19,18 @@ export type Tool =
  * mechanisms or faces never destroys data. */
 export type Face = 'sketch' | 'design';
 
+/** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
+ * alongside, materials (incl. nesting matrix) and BOM as siblings. */
+export type RightTab = 'inspector' | 'checklist' | 'materials' | 'bom';
+
+/** Checklist click-to-fix routing (§8.2 "opens exactly the needed control"):
+ * a transient one-shot hint the target control consumes (scroll + highlight)
+ * then clears. */
+export interface FocusHint {
+  control: 'material' | 'realization' | 'channel';
+  channelId?: string;
+}
+
 /** Equilibrium (§5.2) settle state for the force overlays. `unavailable`
  * covers the pre-merge worktree where the solver's equilibrium mode is not yet
  * implemented — the UI degrades gracefully rather than throwing. */
@@ -60,6 +72,8 @@ export interface EditorState {
   activeMechanismId: string | null;
   tool: Tool;
   face: Face;
+  rightTab: RightTab;
+  focusHint: FocusHint | null;
   /** multi-select (§8.2a): order = click order; empty = nothing selected */
   selectedElementIds: string[];
   /** live solved pose during drag/playback; null = document positions */
@@ -79,6 +93,8 @@ export interface EditorState {
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
   setFace(face: Face): void;
+  setRightTab(tab: RightTab): void;
+  setFocusHint(hint: FocusHint | null): void;
   /** replace the selection with one element (null clears) */
   select(elementId: string | null): void;
   /** shift/cmd-click semantics: add if absent, remove if present */
@@ -99,6 +115,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   activeMechanismId: null,
   tool: 'select',
   face: 'sketch',
+  rightTab: 'inspector',
+  focusHint: null,
   selectedElementIds: [],
   posePositions: null,
   playback: { clipName: null, playing: false, tS: 0, speed: 1, amplitude: 1 },
@@ -116,6 +134,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
     set({ activeMechanismId: id, posePositions: null, selectedElementIds: [], tracePath: [] }),
   setTool: (tool) => set({ tool, pendingConnect: null }),
   setFace: (face) => set({ face }),
+  setRightTab: (rightTab) => set({ rightTab }),
+  setFocusHint: (focusHint) => set({ focusHint }),
   select: (elementId) => set({ selectedElementIds: elementId === null ? [] : [elementId] }),
   toggleSelect: (elementId) =>
     set((s) => ({

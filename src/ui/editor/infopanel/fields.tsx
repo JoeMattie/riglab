@@ -1,9 +1,10 @@
 // Small building blocks shared by the info-panel sections (§8.2a): labelled
 // rows, a commit-on-blur/Enter numeric field (plus a unit-aware length
 // variant), and assignment Selects.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { JointRealization, UnitsPreference } from '../../../schema';
 import { jointRealizationSchema } from '../../../schema';
+import { useEditorStore } from '../../../state/editorStore';
 import { Input } from '../../components/input';
 import {
   Select,
@@ -70,6 +71,37 @@ export function NumberField({
         if (e.key === 'Escape') setText(fmt(value));
       }}
     />
+  );
+}
+
+/** Checklist click-to-fix landing zone (§8.2 "opens exactly the needed
+ * control"): when the transient focusHint names this control, scroll it into
+ * view, ring-highlight it, and clear the hint after a beat. */
+export function FocusTarget({
+  control,
+  children,
+}: {
+  control: 'material' | 'realization';
+  children: React.ReactNode;
+}) {
+  const hint = useEditorStore((s) => s.focusHint);
+  const setFocusHint = useEditorStore((s) => s.setFocusHint);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = hint?.control === control;
+  useEffect(() => {
+    if (!active) return;
+    ref.current?.scrollIntoView?.({ block: 'center' });
+    const t = setTimeout(() => setFocusHint(null), 1600);
+    return () => clearTimeout(t);
+  }, [active, setFocusHint]);
+  return (
+    <div
+      ref={ref}
+      data-testid={`focus-target-${control}`}
+      className={active ? 'rounded-md ring-2 ring-ring ring-offset-1' : undefined}
+    >
+      {children}
+    </div>
   );
 }
 

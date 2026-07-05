@@ -9,8 +9,8 @@ import { Button } from './components/button';
 import { ToggleGroup, ToggleGroupItem } from './components/toggle-group';
 import { ConnectMenu } from './editor/ConnectMenu';
 import { ForcesPanel } from './editor/ForcesPanel';
-import { InfoPanel } from './editor/infopanel/InfoPanel';
 import { MechanismTabs } from './editor/MechanismTabs';
+import { RightDock } from './editor/RightDock';
 import { SketchCanvas } from './editor/SketchCanvas';
 import { Toolbar } from './editor/Toolbar';
 import { TransportBar } from './editor/TransportBar';
@@ -64,6 +64,7 @@ export function EditorShell() {
         tool: s.tool,
         face: s.face,
         selectedElementIds: s.selectedElementIds,
+        rightTab: s.rightTab,
       };
     };
     // seam for exercising the equilibrium force-overlay plumbing while the
@@ -176,7 +177,7 @@ export function EditorShell() {
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
         <SketchCanvas />
         <ConnectMenu />
-        <InfoPanel />
+        <RightDock />
       </div>
       <ForcesPanel />
       <TransportBar />

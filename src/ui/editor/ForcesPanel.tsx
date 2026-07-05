@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { InputChannel, UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import {
@@ -35,6 +36,17 @@ export function ForcesPanel() {
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
   const setEquilibriumOn = useEditorStore((s) => s.setEquilibriumOn);
   const equilibrium = useEditorStore((s) => s.equilibrium);
+  const focusHint = useEditorStore((s) => s.focusHint);
+  const setFocusHint = useEditorStore((s) => s.setFocusHint);
+
+  // checklist click-to-fix for unbound channels (§8.2): flash the chip,
+  // then clear the one-shot hint
+  const focusedChannelId = focusHint?.control === 'channel' ? focusHint.channelId : undefined;
+  useEffect(() => {
+    if (!focusedChannelId) return;
+    const t = setTimeout(() => setFocusHint(null), 1600);
+    return () => clearTimeout(t);
+  }, [focusedChannelId, setFocusHint]);
 
   const mech = doc?.mechanisms.find((m) => m.id === activeMechanismId) ?? null;
   if (!doc || !mech) return null;
@@ -108,6 +120,7 @@ export function ForcesPanel() {
             <div
               key={ch.id}
               data-testid="input-channel"
+              data-focused={ch.id === focusedChannelId || undefined}
               style={{
                 display: 'flex',
                 gap: 5,
@@ -115,6 +128,9 @@ export function ForcesPanel() {
                 border: '1px solid #e2e2e8',
                 borderRadius: 6,
                 padding: '2px 6px',
+                ...(ch.id === focusedChannelId
+                  ? { outline: '2px solid #57f', outlineOffset: 1 }
+                  : {}),
               }}
             >
               <input
