@@ -3,14 +3,19 @@ import { type BalanceQuery, balanceReport, composeProject } from '../../assembly
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { computeSkeleton, getClip, REST_POSE, samplePose } from '../../wearer';
-import { instanceSegments, mannequinBones, type Segment } from './scene';
+import {
+  type InstancePrimitives,
+  instancePrimitives,
+  mannequinTubes,
+  type TubePrim,
+} from './scene';
 
-export interface InstanceLines {
+export interface InstancePrims {
   id: string;
   name: string;
   mechanismId: string;
   driven: boolean;
-  segments: Segment[];
+  prims: InstancePrimitives;
 }
 
 /** Solve + compose the whole assembly at the current playback pose and derive
@@ -31,7 +36,7 @@ export function useAssemblyScene(pivot: BalanceQuery) {
     const composition = composeProject(project, { pose });
     const mechById = new Map(project.mechanisms.map((m) => [m.id, m]));
 
-    const instanceLines: InstanceLines[] = project.assembly.instances.map((inst) => {
+    const instances: InstancePrims[] = project.assembly.instances.map((inst) => {
       const composed = composition.instances[inst.id];
       const mech = mechById.get(inst.mechanismId);
       return {
@@ -39,14 +44,19 @@ export function useAssemblyScene(pivot: BalanceQuery) {
         name: inst.name,
         mechanismId: inst.mechanismId,
         driven: inst.transformDrive.kind !== 'fixed',
-        segments: composed && mech ? instanceSegments(mech.elements, composed.nodeWorld) : [],
+        prims:
+          composed && mech
+            ? instancePrimitives(mech.elements, composed.nodeWorld, project.materials.pipes)
+            : { tubes: [], cables: [] },
       };
     });
 
+    const mannequin: TubePrim[] = mannequinTubes(frame);
+
     return {
       composition,
-      bones: mannequinBones(frame),
-      instanceLines,
+      mannequin,
+      instances,
       report: balanceReport(composition.masses, pivot),
     };
   }, [project, tS, clipName, amplitude, pivot]);

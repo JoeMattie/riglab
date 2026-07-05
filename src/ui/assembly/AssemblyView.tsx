@@ -3,19 +3,28 @@
 // and a live analysis sidebar (mass, CG, seesaw balance about a chosen axis).
 // The clip transport (kept mounted by the shell) animates the whole creature
 // here. Placement gizmos translate/rotate the selected fixed-drive instance.
-import { OrbitControls, TransformControls } from '@react-three/drei';
+import { Line, OrbitControls, TransformControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
-import type { Group, Object3D } from 'three';
+import { type Group, type Object3D, Quaternion as ThreeQuat, Vector3 } from 'three';
 import type { BalanceQuery } from '../../assembly';
 import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { setInstanceTransform, setPointMassKg } from '../../state/docOps';
 import { EDGE, panelStyle, T } from '../editor/theme';
-import type { Segment } from './scene';
+import type { CablePrim, TubePrim } from './scene';
 import { useAssemblyScene } from './useAssemblyScene';
 
 const tuple = (v: Vec3): [number, number, number] => [v.x, v.y, v.z];
+
+/** Scene palette: solid shaded tubes on the light canvas — the 1-px
+ * lineSegments this replaces were invisible (WebGL ignores linewidth). */
+const C = {
+  pvc: '#e7e9ee', // engineered tube — PVC white, reads via shading
+  sketch: '#94a0b4', // generic-OD stand-in for sketch elements
+  cable: '#5f6a7d',
+  mannequin: '#565e6e',
+} as const;
 
 /** Pivot-axis presets for the seesaw report (§5.4). The hips carry the seesaw
  * spine; the shoulders are the other natural fulcrum. Axis is wearer-left (+z);
@@ -43,23 +52,61 @@ const PIVOTS: { key: string; label: string; query: BalanceQuery }[] = [
   },
 ];
 
-function Segments({ data, color, width }: { data: Segment[]; color: string; width: number }) {
-  // one BufferGeometry of line segments; cheap enough to rebuild per frame
-  const positions = useMemo(() => {
-    const arr = new Float32Array(data.length * 6);
-    data.forEach(([a, b], i) => {
-      arr.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6);
-    });
-    return arr;
-  }, [data]);
-  if (data.length === 0) return null;
+const WORLD_UP = new Vector3(0, 1, 0);
+
+/** One capsule per tube primitive; geometry is rebuilt when the pose changes
+ * (tube count is small — tens per creature — so per-frame rebuild is fine). */
+function Tube({ t, color, opacity = 1 }: { t: TubePrim; color?: string; opacity?: number }) {
+  const placed = useMemo(() => {
+    const a = new Vector3(t.a.x, t.a.y, t.a.z);
+    const b = new Vector3(t.b.x, t.b.y, t.b.z);
+    const dir = b.clone().sub(a);
+    const len = dir.length();
+    if (len < 1e-6) return null;
+    return {
+      mid: a.clone().add(b).multiplyScalar(0.5),
+      quat: new ThreeQuat().setFromUnitVectors(WORLD_UP, dir.multiplyScalar(1 / len)),
+      len,
+    };
+  }, [t]);
+  if (!placed) return null;
   return (
-    <lineSegments>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial color={color} linewidth={width} />
-    </lineSegments>
+    <mesh position={placed.mid} quaternion={placed.quat}>
+      <capsuleGeometry args={[t.radiusM, placed.len, 3, 12]} />
+      <meshStandardMaterial
+        color={color ?? (t.style === 'engineered' ? C.pvc : C.sketch)}
+        roughness={0.55}
+        transparent={opacity < 1}
+        opacity={opacity}
+      />
+    </mesh>
+  );
+}
+
+function Tubes({ tubes, color, opacity }: { tubes: TubePrim[]; color?: string; opacity?: number }) {
+  return (
+    <>
+      {tubes.map((t, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
+        <Tube key={i} t={t} color={color} opacity={opacity} />
+      ))}
+    </>
+  );
+}
+
+function Cables({ cables, color }: { cables: CablePrim[]; color?: string }) {
+  return (
+    <>
+      {cables.map((c, i) => (
+        <Line
+          // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
+          key={i}
+          points={c.points.map(tuple)}
+          color={color ?? C.cable}
+          lineWidth={2}
+        />
+      ))}
+    </>
   );
 }
 
@@ -68,14 +115,14 @@ interface Scene3DProps {
   scene: NonNullable<ReturnType<typeof useAssemblyScene>>;
 }
 
-function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
+export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
-  const instances = useAppStore((s) => s.current?.assembly.instances);
+  const docInstances = useAppStore((s) => s.current?.assembly.instances);
   const gizmoRef = useRef<Group>(null);
 
-  const { bones, instanceLines, composition } = scene;
+  const { mannequin, instances, composition } = scene;
   const cg = composition.cg;
-  const selected = instances?.find((i) => i.id === selectedInstanceId);
+  const selected = docInstances?.find((i) => i.id === selectedInstanceId);
   const selectable = selected && selected.transformDrive.kind === 'fixed';
 
   const commitGizmo = () => {
@@ -96,22 +143,24 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
 
   return (
     <>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[2, 4, 3]} intensity={0.6} />
-      <gridHelper args={[6, 24, T.border, T.hairline]} />
+      <ambientLight intensity={0.85} />
+      <directionalLight position={[2, 4, 3]} intensity={1.1} />
+      <directionalLight position={[-3, 2, -2]} intensity={0.35} />
+      <gridHelper args={[6, 24, '#b6bcc7', '#dde1e7']} />
 
-      {/* wearer mannequin */}
-      <Segments data={bones} color="#c8ccd4" width={1} />
+      {/* wearer mannequin (capsules, not 1-px lines — §8.3 visibility) */}
+      <Tubes tubes={mannequin} color={C.mannequin} />
 
-      {/* mechanism instances */}
-      {instanceLines.map((inst) => (
-        <Segments
-          key={inst.id}
-          data={inst.segments}
-          color={inst.id === selectedInstanceId ? T.accent : '#5b6472'}
-          width={inst.id === selectedInstanceId ? 3 : 2}
-        />
-      ))}
+      {/* mechanism instances: rigid members as tubes, tension members as cables */}
+      {instances.map((inst) => {
+        const sel = inst.id === selectedInstanceId;
+        return (
+          <group key={inst.id}>
+            <Tubes tubes={inst.prims.tubes} color={sel ? T.accent : undefined} />
+            <Cables cables={inst.prims.cables} color={sel ? T.accent : undefined} />
+          </group>
+        );
+      })}
 
       {/* point-mass markers */}
       {composition.masses.map((m) => (
@@ -128,7 +177,14 @@ function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
             <sphereGeometry args={[0.05, 16, 16]} />
             <meshStandardMaterial color={T.accent} />
           </mesh>
-          <Segments data={[[cg, { x: cg.x, y: 0, z: cg.z }]]} color={T.accent} width={1} />
+          <Line
+            points={[tuple(cg), [cg.x, 0, cg.z]]}
+            color={T.accent}
+            lineWidth={1.5}
+            dashed
+            dashSize={0.03}
+            gapSize={0.02}
+          />
         </>
       )}
 
@@ -174,6 +230,7 @@ export function AssemblyView() {
         camera={{ position: [2.4, 1.6, 2.6], fov: 45 }}
         style={{ position: 'absolute', inset: 0 }}
       >
+        <color attach="background" args={['#eef0f4']} />
         {scene && <Scene3D selectedInstanceId={selectedInstanceId} scene={scene} />}
       </Canvas>
 
