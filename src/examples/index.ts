@@ -14,6 +14,7 @@ import seesawSpineJson from './seesaw-spine.json';
 import splayedLegsJson from './splayed-legs.json';
 import steerMirrorJson from './steer-mirror.json';
 import tailJson from './tail.json';
+import tailGimbalJson from './tail-gimbal.json';
 
 export {
   ARTIFACT_BUILDERS,
@@ -25,6 +26,7 @@ export {
   buildSeesawSpineProject,
   buildSplayedLegsProject,
   buildSteerMirrorProject,
+  buildTailGimbalProject,
   buildTailProject,
 } from './builders';
 
@@ -99,6 +101,13 @@ export const EXAMPLES: BundledExample[] = [
     description:
       'Mirrored gait-driven legs with off-panel hinge axes and a sprung hip-yaw joint — the paw wanders in 3D.',
     load: load(splayedLegsJson),
+  },
+  {
+    id: 'example-tail-gimbal',
+    name: 'Tail gimbal (wag × lift)',
+    description:
+      'Stacked non-parallel hinges: rope-driven wag carries a sprung lift, and the swish clip orbits the tip in 3D.',
+    load: load(tailGimbalJson),
   },
 ];
 
