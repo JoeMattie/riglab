@@ -129,7 +129,21 @@ interface EndpointDrag {
 export const lengthStepM = (units: 'imperial' | 'metric'): number =>
   units === 'imperial' ? 0.5 * M_PER_IN : 0.01;
 
-export function SketchCanvas() {
+/** World-context ghost overlay for the quad workspace (PLANFILE-quad-
+ * workspace slice 4): other mechanisms' geometry projected into the active
+ * mechanism's local frame, clickable to switch the active mechanism. */
+export interface PanelOverlayItem {
+  mechanismId: string;
+  name: string;
+  segments: [Vec2, Vec2][];
+}
+
+export interface PanelOverlay {
+  items: PanelOverlayItem[];
+  onPick(mechanismId: string): void;
+}
+
+export function SketchCanvas({ overlay }: { overlay?: PanelOverlay | null } = {}) {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const beginGesture = useAppStore((s) => s.beginGesture);
@@ -1024,6 +1038,42 @@ export function SketchCanvas() {
               />
             ))}
         </Layer>
+
+        {/* quad-workspace ghost overlay: other mechanisms in this plane,
+            projected into the active mechanism's frame; click to activate */}
+        {overlay && overlay.items.length > 0 && (
+          <Layer>
+            {overlay.items.map((item, gi) => (
+              <Group
+                // biome-ignore lint/suspicious/noArrayIndexKey: a mechanism can ghost twice (mirrored instances); items regenerate wholesale
+                key={`${item.mechanismId}:${gi}`}
+                onClick={() => overlay.onPick(item.mechanismId)}
+                onTap={() => overlay.onPick(item.mechanismId)}
+                onMouseEnter={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = 'pointer';
+                }}
+                onMouseLeave={(e) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = '';
+                }}
+              >
+                {item.segments.map((seg, i) => (
+                  <Line
+                    // biome-ignore lint/suspicious/noArrayIndexKey: ghost segments are positional, regenerated wholesale
+                    key={i}
+                    points={flat(seg)}
+                    stroke="#b8c1cf"
+                    strokeWidth={3.5}
+                    opacity={0.55}
+                    lineCap="round"
+                    hitStrokeWidth={12}
+                  />
+                ))}
+              </Group>
+            ))}
+          </Layer>
+        )}
 
         <Layer>
           {mech.elements.map((el) => {

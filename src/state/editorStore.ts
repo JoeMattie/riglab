@@ -20,8 +20,13 @@ export type Tool =
 export type Face = 'sketch' | 'design';
 
 /** Top-level editor mode (§8): the 2D per-mechanism editor (with sketch/design
- * faces) vs. the global 3D Assembly viewport. Transient, never persisted. */
-export type Mode = '2d' | '3d';
+ * faces), the global 3D Assembly viewport, or the quad workspace
+ * (Top/Front/Side ortho panels + perspective, PLANFILE-quad-workspace).
+ * Transient, never persisted. */
+export type Mode = '2d' | '3d' | 'quad';
+
+/** Quad-workspace panels; `persp` is the 3D perspective preview. */
+export type QuadPanelId = 'top' | 'front' | 'side' | 'persp';
 
 /** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
  * alongside, materials (incl. nesting matrix) and BOM as siblings. */
@@ -126,6 +131,8 @@ export interface EditorState {
   /** 3D viewport render: wireframe tubes vs the solved pipe-and-fittings
    * model (PLANFILE-quad-workspace slice 3) */
   assemblyRender: 'wire' | 'pipe';
+  /** quad workspace: the panel currently maximized (double-click header) */
+  quadMaximized: QuadPanelId | null;
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
@@ -151,6 +158,7 @@ export interface EditorState {
   setEquilibriumOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
   setAssemblyRender(render: 'wire' | 'pipe'): void;
+  setQuadMaximized(panel: QuadPanelId | null): void;
 }
 
 export const useEditorStore = create<EditorState>()((set) => ({
@@ -174,6 +182,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
   equilibriumOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
   assemblyRender: 'wire',
+  quadMaximized: null,
 
   // face is deliberately kept on mechanism switch — it is a lens, not a
   // per-mechanism property (§8)
@@ -224,4 +233,5 @@ export const useEditorStore = create<EditorState>()((set) => ({
     }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
   setAssemblyRender: (assemblyRender) => set({ assemblyRender }),
+  setQuadMaximized: (quadMaximized) => set({ quadMaximized }),
 }));

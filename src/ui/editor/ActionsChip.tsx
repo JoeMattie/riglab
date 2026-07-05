@@ -106,6 +106,7 @@ export function ActionsChip() {
       >
         {modeSegment('2d', '2D')}
         {modeSegment('3d', '3D')}
+        {modeSegment('quad', 'Quad')}
       </span>
       {mode === '2d' && (
         <span

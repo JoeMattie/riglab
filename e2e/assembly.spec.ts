@@ -72,3 +72,32 @@ test('3D assembly mode renders the full creature with a live mass readout', asyn
 
   expect(errors).toEqual([]);
 });
+
+test('quad workspace mounts four panels and hosts one 2D editor', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+
+  await page.goto('/');
+  await page.getByTestId('new-project-name').fill('Quad check');
+  await page.getByTestId('create-project').click();
+  await expect(page.getByTestId('project-name-input')).toBeVisible();
+  await page.evaluate(() =>
+    (window as unknown as { __riglab: AssemblyHook }).__riglab.loadExample('example-full-creature'),
+  );
+
+  await page.getByTestId('mode-quad').click();
+  for (const id of ['top', 'persp', 'front', 'side']) {
+    await expect(page.getByTestId(`quad-panel-${id}`)).toBeVisible();
+  }
+  // exactly one panel hosts the active mechanism's full editor; the other
+  // ortho panels are read-only ghost projections
+  await expect(page.getByTestId('sketch-canvas')).toHaveCount(1);
+
+  // double-click a panel header maximizes it; again restores the grid
+  await page.getByRole('button', { name: 'Perspective', exact: true }).dblclick();
+  await expect(page.getByTestId('quad-panel-top')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Perspective', exact: true }).dblclick();
+  await expect(page.getByTestId('quad-panel-top')).toBeVisible();
+
+  expect(errors).toEqual([]);
+});

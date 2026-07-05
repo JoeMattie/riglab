@@ -34,7 +34,7 @@ export function PipeModelLayer({ model }: { model: PipeModel }) {
   return (
     <>
       {model.prims.map((p, i) => {
-        // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
+        // primitives are positional per pose, so the index is a stable key
         const key = i;
         switch (p.kind) {
           case 'cylinder':
@@ -63,6 +63,8 @@ export function PipeModelLayer({ model }: { model: PipeModel }) {
                 />
               </mesh>
             );
+          default:
+            return null;
         }
       })}
     </>

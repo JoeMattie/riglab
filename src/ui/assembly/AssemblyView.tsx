@@ -455,7 +455,7 @@ export function AssemblyView() {
 
 /** Wireframe ↔ pipe-model toggle (the "solve pipe model" button): floating
  * pill on the viewport's left edge, mirroring the 2D tool pill's position. */
-export function RenderTogglePill() {
+export function RenderTogglePill({ style }: { style?: React.CSSProperties } = {}) {
   const assemblyRender = useEditorStore((s) => s.assemblyRender);
   const setAssemblyRender = useEditorStore((s) => s.setAssemblyRender);
   const options = [
@@ -473,6 +473,7 @@ export function RenderTogglePill() {
         display: 'flex',
         gap: 2,
         padding: 3,
+        ...style,
       }}
     >
       {options.map((o) => (

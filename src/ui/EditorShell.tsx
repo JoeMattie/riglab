@@ -18,6 +18,7 @@ import { SketchCanvas } from './editor/SketchCanvas';
 import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
 import { EDGE, panelStyle, T } from './editor/theme';
+import { QuadView } from './quad/QuadView';
 
 export function EditorShell() {
   const current = useAppStore((s) => s.current);
@@ -121,17 +122,18 @@ export function EditorShell() {
       }}
     >
       {/* full-bleed canvas; all chrome floats above it. 3D Assembly mode
-          (§8.3) swaps the 2D sketch canvas for the orbit viewport; the clip
-          transport stays mounted so playback drives both. */}
+          (§8.3) swaps the 2D sketch canvas for the orbit viewport; quad mode
+          (PLANFILE-quad-workspace) shows the 2×2 ortho/perspective workspace;
+          the clip transport stays mounted so playback drives all of them. */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-        {mode === '3d' ? <AssemblyView /> : <SketchCanvas />}
+        {mode === '3d' ? <AssemblyView /> : mode === 'quad' ? <QuadView /> : <SketchCanvas />}
       </div>
 
       <ProjectChip />
       <ActionsChip />
-      {mode === '2d' && <ToolPill />}
+      {mode !== '3d' && <ToolPill />}
       <TransportPill />
-      {mode === '2d' && <DofPill />}
+      {mode !== '3d' && <DofPill />}
 
       {/* design face: the tabbed inspector/checklist/materials/BOM dock
           floats as a right-hand column (its feature scope is unchanged by
