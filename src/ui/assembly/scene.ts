@@ -3,14 +3,13 @@
 // mannequin) the r3f layer draws as <Line>s. Kept pure so the geometry is
 // unit-testable without a WebGL context.
 
-import type { ComposedInstance } from '../../assembly';
+import { type ComposedInstance, GENERIC_PIPE_OD_M } from '../../assembly';
 import type { MechanismElement, PipeMaterial, Vec3 } from '../../schema';
 import type { SkeletonFrame } from '../../wearer/skeleton';
 
 export type Segment = [Vec3, Vec3];
 
-/** Default OD for sketch-maturity tubes (3/4" NPS look, §4.2 generic pipe). */
-export const GENERIC_PIPE_OD_M = 0.0267;
+export { GENERIC_PIPE_OD_M };
 /** Mannequin capsule radius — thick enough to read against the light bg. */
 export const MANNEQUIN_RADIUS_M = 0.035;
 

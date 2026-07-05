@@ -123,6 +123,9 @@ export interface EditorState {
    * sketch face hides forces by default (§8.1) */
   equilibriumOn: boolean;
   equilibrium: EquilibriumReadout;
+  /** 3D viewport render: wireframe tubes vs the solved pipe-and-fittings
+   * model (PLANFILE-quad-workspace slice 3) */
+  assemblyRender: 'wire' | 'pipe';
 
   setActiveMechanism(id: string | null): void;
   setTool(tool: Tool): void;
@@ -147,6 +150,7 @@ export interface EditorState {
   setDiagnostics(dof: EditorState['dof'], violated: string[]): void;
   setEquilibriumOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
+  setAssemblyRender(render: 'wire' | 'pipe'): void;
 }
 
 export const useEditorStore = create<EditorState>()((set) => ({
@@ -169,6 +173,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
   dof: null,
   equilibriumOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
+  assemblyRender: 'wire',
 
   // face is deliberately kept on mechanism switch — it is a lens, not a
   // per-mechanism property (§8)
@@ -218,4 +223,5 @@ export const useEditorStore = create<EditorState>()((set) => ({
       equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM,
     }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
+  setAssemblyRender: (assemblyRender) => set({ assemblyRender }),
 }));

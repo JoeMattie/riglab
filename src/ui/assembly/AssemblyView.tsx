@@ -6,12 +6,15 @@
 import { Line, OrbitControls, TransformControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
-import { type Group, type Object3D, Quaternion as ThreeQuat, Vector3 } from 'three';
-import type { BalanceQuery } from '../../assembly';
+import type { Group, Object3D } from 'three';
+import { type BalanceQuery, buildPipeModel, type PipeModelItem } from '../../assembly';
 import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { addInstance, setInstanceTransform, setPointMassKg } from '../../state/docOps';
+import { useEditorStore } from '../../state/editorStore';
 import { EDGE, panelStyle, T } from '../editor/theme';
+import { placeAxis } from './axis';
+import { PipeModelLayer } from './PipeModelLayer';
 import type { CablePrim, TubePrim } from './scene';
 import { useAssemblyScene } from './useAssemblyScene';
 
@@ -52,23 +55,10 @@ const PIVOTS: { key: string; label: string; query: BalanceQuery }[] = [
   },
 ];
 
-const WORLD_UP = new Vector3(0, 1, 0);
-
 /** One capsule per tube primitive; geometry is rebuilt when the pose changes
  * (tube count is small — tens per creature — so per-frame rebuild is fine). */
 function Tube({ t, color, opacity = 1 }: { t: TubePrim; color?: string; opacity?: number }) {
-  const placed = useMemo(() => {
-    const a = new Vector3(t.a.x, t.a.y, t.a.z);
-    const b = new Vector3(t.b.x, t.b.y, t.b.z);
-    const dir = b.clone().sub(a);
-    const len = dir.length();
-    if (len < 1e-6) return null;
-    return {
-      mid: a.clone().add(b).multiplyScalar(0.5),
-      quat: new ThreeQuat().setFromUnitVectors(WORLD_UP, dir.multiplyScalar(1 / len)),
-      len,
-    };
-  }, [t]);
+  const placed = useMemo(() => placeAxis(t.a, t.b), [t]);
   if (!placed) return null;
   return (
     <mesh position={placed.mid} quaternion={placed.quat}>
@@ -118,9 +108,30 @@ interface Scene3DProps {
 export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const docInstances = useAppStore((s) => s.current?.assembly.instances);
+  const mechanisms = useAppStore((s) => s.current?.mechanisms);
+  const materials = useAppStore((s) => s.current?.materials);
+  const assemblyRender = useEditorStore((s) => s.assemblyRender);
   const gizmoRef = useRef<Group>(null);
 
   const { mannequin, instances, composition } = scene;
+
+  // Solved pipe-and-fittings model, rebuilt as the pose changes so it stays
+  // live during playback; ghosts included translucently.
+  const pipeModel = useMemo(() => {
+    if (assemblyRender !== 'pipe' || !mechanisms || !materials) return null;
+    const items: PipeModelItem[] = [
+      ...instances.map((inst) => ({
+        mechanismId: inst.mechanismId,
+        nodeWorld: composition.instances[inst.id]?.nodeWorld ?? {},
+      })),
+      ...scene.ghosts.map((g) => ({
+        mechanismId: g.mechanismId,
+        nodeWorld: g.nodeWorld,
+        ghost: true,
+      })),
+    ];
+    return buildPipeModel(mechanisms, items, materials);
+  }, [assemblyRender, mechanisms, materials, instances, composition, scene.ghosts]);
   const cg = composition.cg;
   const selected = docInstances?.find((i) => i.id === selectedInstanceId);
   const selectable = selected && selected.transformDrive.kind === 'fixed';
@@ -151,23 +162,35 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
       {/* wearer mannequin (capsules, not 1-px lines — §8.3 visibility) */}
       <Tubes tubes={mannequin} color={C.mannequin} />
 
-      {/* mechanism instances: rigid members as tubes, tension members as cables */}
-      {instances.map((inst) => {
-        const sel = inst.id === selectedInstanceId;
-        return (
-          <group key={inst.id}>
-            <Tubes tubes={inst.prims.tubes} color={sel ? T.accent : undefined} />
-            <Cables cables={inst.prims.cables} color={sel ? T.accent : undefined} />
-          </group>
-        );
-      })}
-
-      {/* unplaced mechanisms ghosted at their default plane (synthesis) */}
+      {/* mechanism structure: wireframe tubes, or the solved pipe model.
+          Cables (ropes/elastics/bowden) are physical in both renders. */}
+      {pipeModel ? (
+        <PipeModelLayer model={pipeModel} />
+      ) : (
+        <>
+          {instances.map((inst) => {
+            const sel = inst.id === selectedInstanceId;
+            return (
+              <group key={inst.id}>
+                <Tubes tubes={inst.prims.tubes} color={sel ? T.accent : undefined} />
+              </group>
+            );
+          })}
+          {/* unplaced mechanisms ghosted at their default plane (synthesis) */}
+          {scene.ghosts.map((g) => (
+            <Tubes key={g.mechanismId} tubes={g.prims.tubes} opacity={0.3} />
+          ))}
+        </>
+      )}
+      {instances.map((inst) => (
+        <Cables
+          key={inst.id}
+          cables={inst.prims.cables}
+          color={inst.id === selectedInstanceId ? T.accent : undefined}
+        />
+      ))}
       {scene.ghosts.map((g) => (
-        <group key={g.mechanismId}>
-          <Tubes tubes={g.prims.tubes} opacity={0.3} />
-          <Cables cables={g.prims.cables} color="#aab2bf" />
-        </group>
+        <Cables key={g.mechanismId} cables={g.prims.cables} color="#aab2bf" />
       ))}
 
       {/* point-mass markers */}
@@ -241,6 +264,8 @@ export function AssemblyView() {
         <color attach="background" args={['#eef0f4']} />
         {scene && <Scene3D selectedInstanceId={selectedInstanceId} scene={scene} />}
       </Canvas>
+
+      <RenderTogglePill />
 
       {/* analysis + scene-tree sidebar */}
       <div
@@ -424,6 +449,50 @@ export function AssemblyView() {
           ))}
         </Section>
       </div>
+    </div>
+  );
+}
+
+/** Wireframe ↔ pipe-model toggle (the "solve pipe model" button): floating
+ * pill on the viewport's left edge, mirroring the 2D tool pill's position. */
+export function RenderTogglePill() {
+  const assemblyRender = useEditorStore((s) => s.assemblyRender);
+  const setAssemblyRender = useEditorStore((s) => s.setAssemblyRender);
+  const options = [
+    { key: 'wire' as const, label: 'Wireframe' },
+    { key: 'pipe' as const, label: 'Pipe model' },
+  ];
+  return (
+    <div
+      style={{
+        ...panelStyle,
+        position: 'absolute',
+        top: 64,
+        left: EDGE,
+        zIndex: 30,
+        display: 'flex',
+        gap: 2,
+        padding: 3,
+      }}
+    >
+      {options.map((o) => (
+        <button
+          type="button"
+          key={o.key}
+          onClick={() => setAssemblyRender(o.key)}
+          style={{
+            border: 'none',
+            borderRadius: 9,
+            padding: '5px 12px',
+            cursor: 'pointer',
+            fontSize: 12,
+            background: assemblyRender === o.key ? T.accentTint : 'transparent',
+            color: assemblyRender === o.key ? T.accentText : T.muted,
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

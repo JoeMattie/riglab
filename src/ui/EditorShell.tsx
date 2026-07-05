@@ -5,6 +5,7 @@
 // card, all rendered inside SketchCanvas); the design face additionally docks
 // the tabbed inspector/checklist/materials/BOM panel as a floating column.
 import { useEffect } from 'react';
+import { buildPipeModel, composeProject, type PipeModelItem } from '../assembly';
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { useEditorStore } from '../state/editorStore';
@@ -79,6 +80,29 @@ export function EditorShell() {
     hook.loadExample = (id: string) => {
       const ex = EXAMPLES.find((e) => e.id === id);
       if (ex) useAppStore.setState({ current: ex.load(), saveState: 'saved' });
+    };
+    // scripted-verification seam for the 3D synthesis + pipe model
+    // (PLANFILE-quad-workspace): recomputes composition and pipe model from
+    // the live document, independent of what the viewport is drawing
+    hook.getAssemblyStats = () => {
+      const doc = useAppStore.getState().current;
+      if (!doc) return null;
+      const composition = composeProject(doc);
+      const placed = new Set(doc.assembly.instances.map((i) => i.mechanismId));
+      const items: PipeModelItem[] = doc.assembly.instances.map((inst) => ({
+        mechanismId: inst.mechanismId,
+        nodeWorld: composition.instances[inst.id]?.nodeWorld ?? {},
+      }));
+      const model = buildPipeModel(doc.mechanisms, items, doc.materials);
+      return {
+        render: useEditorStore.getState().assemblyRender,
+        totalMassKg: composition.totalMassKg,
+        placedCount: doc.assembly.instances.length,
+        unplacedCount: doc.mechanisms.filter((m) => !placed.has(m.id)).length,
+        primCount: model.prims.length,
+        pipeCount: model.pipeCount,
+        fittingCount: model.fittingCount,
+      };
     };
   }, []);
 

@@ -11,6 +11,15 @@ import { expect, test } from '@playwright/test';
 interface AssemblyHook {
   loadExample(id: string): void;
   getEditor(): { mode: string };
+  getAssemblyStats(): {
+    render: string;
+    totalMassKg: number;
+    placedCount: number;
+    unplacedCount: number;
+    primCount: number;
+    pipeCount: number;
+    fittingCount: number;
+  } | null;
 }
 
 test('3D assembly mode renders the full creature with a live mass readout', async ({ page }) => {
@@ -47,6 +56,19 @@ test('3D assembly mode renders the full creature with a live mass readout', asyn
   // seesaw balance readout present
   await expect(page.getByText('Seesaw balance')).toBeVisible();
   await expect(page.getByText(/N·m/).first()).toBeVisible();
+
+  // pipe-model toggle (PLANFILE-quad-workspace slice 3): switch render and
+  // confirm the solved model has pipe segments and joint bodies
+  await page.getByRole('button', { name: 'Pipe model' }).click();
+  const stats = await page.evaluate(() =>
+    (window as unknown as { __riglab: AssemblyHook }).__riglab.getAssemblyStats(),
+  );
+  expect(stats).not.toBeNull();
+  expect(stats!.render).toBe('pipe');
+  expect(stats!.pipeCount).toBeGreaterThan(0);
+  // joint bodies (fittings/bands/sleeves/blobs) beyond the bare pipe runs
+  expect(stats!.primCount).toBeGreaterThan(stats!.pipeCount);
+  await expect(page.locator('canvas')).toBeVisible();
 
   expect(errors).toEqual([]);
 });

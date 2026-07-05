@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { type BalanceQuery, balanceReport, composeProject, defaultPlacement } from '../../assembly';
+import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { computeSkeleton, getClip, REST_POSE, samplePose } from '../../wearer';
@@ -22,6 +23,8 @@ export interface GhostPrims {
   mechanismId: string;
   name: string;
   prims: InstancePrimitives;
+  /** lifted nodes at the default plane — feeds the pipe model for ghosts */
+  nodeWorld: Record<string, Vec3>;
 }
 
 /** Solve + compose the whole assembly at the current playback pose and derive
@@ -98,6 +101,7 @@ export function useAssemblyScene(pivot: BalanceQuery) {
         prims: composed
           ? instancePrimitives(m.elements, composed.nodeWorld, project.materials.pipes)
           : { tubes: [], cables: [] },
+        nodeWorld: composed?.nodeWorld ?? {},
       };
     });
 
