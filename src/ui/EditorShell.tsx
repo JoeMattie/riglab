@@ -28,6 +28,7 @@ import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
 import { EDGE, panelStyle, T } from './editor/theme';
 import { useGlobalSolve } from './editor/useGlobalSolve';
+import { PanelToggleChip } from './quad/PanelToggleChip';
 import { QuadView } from './quad/QuadView';
 
 /** Document render positions (drawn geometry / playback pose / settled sag)
@@ -156,6 +157,8 @@ export function EditorShell() {
         playback: s.playback,
         activePanel: s.activePanel,
         quadMaximized: s.quadMaximized,
+        quadSplit: s.quadSplit,
+        panelsVisible: s.panelsVisible,
         panelDepths: s.panelDepths,
         night: useThemeStore.getState().night,
       };
@@ -229,6 +232,7 @@ export function EditorShell() {
       {!hasElements && !onboardingDismissed && <EmptyState />}
 
       <ProjectChip />
+      <PanelToggleChip />
       <ActionsChip />
       <ToolPill />
       <TransportPill />
