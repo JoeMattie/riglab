@@ -95,7 +95,9 @@ export function ToolPill() {
         ...panelStyle,
         position: 'absolute',
         left: Math.max(0, EDGE + offset.x),
-        top: Math.max(0, 88 + offset.y),
+        // docked vertically centered on the left edge
+        top: `calc(50% + ${offset.y}px)`,
+        transform: 'translateY(-50%)',
         width: 158,
         padding: 8,
         display: 'flex',
