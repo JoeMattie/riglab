@@ -14,6 +14,15 @@ import { adjacentNodeId, angle3, type HingePlan, hingePlan } from './hinge';
 import type { SolveInputs, SolveResult } from './types';
 
 const ITERATIONS = 300;
+/** Drag-loop fixed-point exit: the drag/project map converges to a fixed
+ * point long before ITERATIONS on quiet frames (clip playback moves targets
+ * a few millimetres per frame). Every FIXED_POINT_CHECK iterations the max
+ * particle displacement since the last check is measured; below
+ * FIXED_POINT_TOL the loop has converged — further iterations are no-ops at
+ * sub-nanometre scale — and it exits. Deterministic: the exit depends only
+ * on deterministic state, and hard frames still run the full ITERATIONS. */
+const FIXED_POINT_CHECK = 25;
+const FIXED_POINT_TOL = 1e-9;
 /** constraint-only sweeps after the drag loop: a far-from-feasible drag
  * target would otherwise leave real violation in the output (the drag/
  * constraint cycle never converges), and since callers recompute rest
@@ -25,7 +34,7 @@ const SETTLE_ITERATIONS = 100;
  * that the per-frame rest-length recompute would ratchet into permanent
  * distortion. The settle therefore runs in blocks of SETTLE_ITERATIONS with
  * an early exit once under tolerance, capped at SETTLE_BLOCKS blocks:
- * ordinary frames still pay exactly one block, pathological rotations keep
+ * ordinary frames pay one or two blocks, pathological rotations keep
  * sweeping until the body is rigid again. Still deterministic — the exit
  * condition depends only on deterministic state (§12). */
 const SETTLE_BLOCKS = 60;
@@ -34,11 +43,24 @@ const CONVERGE_TOL = 1e-5;
  * CONVERGE_TOL. Residual-scale artifacts leak through constraint gradients
  * amplified by O(1) factors (e.g. the hinge virtual-axis ties turn distance
  * residual into out-of-plane z at ~2×), so exiting at CONVERGE_TOL would let
- * a planar sketch float ~2e-5 off its plane every frame. Exiting at 1e-7
+ * a planar sketch float ~2e-5 off its plane every frame. Exiting at 1e-9
  * puts that leakage well under 1e-6 while healthy rigs only pay ~1 extra
  * block (geometric convergence); pathological cases hit the SETTLE_BLOCKS
  * cap exactly as before. `converged` still reports against CONVERGE_TOL. */
 const SETTLE_EXIT_TOL = 1e-9;
+/** Settle stagnation exit: Gauss–Seidel has a floating-point floor per pose
+ * (rope inequalities and hinge ties can cycle at ~1e-8, above EXIT_TOL). If
+ * a whole block improves the violation by less than 3%, further blocks are
+ * provably useless — stop and keep the budget. A genuinely converging hard
+ * pose (the four-bar branch-limit frame relaxes at ~0.90 per block) is well
+ * below the factor and keeps sweeping. */
+const SETTLE_STAGNATION_FACTOR = 0.97;
+/** Successive over-relaxation factor for the settle's equality distance
+ * projections. GS on serial chains (leg/neck assemblies: links + hinge ties)
+ * relaxes at ~0.9986/sweep; ω = 1.7 roughly squares the rate at identical
+ * fixed points (a satisfied constraint steps zero for any ω). The drag loop
+ * and all inequality projections stay at ω = 1 for clamp stability. */
+const SETTLE_OMEGA = 1.7;
 
 interface P {
   id: string;
@@ -51,12 +73,15 @@ interface P {
 interface KConstraint {
   /** element id reported when violated */
   elementId: string;
-  project(): void;
+  project(omega?: number): void;
   /** current violation magnitude (0 for a satisfied inequality) */
   violation(): number;
   /** scalar equality constraints contributed to the mobility count (0 for
    * inequalities; redundant rigid-body pairs are not double-counted) */
   mobilityEqualities: number;
+  /** incident particles — island decomposition splits the constraint graph
+   * at held particles (see solveKinematic) */
+  parts(): P[];
 }
 
 class DistanceC implements KConstraint {
@@ -80,17 +105,22 @@ class DistanceC implements KConstraint {
     return c;
   }
 
-  project(): void {
-    const C = this.C();
-    if (C === 0) return;
+  project(omega = 1): void {
     const dx = this.p1.x - this.p2.x;
     const dy = this.p1.y - this.p2.y;
     const dz = this.p1.z - this.p2.z;
     const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    let C = len - this.rest;
+    if (this.kind === 'max') C = Math.max(0, C);
+    else if (this.kind === 'min') C = Math.min(0, C);
+    if (C === 0) return;
     if (len < 1e-12) return;
     const wSum = this.p1.w + this.p2.w;
     if (wSum === 0) return;
-    const s = -C / wSum;
+    // over-relaxation (settle only, equalities only): same fixed point
+    // (C = 0 steps are zero regardless of ω), ~squared convergence rate on
+    // serial chains; inequalities keep ω = 1 to avoid clamp chatter
+    const s = (this.kind === 'eq' ? omega : 1) * (-C / wSum);
     const nx = dx / len;
     const ny = dy / len;
     const nz = dz / len;
@@ -104,6 +134,10 @@ class DistanceC implements KConstraint {
 
   violation(): number {
     return Math.abs(this.C());
+  }
+
+  parts(): P[] {
+    return [this.p1, this.p2];
   }
 }
 
@@ -152,6 +186,10 @@ class AngleLimitC implements KConstraint {
   violation(): number {
     const ag = angle3(this.pivot, this.a, this.b, this.pivot, this.axisTip);
     return ag ? Math.abs(this.C(ag.theta)) : 0;
+  }
+
+  parts(): P[] {
+    return [this.pivot, this.a, this.b, this.axisTip];
   }
 }
 
@@ -234,6 +272,10 @@ class PointOnLineC implements KConstraint {
     const over = Math.max(0, s - this.travelMax * L);
     return Math.max(cPerp, under, over);
   }
+
+  parts(): P[] {
+    return [this.n, this.a, this.b];
+  }
 }
 
 /** Ground plane y ≥ 0 (v6 slice C, carried to world y): free USER nodes
@@ -255,13 +297,17 @@ class FloorC implements KConstraint {
   violation(): number {
     return Math.max(0, -this.p.y);
   }
+
+  parts(): P[] {
+    return [this.p];
+  }
 }
 
 /** Drag target: a wish, projected before the real constraints each
  * iteration so geometry always wins. Not counted in residual/DOF. */
 class DragC {
   constructor(
-    private readonly p: P,
+    readonly p: P,
     readonly target: Vec3,
   ) {}
 
@@ -480,51 +526,153 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
       ([id, target]) => new DragC(get(id), { x: target.x, y: Math.max(0, target.y), z: target.z }),
     );
 
-  const maxViolation = () => {
-    let r = 0;
-    for (const c of constraints) r = Math.max(r, c.violation());
+  // ── island decomposition ────────────────────────────────────────────────
+  // Gauss–Seidel corrections propagate only through FREE particles: held
+  // particles (anchors / driven / pinned axis virtuals) absorb no motion, so
+  // the constraint graph splits at them into independent islands whose
+  // separate solves are exactly what interleaved global sweeps would compute
+  // — but each island stops as soon as IT is done. On a compound document
+  // (many subsystems bound to the wearer) this is the difference between the
+  // slowest subsystem sweeping its own ~10 constraints and sweeping all of
+  // them. Deterministic: islands form in constraint order and keep the
+  // global element-id constraint order within.
+  const rootOf = new Map<string, string>();
+  for (const p of particles.values()) if (p.w > 0) rootOf.set(p.id, p.id);
+  const findRoot = (id: string): string => {
+    let r = id;
+    while (rootOf.get(r) !== r) r = rootOf.get(r)!;
+    let cur = id;
+    while (cur !== r) {
+      const next = rootOf.get(cur)!;
+      rootOf.set(cur, r);
+      cur = next;
+    }
     return r;
   };
-  const settle = () => {
-    for (let b = 0; b < SETTLE_BLOCKS; b++) {
-      for (let it = 0; it < SETTLE_ITERATIONS; it++) {
-        for (const c of constraints) c.project();
+  for (const c of constraints) {
+    const freeParts = c.parts().filter((p) => p.w > 0);
+    for (let i = 1; i < freeParts.length; i++) {
+      const ra = findRoot(freeParts[0]!.id);
+      const rb = findRoot(freeParts[i]!.id);
+      if (ra !== rb) rootOf.set(rb, ra);
+    }
+  }
+
+  interface Island {
+    constraints: KConstraint[];
+    drags: DragC[];
+    parts: P[];
+  }
+  const islandByRoot = new Map<string, Island>();
+  const islands: Island[] = [];
+  const islandFor = (root: string): Island => {
+    let island = islandByRoot.get(root);
+    if (!island) {
+      island = { constraints: [], drags: [], parts: [] };
+      islandByRoot.set(root, island);
+      islands.push(island);
+    }
+    return island;
+  };
+  for (const c of constraints) {
+    const firstFree = c.parts().find((p) => p.w > 0);
+    // fully-held constraints move nothing — excluded from the solve, still
+    // part of the residual/DOF reporting below
+    if (firstFree) islandFor(findRoot(firstFree.id)).constraints.push(c);
+  }
+  for (const d of drags) {
+    if (d.p.w > 0) islandFor(findRoot(d.p.id)).drags.push(d);
+  }
+  for (const p of particles.values()) {
+    if (p.w === 0) continue;
+    const island = islandByRoot.get(findRoot(p.id));
+    if (island) island.parts.push(p);
+  }
+
+  // ── per-island solve: drag loop → settle → degeneracy nudges ────────────
+  const solveIsland = (island: Island): void => {
+    const cs = island.constraints;
+    const maxViolation = () => {
+      let r = 0;
+      for (const c of cs) r = Math.max(r, c.violation());
+      return r;
+    };
+    const settle = () => {
+      let prev = maxViolation();
+      if (prev <= SETTLE_EXIT_TOL) return;
+      for (let b = 0; b < SETTLE_BLOCKS; b++) {
+        for (let it = 0; it < SETTLE_ITERATIONS; it++) {
+          for (const c of cs) c.project(SETTLE_OMEGA);
+        }
+        const v = maxViolation();
+        if (v <= SETTLE_EXIT_TOL || v > prev * SETTLE_STAGNATION_FACTOR) return;
+        prev = v;
       }
-      if (maxViolation() <= SETTLE_EXIT_TOL) return;
+    };
+
+    // drag loop with fixed-point exit (see FIXED_POINT_CHECK); without drags
+    // the settle below is the whole job
+    if (island.drags.length > 0) {
+      const fpSnap = new Float64Array(island.parts.length * 3);
+      const takeSnap = () => {
+        for (let i = 0; i < island.parts.length; i++) {
+          fpSnap[3 * i] = island.parts[i]!.x;
+          fpSnap[3 * i + 1] = island.parts[i]!.y;
+          fpSnap[3 * i + 2] = island.parts[i]!.z;
+        }
+      };
+      const snapDrift = () => {
+        let d = 0;
+        for (let i = 0; i < island.parts.length; i++) {
+          d = Math.max(
+            d,
+            Math.abs(island.parts[i]!.x - fpSnap[3 * i]!),
+            Math.abs(island.parts[i]!.y - fpSnap[3 * i + 1]!),
+            Math.abs(island.parts[i]!.z - fpSnap[3 * i + 2]!),
+          );
+        }
+        return d;
+      };
+      takeSnap();
+      for (let it = 0; it < ITERATIONS; it++) {
+        for (const d of island.drags) d.project();
+        for (const c of cs) c.project();
+        if ((it + 1) % FIXED_POINT_CHECK === 0) {
+          if (snapDrift() < FIXED_POINT_TOL) break;
+          takeSnap();
+        }
+      }
+    }
+    // release the drag and settle onto the constraint manifold
+    settle();
+
+    // degenerate configurations (e.g. links dragged exactly collinear) leave
+    // Gauss–Seidel with no perpendicular gradient to escape along; a tiny
+    // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry
+    // (with a z component in 3D). Truly conflicting constraints stay violated
+    // and get reported below.
+    for (let round = 0; round < 3 && maxViolation() > CONVERGE_TOL; round++) {
+      // escalate per round: 1e-6 breaks exact collinearity; a floor wedge
+      // (the satisfying pose is well above ground, the iterate pinned onto
+      // the floor by the clamp) needs a kick on the scale of the violation
+      // itself to leave the wrong basin, so the last round lifts by
+      // maxViolation()
+      const mag = round < 2 ? 1e-6 * 10 ** round : Math.max(1e-4, maxViolation());
+      let k = 0;
+      for (const p of island.parts) {
+        k++;
+        p.x += 1e-6 * Math.sin(k * 2.39996);
+        // a particle resting on the floor can only escape upward, and by the
+        // full magnitude — the clamp erases downward nudges, and a golden-
+        // angle fraction can be arbitrarily small for exactly the stuck
+        // particle
+        p.y += p.y <= CONVERGE_TOL ? mag : 1e-6 * Math.cos(k * 2.39996);
+        p.z += 1e-6 * Math.sin(k * 2.39996 * 0.5 + 1);
+      }
+      settle();
     }
   };
-
-  for (let it = 0; it < ITERATIONS; it++) {
-    for (const d of drags) d.project();
-    for (const c of constraints) c.project();
-  }
-  // release the drag and settle onto the constraint manifold
-  settle();
-
-  // degenerate configurations (e.g. links dragged exactly collinear) leave
-  // Gauss–Seidel with no perpendicular gradient to escape along; a tiny
-  // DETERMINISTIC golden-angle nudge per free particle breaks the symmetry
-  // (with a z component in 3D). Truly conflicting constraints stay violated
-  // and get reported below.
-  for (let round = 0; round < 3 && maxViolation() > CONVERGE_TOL; round++) {
-    // escalate per round: 1e-6 breaks exact collinearity; a floor wedge (the
-    // satisfying pose is well above ground, the iterate pinned onto the
-    // floor by the clamp) needs a kick on the scale of the violation itself
-    // to leave the wrong basin, so the last round lifts by maxViolation()
-    const mag = round < 2 ? 1e-6 * 10 ** round : Math.max(1e-4, maxViolation());
-    let k = 0;
-    for (const p of particles.values()) {
-      if (p.w === 0) continue;
-      k++;
-      p.x += 1e-6 * Math.sin(k * 2.39996);
-      // a particle resting on the floor can only escape upward, and by the
-      // full magnitude — the clamp erases downward nudges, and a golden-angle
-      // fraction can be arbitrarily small for exactly the stuck particle
-      p.y += p.y <= CONVERGE_TOL ? mag : 1e-6 * Math.cos(k * 2.39996);
-      p.z += 1e-6 * Math.sin(k * 2.39996 * 0.5 + 1);
-    }
-    settle();
-  }
+  for (const island of islands) solveIsland(island);
 
   let residual = 0;
   const violatedSet = new Set<string>();

@@ -1921,3 +1921,22 @@ plane. Exported in the BOM/CSV as a "twist°" column beside "angle°" — the
 amount to rotate the pipe in the bender between bends. Cut lengths are
 transform-invariant, so migrated documents' BOM totals equal their v6
 values (asserted in tests).
+
+### DECISION: kinematic solver throughput — island decomposition + convergence controls
+The compound single-solve initially cost ~16–26 ms/frame on the full
+creature (2D+compose was ~1.4 ms). Fixes, all in kinematic.ts and all
+determinism-preserving: (1) constraint-graph ISLAND decomposition — Gauss–
+Seidel corrections cannot cross held particles (anchors, driven nodes,
+pinned axis virtuals), so the graph splits at them into exactly-independent
+islands (union-find, constraint order preserved within each); the full
+creature yields 11 islands and a slow subsystem no longer drags the rest
+through its sweeps; (2) drag-loop fixed-point exit (every 25 iterations,
+stop when max displacement < 1e-9 m); (3) settle stagnation exit (stop when
+a whole block improves violation < 3% — the floating-point floor sits above
+the exit tolerance); (4) SOR ω = 1.7 on settle equality-distance
+projections only (identical fixed point — a satisfied constraint steps zero
+for any ω; inequalities stay ω = 1 for clamp stability). Result: 4.25 ms
+median (min 3.66, max 5.08) on the full creature; four-bar planarity
+improved to |z| ≤ 8.4e-10. The perf acceptance asserts the MEDIAN of 60
+per-frame timings < 16 ms — robust to GC pauses and test-worker
+parallelism, unlike the old mean.

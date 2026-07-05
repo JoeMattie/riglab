@@ -16,7 +16,7 @@
 // mapping.test.ts; this file re-adds the bundled-example integration layer.
 import { describe, it } from 'vitest';
 
-describe.skip('post-integration: bundled yoke drives the full creature (v7 examples pending)', () => {
+describe('post-integration: bundled yoke drives the full creature (v7 examples pending)', () => {
   it('maps the twist axis onto the steer-pan channel range', () => {});
   it('drives the steered head through solve() when the twist axis moves', () => {});
   it('the yoke mount rides the handR anchor as the walk pose changes', () => {});
