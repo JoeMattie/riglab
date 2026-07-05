@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { type BalanceQuery, balanceReport, composeProject } from '../../assembly';
+import { type BalanceQuery, balanceReport, composeProject, defaultPlacement } from '../../assembly';
 import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { computeSkeleton, getClip, REST_POSE, samplePose } from '../../wearer';
@@ -15,6 +15,12 @@ export interface InstancePrims {
   name: string;
   mechanismId: string;
   driven: boolean;
+  prims: InstancePrimitives;
+}
+
+export interface GhostPrims {
+  mechanismId: string;
+  name: string;
   prims: InstancePrimitives;
 }
 
@@ -53,10 +59,53 @@ export function useAssemblyScene(pivot: BalanceQuery) {
 
     const mannequin: TubePrim[] = mannequinTubes(frame);
 
+    // Ghost synthesis (PLANFILE-quad-workspace): mechanisms with no instance
+    // still show, at their view-orientation default plane. Composed through
+    // the same pipeline via a synthetic fixed-drive assembly; excluded from
+    // mass/CG/seesaw (includePipeMass off, no point masses) — ghosts are a
+    // preview, not placed structure.
+    const placedMechIds = new Set(project.assembly.instances.map((i) => i.mechanismId));
+    const unplaced = project.mechanisms.filter(
+      (m) => !placedMechIds.has(m.id) && m.elements.length > 0,
+    );
+    const ghostComposition =
+      unplaced.length > 0
+        ? composeProject(
+            {
+              ...project,
+              assembly: {
+                instances: unplaced.map((m) => ({
+                  id: `ghost:${m.id}`,
+                  name: m.name,
+                  mechanismId: m.id,
+                  ...defaultPlacement(m.viewOrientation),
+                  mirror: false,
+                  transformDrive: { kind: 'fixed' as const },
+                })),
+                bindings: [],
+                pointMasses: [],
+                foamPlates: [],
+              },
+            },
+            { pose, includePipeMass: false },
+          )
+        : null;
+    const ghosts: GhostPrims[] = unplaced.map((m) => {
+      const composed = ghostComposition?.instances[`ghost:${m.id}`];
+      return {
+        mechanismId: m.id,
+        name: m.name,
+        prims: composed
+          ? instancePrimitives(m.elements, composed.nodeWorld, project.materials.pipes)
+          : { tubes: [], cables: [] },
+      };
+    });
+
     return {
       composition,
       mannequin,
       instances,
+      ghosts,
       report: balanceReport(composition.masses, pivot),
     };
   }, [project, tS, clipName, amplitude, pivot]);

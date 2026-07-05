@@ -1,6 +1,7 @@
 // Pure document transforms for sketch editing. All editing flows through
 // these (via appStore.updateCurrent) so undo/autosave see exactly one code
 // path. IDs are generated here; everything else is a pure Project→Project.
+import { defaultPlacement } from '../assembly/placement';
 import { derivedMaturity } from '../design/resolution';
 import type {
   BowdenElement,
@@ -943,6 +944,34 @@ export function patchElement<K extends MechanismElement['type']>(
 }
 
 // ── Assembly (3D) edits (§4.3/§8.3) ────────────────────────────────────────
+
+/** Place a mechanism into the 3D assembly at its view-orientation default
+ * plane (one-click Place on an unplaced ghost, PLANFILE-quad-workspace). The
+ * instance starts fixed-drive so the existing gizmo applies immediately. */
+export function addInstance(
+  doc: Project,
+  mechanismId: string,
+): { doc: Project; instanceId: string | null } {
+  const mech = doc.mechanisms.find((m) => m.id === mechanismId);
+  if (!mech) return { doc, instanceId: null };
+  const { position, quaternion } = defaultPlacement(mech.viewOrientation);
+  const instance: MechanismInstance = {
+    id: uid(),
+    name: mech.name,
+    mechanismId,
+    position,
+    quaternion,
+    mirror: false,
+    transformDrive: { kind: 'fixed' },
+  };
+  return {
+    doc: {
+      ...doc,
+      assembly: { ...doc.assembly, instances: [...doc.assembly.instances, instance] },
+    },
+    instanceId: instance.id,
+  };
+}
 
 /** Patch a mechanism instance's placement transform (gizmo drag, mirror
  * toggle). Pure Project→Project like every other edit, so undo/autosave see

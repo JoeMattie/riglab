@@ -10,7 +10,7 @@ import { type Group, type Object3D, Quaternion as ThreeQuat, Vector3 } from 'thr
 import type { BalanceQuery } from '../../assembly';
 import type { Vec3 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { setInstanceTransform, setPointMassKg } from '../../state/docOps';
+import { addInstance, setInstanceTransform, setPointMassKg } from '../../state/docOps';
 import { EDGE, panelStyle, T } from '../editor/theme';
 import type { CablePrim, TubePrim } from './scene';
 import { useAssemblyScene } from './useAssemblyScene';
@@ -162,6 +162,14 @@ export function Scene3D({ selectedInstanceId, scene }: Scene3DProps) {
         );
       })}
 
+      {/* unplaced mechanisms ghosted at their default plane (synthesis) */}
+      {scene.ghosts.map((g) => (
+        <group key={g.mechanismId}>
+          <Tubes tubes={g.prims.tubes} opacity={0.3} />
+          <Cables cables={g.prims.cables} color="#aab2bf" />
+        </group>
+      ))}
+
       {/* point-mass markers */}
       {composition.masses.map((m) => (
         <mesh key={m.id} position={tuple(m.world)}>
@@ -307,6 +315,34 @@ export function AssemblyView() {
             </>
           )}
         </Section>
+
+        {scene && scene.ghosts.length > 0 && (
+          <Section title="Unplaced">
+            {scene.ghosts.map((g) => (
+              <div
+                key={g.mechanismId}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}
+              >
+                <span style={{ flex: 1, fontSize: 12.5, color: T.muted }}>{g.name}</span>
+                <button
+                  type="button"
+                  onClick={() => updateCurrent((doc) => addInstance(doc, g.mechanismId).doc)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '3px 10px',
+                    cursor: 'pointer',
+                    background: T.accentTint,
+                    color: T.accentText,
+                    fontSize: 11.5,
+                  }}
+                >
+                  Place
+                </button>
+              </div>
+            ))}
+          </Section>
+        )}
 
         <Section title="Instances">
           {project?.assembly.instances.map((inst) => (
