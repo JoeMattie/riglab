@@ -10,11 +10,11 @@ pack-frame snap parity commit. Referenced from DECISIONS.md. The main
 1. "The pivots should snap to packframe points the same way they snap to body
    points" — **done** (commit `f2aa19a`): select-drag attracts to wearer
    anchors; a drop grounds the node there.
-2. "We should be able to disconnect points from where they are snapped by
+2. **Done.** "We should be able to disconnect points from where they are snapped by
    dragging past a deadzone."
-3. "Anchors attached to points on the packframe or skeleton should move with
+3. **Done.** "Anchors attached to points on the packframe or skeleton should move with
    it."
-4. "Also we need to add a ground plane that things can't fall through."
+4. **Done.** "Also we need to add a ground plane that things can't fall through."
 
 Directive 3 supersedes the static-ground decision recorded for directive 1:
 grounded nodes attached to a wearer point now track that point through pose

@@ -1745,6 +1745,37 @@ a pipe end onto an anchor, which has always produced a grounded node
 (`EndSpec` `anchorNode`, docOps). Grounding clears any skeleton binding on
 the node (`groundNodeAtAnchor`): a grounded node cannot also be clip-driven —
 `bindingTargets` would feed the solver a drag target that fights the ground.
-Anchors are treated as static mount points even though the mannequin's
-anchors move slightly with pose (pelvisRise/lean); that matches the existing
-drawing semantics and Phase 1's "anchor = fixed to mechanism ground" model.
+*(Superseded same day: Joe asked that attached anchors ride the wearer —
+see the wearer-attachments entry below and
+PLANFILE-wearer-attachments-and-floor.md.)*
+
+### DECISION: wearer attachments, tear-off deadzone, ground plane (feature planfile)
+Three same-day directives from Joe (2026-07-04), planned in
+`PLANFILE-wearer-attachments-and-floor.md` and built as three slices on the
+`worktree-anchor-snap-drag` branch. (a) **Anchor attachments (schema v6)**:
+grounding a node on a wearer anchor — drawing onto it or dropping a dragged
+node — records a `Mechanism.anchorBindings` entry, and the ground point is
+PRESCRIBED at the anchor's projected position each solve via the new
+`SolveInputs.groundTargets` (both modes; rest lengths still derive from
+document positions). This is the hard counterpart of skeletonBindings' soft
+drag-target pull: grounds carry structure, so the wearer moves them
+authoritatively rather than "pulling and letting constraints win". The
+WearerAnchor set spans pack frame AND body (thigh/calf/shoe/hand), which is
+how "packframe or skeleton" is covered by one target type. (b) **Tear-off**:
+a select-drag starting on a connected node (bound, attached, or plain
+grounded) holds still inside a 28 px deadzone (2× snap tolerance) and
+releases the connection (`releaseNodeConnection`) when crossed — the missing
+inverse of drop-to-bind/ground; a release inside the deadzone changes
+nothing. (c) **Ground plane**: world y = 0 is the floor in every non-`top`
+view, as a positional clamp on free particles in both solvers; drag wishes
+clamp onto the floor surface (a pointer underground drags along the ground —
+also prevents driving linkages into a collinear floor wedge); the kinematic
+symmetry nudge lifts floor-pinned particles by the violation scale so a
+below-floor-branch wedge escapes (1e-6 golden-angle alone is erased by the
+clamp). Floor contact REACTIONS are not in the force readout — positional
+only, noted as a limitation. Anchor/driven nodes are exempt (prescribed
+positions are authoritative; a deliberately buried ground stays put). The
+jaw-bowden example moved up to head height (`JAW_PIVOT_Y`) — mechanism space
+is the wearer's world frame (§7), so geometry authored around a local y=0
+origin was living underground; its heel-rotation cable sizing was fixed to
+rotate about the jaw pivot rather than the origin in the process.
