@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-neck-truss",
   "name": "Example — neck truss (pitch)",
   "unitsPreference": "imperial",
@@ -622,238 +622,277 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
+  "mechanism": {
+    "id": "neck-truss",
+    "name": "Neck truss (pitch)",
+    "nodes": [
+      {
+        "id": "guideA",
+        "kind": "anchor",
+        "position": {
+          "x": 0.05,
+          "y": 1.32,
+          "z": 0
+        }
+      },
+      {
+        "id": "guideB",
+        "kind": "anchor",
+        "position": {
+          "x": 0.23,
+          "y": 1.41,
+          "z": 0
+        }
+      },
+      {
+        "id": "mastTop",
+        "kind": "anchor",
+        "position": {
+          "x": 0.05,
+          "y": 1.55,
+          "z": 0
+        }
+      },
+      {
+        "id": "chinGuide",
+        "kind": "anchor",
+        "position": {
+          "x": 0.28,
+          "y": 1.25,
+          "z": 0
+        }
+      },
+      {
+        "id": "handleBase",
+        "kind": "anchor",
+        "position": {
+          "x": 0.25,
+          "y": 0.85,
+          "z": 0
+        }
+      },
+      {
+        "id": "boxBack",
+        "kind": "free",
+        "position": {
+          "x": 0.104,
+          "y": 1.347,
+          "z": 0
+        }
+      },
+      {
+        "id": "neckBase",
+        "kind": "free",
+        "position": {
+          "x": 0.185,
+          "y": 1.3875,
+          "z": 0
+        }
+      },
+      {
+        "id": "head",
+        "kind": "free",
+        "position": {
+          "x": 0.95,
+          "y": 1.72,
+          "z": 0
+        }
+      },
+      {
+        "id": "pull",
+        "kind": "driven",
+        "position": {
+          "x": 0.25,
+          "y": 1,
+          "z": 0
+        },
+        "channelId": "chSteerPitch"
+      }
+    ],
+    "elements": [
+      {
+        "id": "aGuide",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "frame",
+        "nodeA": "guideA",
+        "nodeB": "guideB",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "fitting",
+        "endRealizationB": "fitting",
+        "pointMasses": []
+      },
+      {
+        "id": "bundleCore",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "boxBack",
+        "nodeB": "neckBase",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "ropeLashing",
+        "pointMasses": []
+      },
+      {
+        "id": "neckBoom",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "neckBase",
+        "nodeB": "head",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "zHandle",
+        "type": "telescope",
+        "maturity": "engineered",
+        "subsystemTag": "frame",
+        "nodeA": "handleBase",
+        "nodeB": "pull",
+        "minLengthM": 0.05,
+        "maxLengthM": 0.3,
+        "lengthM": 0.15,
+        "sliding": true,
+        "outerPipeMaterialId": "pipe-nps-cls200-075",
+        "innerPipeMaterialId": "pipe-cts-cpvc-075",
+        "pointMasses": []
+      },
+      {
+        "id": "boxSliderBack",
+        "type": "slider",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeId": "boxBack",
+        "alongElementId": "aGuide",
+        "travelMin": 0.26,
+        "travelMax": 0.36,
+        "realization": "conduitBox"
+      },
+      {
+        "id": "boxSliderFront",
+        "type": "slider",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeId": "neckBase",
+        "alongElementId": "aGuide",
+        "travelMin": 0.71,
+        "travelMax": 0.81,
+        "realization": "conduitBox"
+      },
+      {
+        "id": "boxPivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeId": "neckBase",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": [
+          "bundleCore",
+          "neckBoom"
+        ],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "bundleCore",
+          "memberB": "neckBoom",
+          "minRad": -0.35,
+          "maxRad": 0.35
+        },
+        "realization": "ropeLashing"
+      },
+      {
+        "id": "counterElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "nodeA": "mastTop",
+        "nodeB": "head",
+        "restLengthM": 0.65,
+        "stiffnessNPerM": 185,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee8"
+      },
+      {
+        "id": "pitchRopeDown",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "path": [
+          "pull",
+          "chinGuide",
+          "head"
+        ],
+        "lengthM": 1.0722,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "pitchRopeUp",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "neck",
+        "path": [
+          "pull",
+          "handleBase",
+          "mastTop",
+          "head"
+        ],
+        "lengthM": 1.7959,
+        "cordageMaterialId": "cord-paracord550"
+      }
+    ],
+    "pointMasses": [
+      {
+        "id": "headMass",
+        "name": "head",
+        "massKg": 1.2,
+        "nodeId": "head"
+      }
+    ],
+    "skeletonBindings": [],
+    "anchorBindings": [],
+    "inputs": [
+      {
+        "id": "chSteerPitch",
+        "name": "steer pitch",
+        "kind": "displacement",
+        "min": -0.03,
+        "max": 0.015,
+        "value": 0,
+        "locked": false
+      }
+    ],
+    "namedStates": []
+  },
+  "groups": [
     {
-      "id": "neck-truss",
+      "id": "grp-neck-truss",
       "name": "Neck truss (pitch)",
-      "viewOrientation": "side-left",
-      "gravityOn": true,
-      "nodes": [
-        {
-          "id": "guideA",
-          "kind": "anchor",
-          "position": {
-            "x": 0.05,
-            "y": 1.32
-          }
-        },
-        {
-          "id": "guideB",
-          "kind": "anchor",
-          "position": {
-            "x": 0.23,
-            "y": 1.41
-          }
-        },
-        {
-          "id": "mastTop",
-          "kind": "anchor",
-          "position": {
-            "x": 0.05,
-            "y": 1.55
-          }
-        },
-        {
-          "id": "chinGuide",
-          "kind": "anchor",
-          "position": {
-            "x": 0.28,
-            "y": 1.25
-          }
-        },
-        {
-          "id": "handleBase",
-          "kind": "anchor",
-          "position": {
-            "x": 0.25,
-            "y": 0.85
-          }
-        },
-        {
-          "id": "boxBack",
-          "kind": "free",
-          "position": {
-            "x": 0.104,
-            "y": 1.347
-          }
-        },
-        {
-          "id": "neckBase",
-          "kind": "free",
-          "position": {
-            "x": 0.185,
-            "y": 1.3875
-          }
-        },
-        {
-          "id": "head",
-          "kind": "free",
-          "position": {
-            "x": 0.95,
-            "y": 1.72
-          }
-        },
-        {
-          "id": "pull",
-          "kind": "driven",
-          "position": {
-            "x": 0.25,
-            "y": 1
-          },
-          "channelId": "chSteerPitch"
-        }
-      ],
-      "elements": [
-        {
-          "id": "aGuide",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "frame",
-          "nodeA": "guideA",
-          "nodeB": "guideB",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "fitting",
-          "endRealizationB": "fitting",
-          "pointMasses": []
-        },
-        {
-          "id": "bundleCore",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeA": "boxBack",
-          "nodeB": "neckBase",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "ropeLashing",
-          "endRealizationB": "ropeLashing",
-          "pointMasses": []
-        },
-        {
-          "id": "neckBoom",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeA": "neckBase",
-          "nodeB": "head",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "ropeLashing",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "zHandle",
-          "type": "telescope",
-          "maturity": "engineered",
-          "subsystemTag": "frame",
-          "nodeA": "handleBase",
-          "nodeB": "pull",
-          "minLengthM": 0.05,
-          "maxLengthM": 0.3,
-          "lengthM": 0.15,
-          "sliding": true,
-          "outerPipeMaterialId": "pipe-nps-cls200-075",
-          "innerPipeMaterialId": "pipe-cts-cpvc-075",
-          "pointMasses": []
-        },
-        {
-          "id": "boxSliderBack",
-          "type": "slider",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeId": "boxBack",
-          "alongElementId": "aGuide",
-          "travelMin": 0.26,
-          "travelMax": 0.36,
-          "realization": "conduitBox"
-        },
-        {
-          "id": "boxSliderFront",
-          "type": "slider",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeId": "neckBase",
-          "alongElementId": "aGuide",
-          "travelMin": 0.71,
-          "travelMax": 0.81,
-          "realization": "conduitBox"
-        },
-        {
-          "id": "boxPivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeId": "neckBase",
-          "memberIds": ["bundleCore", "neckBoom"],
-          "welds": [],
-          "angleLimit": {
-            "memberA": "bundleCore",
-            "memberB": "neckBoom",
-            "minRad": -0.35,
-            "maxRad": 0.35
-          },
-          "realization": "ropeLashing"
-        },
-        {
-          "id": "counterElastic",
-          "type": "elastic",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "nodeA": "mastTop",
-          "nodeB": "head",
-          "restLengthM": 0.65,
-          "stiffnessNPerM": 185,
-          "tensionOnly": true,
-          "cordageMaterialId": "cord-bungee8"
-        },
-        {
-          "id": "pitchRopeDown",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "path": ["pull", "chinGuide", "head"],
-          "lengthM": 1.0722,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "pitchRopeUp",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "neck",
-          "path": ["pull", "handleBase", "mastTop", "head"],
-          "lengthM": 1.7959,
-          "cordageMaterialId": "cord-paracord550"
-        }
-      ],
-      "pointMasses": [
-        {
-          "id": "headMass",
-          "name": "head",
-          "massKg": 1.2,
-          "nodeId": "head"
-        }
-      ],
-      "skeletonBindings": [],
-      "anchorBindings": [],
-      "inputs": [
-        {
-          "id": "chSteerPitch",
-          "name": "steer pitch",
-          "kind": "displacement",
-          "min": -0.03,
-          "max": 0.015,
-          "value": 0,
-          "locked": false
-        }
-      ],
-      "namedStates": []
+      "elementIds": [
+        "aGuide",
+        "bundleCore",
+        "neckBoom",
+        "zHandle",
+        "boxSliderBack",
+        "boxSliderFront",
+        "boxPivot",
+        "counterElastic",
+        "pitchRopeDown",
+        "pitchRopeUp"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

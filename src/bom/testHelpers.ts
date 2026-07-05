@@ -1,6 +1,7 @@
 // Shared BOM test fixtures. Round-number materials so allowance arithmetic is
 // exact and independently checkable. Test-support only — not app code.
-import type { BomSettings, MaterialsDb, Mechanism, MechanismElement } from '../schema';
+import type { BomSettings, MaterialsDb, Mechanism, MechanismElement, Project } from '../schema';
+import { DEFAULT_WEARER, SCHEMA_VERSION } from '../schema';
 
 export const BOM_SETTINGS: BomSettings = { heatWrapAllowanceFactor: 1.5, ropeWasteFactor: 1.2 };
 
@@ -83,7 +84,7 @@ function makeFitting(
   return { id, type, sizingSystem, nominalSize, massKg, socketDepthM, approximate: true };
 }
 
-/** Minimal single-mechanism wrapper. */
+/** Minimal compound-mechanism wrapper (v7: fully 3D, one per project). */
 export function mech(
   elements: MechanismElement[],
   nodes: Mechanism['nodes'],
@@ -92,8 +93,6 @@ export function mech(
   return {
     id: 'm1',
     name: 'm1',
-    viewOrientation: 'side-left',
-    gravityOn: true,
     nodes,
     elements,
     pointMasses: [],
@@ -105,8 +104,31 @@ export function mech(
   };
 }
 
-export const node = (id: string, x: number, y: number): Mechanism['nodes'][number] => ({
+/** Minimal v7 project around a mechanism, with the round-number test
+ * materials + BOM settings. Override anything (groups, materials, masses)
+ * via `extras`. */
+export function proj(mechanism: Mechanism, extras: Partial<Project> = {}): Project {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: 'p1',
+    name: 'p1',
+    unitsPreference: 'imperial',
+    materials: testMaterials(),
+    mechanism,
+    groups: [],
+    pointMasses: [],
+    foamPlates: [],
+    controls: [],
+    controlClips: [],
+    wearer: { ...DEFAULT_WEARER },
+    wearerAnchorOverrides: {},
+    bomSettings: BOM_SETTINGS,
+    ...extras,
+  };
+}
+
+export const node = (id: string, x: number, y: number, z = 0): Mechanism['nodes'][number] => ({
   id,
   kind: 'free',
-  position: { x, y },
+  position: { x, y, z },
 });

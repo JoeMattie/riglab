@@ -1,45 +1,305 @@
 // Bundled example: "full creature" (planfile §9 item 7) — the recreation of
-// the reference build (Esmee Kramer's Project Raptor, planfile §1) as one
-// project: seesaw spine, neck truss, steer mirror, jaw + Bowden, both leg
-// exoskeletons, tail, and the two arms, plus speaker/battery point masses on
-// the wearer. The global BOM and weight rollup populate from all mechanisms.
+// the reference build (Esmee Kramer's Project Raptor, planfile §1) as ONE
+// v7 compound document: every subsystem is a named group inside a single 3D
+// mechanism, actually connected in space (PLANFILE-3d-conversion.md).
+// "Raptor" appears only in this bundled data (project name), per the §9
+// creature-agnostic rule.
 //
-// Complete as of Phases 4/4.5: 3D instance placement/mirroring of these
-// mechanisms on the wearer, the yoke control (§4.4) mounted to hand.R, and the
-// bundled head-sweep + jaw-snap control clip all ship here. "Raptor" appears
-// only in this bundled data (project name), per the §9 creature-agnostic rule.
-import type {
-  Assembly,
-  Control,
-  ControlClip,
-  Mechanism,
-  MechanismElement,
-  Project,
-  Vec2,
-} from '../schema';
-import { buildJawBowdenMechanism } from './jawBowden';
-import { buildLegExoMechanism } from './legExo';
-import { buildNeckTrussMechanism } from './neckTruss';
-import { buildSeesawSpineProject } from './seesawSpine';
-import { CORD, dist, exampleProject, PIPE_050 } from './shared';
-import { buildSteerMirrorMechanism } from './steerMirror';
-import { buildTailMechanism } from './tailBoom';
+// The headline is the neck: the former plan-view pan mechanism and the
+// elevation pitch mechanism become two REAL stacked joints sharing geometry —
+//   • pan  = a hinge with vertical axis at the conduit-box base (panBase):
+//     the anchored carrier spar vs the conduit pipe bundle, whose welded
+//     left/right cross-bars receive the crossed mirror ropes from the steer
+//     handle below;
+//   • pitch = a hinge with horizontal (+z at rest) axis at the bundle's
+//     front (pitchBase), the rope-lashed compliance joint between bundle and
+//     neck boom. Because the pitch hinge's carrying member IS the pan-side
+//     bundle, the pitch plane physically rotates with pan — no transform
+//     machinery. (A spherical joint here would transmit no pan torque, so
+//     the lashing keeps a hinge with its ±0.35 rad compliance limits; the
+//     spherical showcase lives at the arm's rope-lashed hang instead.)
+// The legs are mirror-duplicated real geometry (left/right copies across
+// z = 0); the arm hangs from the front frame on a SPHERICAL rope-lashed
+// pivot (§1 item 9) with the reel-up rope; jaw, tail, spine, yoke control
+// and the head-sweep control clip carry over from the per-example builders.
+import type { Control, ControlClip, Group, PointMass, Project } from '../schema';
+import { buildJawBowdenParts } from './jawBowden';
+import { buildLegExoParts } from './legExo';
+import { buildSeesawSpineParts } from './seesawSpine';
+import {
+  BUNGEE_8,
+  CORD,
+  dist,
+  exampleProject,
+  groupOf,
+  HINGE_PLAN,
+  HINGE_SAGITTAL,
+  type MechParts,
+  mergeParts,
+  PIPE_050,
+  PIPE_075,
+  PIPE_CLS200_075,
+  PIPE_CTS_075,
+  partsMechanism,
+  v3,
+} from './shared';
+import { buildSteerChainParts } from './steerMirror';
+import { buildTailParts } from './tailBoom';
 
-const A: Record<string, Vec2> = {
-  armMount: { x: 0.18, y: 1.25 },
-  reelMount: { x: 0.1, y: 1.45 },
-  armElbow: { x: 0.3, y: 0.95 },
-  armHand: { x: 0.52, y: 0.72 },
+// ── neck: pan × pitch as real stacked 3D joints ─────────────────────────
+const N = {
+  mount: v3(0.02, 1.43, 0),
+  panBase: v3(0.19, 1.43, 0), // conduit-box base = pan bearing
+  barL: v3(0.19, 1.43, 0.07),
+  barR: v3(0.19, 1.43, -0.07),
+  pitchBase: v3(0.4, 1.43, 0), // bundle front = pitch lashing
+  head: v3(0.95, 1.72, 0),
+  mastTop: v3(0.05, 1.55, 0),
+  chinGuide: v3(0.28, 1.25, 0),
+  handleBase: v3(0.25, 0.85, 0),
+  pull: v3(0.25, 1.0, 0),
 };
 
-/** §1 item 9: single pipe with one joint each, hung from the front conduit
- * box, with a rope to reel them up before setting the costume down. */
-export function buildArmsMechanism(): Mechanism {
+/** Rest deviation of the boom from the bundle axis about the pitch hinge;
+ * the ±0.35 rad lashing compliance brackets it. */
+const PITCH_REST =
+  Math.round(Math.atan2(N.head.y - N.pitchBase.y, N.head.x - N.pitchBase.x) * 1e4) / 1e4;
+
+export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
+  const n = (id: string) => prefix + id;
+  return {
+    nodes: [
+      { id: n('mount'), kind: 'anchor', position: N.mount },
+      { id: n('panBase'), kind: 'anchor', position: N.panBase },
+      { id: n('barL'), kind: 'free', position: N.barL },
+      { id: n('barR'), kind: 'free', position: N.barR },
+      { id: n('pitchBase'), kind: 'free', position: N.pitchBase },
+      { id: n('head'), kind: 'free', position: N.head },
+      { id: n('mastTop'), kind: 'anchor', position: N.mastTop },
+      { id: n('chinGuide'), kind: 'anchor', position: N.chinGuide },
+      { id: n('handleBase'), kind: 'anchor', position: N.handleBase },
+      { id: n('pull'), kind: 'driven', position: N.pull, channelId: 'chSteerPitch' },
+    ],
+    elements: [
+      {
+        id: n('carrier'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('mount'),
+        nodeB: n('panBase'),
+        pipeMaterialId: PIPE_075,
+        endRealizationA: 'fitting',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      // the three-pipe conduit bundle — now the pan arm carrying the pitch
+      {
+        id: n('bundleCore'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('panBase'),
+        nodeB: n('pitchBase'),
+        pipeMaterialId: PIPE_075,
+        endRealizationA: 'conduitBox',
+        endRealizationB: 'ropeLashing',
+        pointMasses: [],
+      },
+      {
+        id: n('barLBar'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('panBase'),
+        nodeB: n('barL'),
+        pipeMaterialId: PIPE_050,
+        endRealizationA: 'boltThrough',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      {
+        id: n('barRBar'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('panBase'),
+        nodeB: n('barR'),
+        pipeMaterialId: PIPE_050,
+        endRealizationA: 'boltThrough',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      {
+        id: n('boom'),
+        type: 'link',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('pitchBase'),
+        nodeB: n('head'),
+        pipeMaterialId: PIPE_075,
+        endRealizationA: 'ropeLashing',
+        endRealizationB: 'boltThrough',
+        pointMasses: [],
+      },
+      // PAN: vertical-axis hinge at the conduit-box base; the bundle and its
+      // welded cross-bars rotate against the anchored carrier spar
+      {
+        id: n('panPivot'),
+        type: 'pivot',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeId: n('panBase'),
+        joint: { kind: 'hinge', axis: HINGE_PLAN },
+        memberIds: [n('carrier'), n('bundleCore'), n('barLBar'), n('barRBar')],
+        welds: [
+          [n('bundleCore'), n('barLBar')],
+          [n('bundleCore'), n('barRBar')],
+        ],
+        angleLimit: { memberA: n('carrier'), memberB: n('bundleCore'), minRad: -0.6, maxRad: 0.6 },
+        realization: 'conduitBox',
+      },
+      // PITCH: horizontal-axis hinge carried by the pan-side bundle — the
+      // rope-lashed compliance joint; rotates with pan because its carrying
+      // member is pan-side geometry
+      {
+        id: n('pitchPivot'),
+        type: 'pivot',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeId: n('pitchBase'),
+        joint: { kind: 'hinge', axis: HINGE_SAGITTAL },
+        memberIds: [n('bundleCore'), n('boom')],
+        welds: [],
+        angleLimit: {
+          memberA: n('bundleCore'),
+          memberB: n('boom'),
+          minRad: Math.round((PITCH_REST - 0.35) * 1e4) / 1e4,
+          maxRad: Math.round((PITCH_REST + 0.35) * 1e4) / 1e4,
+        },
+        realization: 'ropeLashing',
+      },
+      {
+        id: n('counterElastic'),
+        type: 'elastic',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('mastTop'),
+        nodeB: n('head'),
+        restLengthM: 0.65,
+        stiffnessNPerM: 185,
+        tensionOnly: true,
+        cordageMaterialId: BUNGEE_8,
+      },
+      // the steer grip slides on the handle pipe (sliding telescope rail)
+      {
+        id: n('zHandle'),
+        type: 'telescope',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        nodeA: n('handleBase'),
+        nodeB: n('pull'),
+        minLengthM: 0.05,
+        maxLengthM: 0.3,
+        lengthM: 0.15,
+        sliding: true,
+        outerPipeMaterialId: PIPE_CLS200_075,
+        innerPipeMaterialId: PIPE_CTS_075,
+        pointMasses: [],
+      },
+      // the up/down rope pair pinning head pitch to the grip position
+      {
+        id: n('pitchRopeDown'),
+        type: 'rope',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        path: [n('pull'), n('chinGuide'), n('head')],
+        lengthM: dist(N.pull, N.chinGuide) + dist(N.chinGuide, N.head) + 0.002,
+        cordageMaterialId: CORD,
+      },
+      {
+        id: n('pitchRopeUp'),
+        type: 'rope',
+        maturity: 'engineered',
+        subsystemTag: 'neck',
+        path: [n('pull'), n('handleBase'), n('mastTop'), n('head')],
+        lengthM:
+          dist(N.pull, N.handleBase) +
+          dist(N.handleBase, N.mastTop) +
+          dist(N.mastTop, N.head) +
+          0.002,
+        cordageMaterialId: CORD,
+      },
+    ],
+    pointMasses: [{ id: n('headMass'), name: 'head', massKg: 1.2, nodeId: n('head') }],
+    skeletonBindings: [],
+    inputs: [
+      {
+        id: 'chSteerPitch',
+        name: 'steer pitch',
+        kind: 'displacement',
+        min: -0.03,
+        max: 0.015,
+        value: 0,
+        locked: false,
+      },
+    ],
+  };
+}
+
+// ── steer handle + crossed mirror ropes to the neck's pan bars ──────────
+/** Steer pan pivot position: a horizontal handle deck at grip height, aft of
+ * the conduit box. Chain points aft, neck bundle points forward, ropes
+ * crossed — the head pans to the same side as the steer tip (§9 item 3). */
+const STEER_AT = v3(0.43, 1.1, 0);
+
+function buildSteerRopesParts(steerPrefix: string, neckPrefix: string): MechParts {
+  const sL = v3(STEER_AT.x, STEER_AT.y, STEER_AT.z + 0.07);
+  const sR = v3(STEER_AT.x, STEER_AT.y, STEER_AT.z - 0.07);
+  return {
+    nodes: [],
+    elements: [
+      {
+        id: `${steerPrefix}ropeCrossLtoR`,
+        type: 'rope',
+        maturity: 'engineered',
+        subsystemTag: 'steer',
+        path: [`${steerPrefix}sL`, `${neckPrefix}barR`],
+        lengthM: dist(sL, N.barR),
+        cordageMaterialId: CORD,
+      },
+      {
+        id: `${steerPrefix}ropeCrossRtoL`,
+        type: 'rope',
+        maturity: 'engineered',
+        subsystemTag: 'steer',
+        path: [`${steerPrefix}sR`, `${neckPrefix}barL`],
+        lengthM: dist(sR, N.barL),
+        cordageMaterialId: CORD,
+      },
+    ],
+    pointMasses: [],
+    skeletonBindings: [],
+    inputs: [],
+  };
+}
+
+// ── arm: single pipe pair hung from the front frame (§1 item 9) ─────────
+const A = {
+  mountRoot: v3(0.18, 1.32, -0.23),
+  armMount: v3(0.18, 1.25, -0.23),
+  reelMount: v3(0.1, 1.45, -0.23),
+  armElbow: v3(0.3, 0.95, -0.23),
+  armHand: v3(0.52, 0.72, -0.23),
+};
+
+export function buildArmParts(prefix = 'arm.'): MechParts {
+  const n = (id: string) => prefix + id;
   const link = (
     id: string,
     nodeA: string,
     nodeB: string,
-  ): Extract<MechanismElement, { type: 'link' }> => ({
+  ): Extract<MechParts['elements'][number], { type: 'link' }> => ({
     id,
     type: 'link',
     maturity: 'engineered',
@@ -53,179 +313,114 @@ export function buildArmsMechanism(): Mechanism {
   });
 
   return {
-    id: 'arms',
-    name: 'Arms',
-    viewOrientation: 'side-left',
-    gravityOn: true,
     nodes: [
-      { id: 'armMount', kind: 'anchor', position: A.armMount! },
-      { id: 'reelMount', kind: 'anchor', position: A.reelMount! },
-      { id: 'armElbow', kind: 'free', position: A.armElbow! },
-      { id: 'armHand', kind: 'free', position: A.armHand! },
+      { id: n('mountRoot'), kind: 'anchor', position: A.mountRoot },
+      { id: n('armMount'), kind: 'anchor', position: A.armMount },
+      { id: n('reelMount'), kind: 'anchor', position: A.reelMount },
+      { id: n('armElbow'), kind: 'free', position: A.armElbow },
+      { id: n('armHand'), kind: 'free', position: A.armHand },
     ],
     elements: [
-      link('armUpper', 'armMount', 'armElbow'),
-      link('armFore', 'armElbow', 'armHand'),
+      { ...link(n('armStub'), n('mountRoot'), n('armMount')), endRealizationA: 'boltThrough' },
+      link(n('armUpper'), n('armMount'), n('armElbow')),
+      link(n('armFore'), n('armElbow'), n('armHand')),
+      // the rope-lashed HANG from the original build: multi-DOF, so a
+      // spherical pivot — the v7 joint kind showcase
       {
-        id: 'armElbowPivot',
+        id: n('shoulderLash'),
         type: 'pivot',
         maturity: 'engineered',
         subsystemTag: 'arm',
-        nodeId: 'armElbow',
-        memberIds: ['armUpper', 'armFore'],
+        nodeId: n('armMount'),
+        joint: { kind: 'spherical' },
+        memberIds: [n('armStub'), n('armUpper')],
         welds: [],
-        angleLimit: { memberA: 'armUpper', memberB: 'armFore', minRad: -0.1, maxRad: 2 },
+        realization: 'ropeLashing',
+      },
+      {
+        id: n('armElbowPivot'),
+        type: 'pivot',
+        maturity: 'engineered',
+        subsystemTag: 'arm',
+        nodeId: n('armElbow'),
+        joint: { kind: 'hinge', axis: HINGE_SAGITTAL },
+        memberIds: [n('armUpper'), n('armFore')],
+        welds: [],
+        angleLimit: { memberA: n('armUpper'), memberB: n('armFore'), minRad: -0.1, maxRad: 2 },
         realization: 'heatWrapPivot',
       },
       {
-        id: 'armReelRope',
+        id: n('armReelRope'),
         type: 'rope',
         maturity: 'engineered',
         subsystemTag: 'arm',
-        path: ['armHand', 'reelMount'],
-        lengthM: dist(A.armHand!, A.reelMount!) + 0.15,
+        path: [n('armHand'), n('reelMount')],
+        lengthM: dist(A.armHand, A.reelMount) + 0.15,
         cordageMaterialId: CORD,
       },
     ],
-    pointMasses: [{ id: 'armClawMass', name: 'arm claw', massKg: 0.12, nodeId: 'armHand' }],
+    pointMasses: [{ id: n('armClawMass'), name: 'arm claw', massKg: 0.12, nodeId: n('armHand') }],
     // the puppet hand rides the wearer's right hand, so the walk clip's arm
-    // swing animates the arm in 2D and in the 3D assembly (§7.3, Phase 4).
-    skeletonBindings: [{ id: 'bindArmHand', point: 'handR', nodeId: 'armHand' }],
-    anchorBindings: [],
+    // swing animates the arm in every panel (§7.3)
+    skeletonBindings: [{ id: n('bindArmHand'), point: 'handR', nodeId: n('armHand') }],
     inputs: [],
-    namedStates: [],
   };
 }
 
 export function buildFullCreatureProject(): Project {
-  const mechanisms: Mechanism[] = [
-    buildSeesawSpineProject().mechanisms[0]!,
-    buildNeckTrussMechanism(),
-    buildSteerMirrorMechanism(),
-    buildJawBowdenMechanism(),
-    buildLegExoMechanism('left'),
-    buildLegExoMechanism('right'),
-    buildTailMechanism(),
-    buildArmsMechanism(),
+  const spine = buildSeesawSpineParts('spine.');
+  const neck = buildNeckPanPitchParts('neck.');
+  const steer = mergeParts(
+    buildSteerChainParts('steer.', STEER_AT),
+    buildSteerRopesParts('steer.', 'neck.'),
+  );
+  const jaw = buildJawBowdenParts('jaw.');
+  const legLeft = buildLegExoParts('left', 'legL.');
+  const legRight = buildLegExoParts('right', 'legR.');
+  const tail = buildTailParts('tail.');
+  const arm = buildArmParts('arm.');
+
+  const parts = mergeParts(spine, neck, steer, jaw, legLeft, legRight, tail, arm);
+
+  const groups: Group[] = [
+    groupOf('grp-spine', 'Spine', spine.elements),
+    groupOf('grp-neck', 'Neck (pan × pitch)', neck.elements),
+    groupOf('grp-steer', 'Steer', steer.elements),
+    groupOf('grp-jaw', 'Jaw + Bowden', jaw.elements),
+    groupOf('grp-leg-left', 'Leg (left)', legLeft.elements),
+    groupOf('grp-leg-right', 'Leg (right)', legRight.elements),
+    groupOf('grp-tail', 'Tail', tail.elements),
+    groupOf('grp-arm', 'Arm', arm.elements),
   ];
 
-  // Instance placement (§4.3/§5.4). Sagittal (side-*) mechanisms lift local
-  // (x,y) straight into the world x-y plane (identity, z=0) since their 2D
-  // coordinates are already true-scale about the wearer. The right leg reuses
-  // the same body plane but its mechanism is authored in the side-right view
-  // (x flips), so `mirror` restores world +x while position.z drops it onto the
-  // right hip. The plan-view steer mechanism rotates +90° about x so its 2D y
-  // becomes world z (a horizontal deck at shoulder height).
-  const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
-  const YAW_X_90 = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
-  const hipHalf = 0.18; // ≈ DEFAULT_WEARER.hipWidthM / 2
-  const shoulderHalf = 0.23; // ≈ DEFAULT_WEARER.shoulderWidthM / 2
-  const shoulderY = 1.43; // ≈ shoulder height for the plan-view deck
-
-  const assembly: Assembly = {
-    instances: [
-      {
-        id: 'inst-spine',
-        name: 'Seesaw spine',
-        mechanismId: 'seesaw-spine',
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-neck',
-        name: 'Neck truss',
-        mechanismId: 'neck-truss',
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-jaw',
-        name: 'Jaw + Bowden',
-        mechanismId: 'jaw-bowden',
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-steer',
-        name: 'Steer mirror',
-        mechanismId: 'steer-mirror',
-        position: { x: 0, y: shoulderY, z: 0 },
-        quaternion: YAW_X_90,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-tail',
-        name: 'Tail',
-        mechanismId: 'tail-boom',
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-leg-left',
-        name: 'Leg (left)',
-        mechanismId: 'leg-exo-left',
-        position: { x: 0, y: 0, z: hipHalf },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-leg-right',
-        name: 'Leg (right)',
-        mechanismId: 'leg-exo-right',
-        position: { x: 0, y: 0, z: -hipHalf },
-        quaternion: IDENTITY,
-        mirror: true,
-        transformDrive: { kind: 'fixed' },
-      },
-      {
-        id: 'inst-arm',
-        name: 'Arm',
-        mechanismId: 'arms',
-        position: { x: 0, y: 0, z: -shoulderHalf },
-        quaternion: IDENTITY,
-        mirror: false,
-        transformDrive: { kind: 'fixed' },
-      },
-    ],
-    bindings: [],
-    pointMasses: [
-      {
-        id: 'speakerMass',
-        name: 'speaker',
-        massKg: 0.35,
-        attach: { kind: 'wearerAnchor', anchor: 'spineTop' },
-      },
-      {
-        id: 'batteryMass',
-        name: 'battery pack',
-        massKg: 0.55,
-        attach: { kind: 'wearerAnchor', anchor: 'beltBack' },
-      },
-      {
-        id: 'headMass',
-        name: 'head + foam',
-        massKg: 0.6,
-        attach: { kind: 'instanceNode', instanceId: 'inst-spine', nodeId: 'head' },
-      },
-      {
-        id: 'tailMass',
-        name: 'tail counterweight',
-        massKg: 0.5,
-        attach: { kind: 'instanceNode', instanceId: 'inst-spine', nodeId: 'tail' },
-      },
-    ],
-    foamPlates: [],
-  };
+  // body-carried masses at project level (v7): wearer-anchor riders plus the
+  // head foam / tail counterweight hanging on spine nodes
+  const pointMasses: PointMass[] = [
+    {
+      id: 'speakerMass',
+      name: 'speaker',
+      massKg: 0.35,
+      attach: { kind: 'wearerAnchor', anchor: 'spineTop' },
+    },
+    {
+      id: 'batteryMass',
+      name: 'battery pack',
+      massKg: 0.55,
+      attach: { kind: 'wearerAnchor', anchor: 'beltBack' },
+    },
+    {
+      id: 'headFoamMass',
+      name: 'head + foam',
+      massKg: 0.6,
+      attach: { kind: 'node', nodeId: 'spine.head' },
+    },
+    {
+      id: 'tailCounterweightMass',
+      name: 'tail counterweight',
+      massKg: 0.5,
+      attach: { kind: 'node', nodeId: 'spine.tail' },
+    },
+  ];
 
   // §4.4 yoke: the operator's right hand holds a yoke whose tilt pitches the
   // head, twist pans it, and trigger works the jaw — three axes onto the three
@@ -290,8 +485,8 @@ export function buildFullCreatureProject(): Project {
   return exampleProject(
     'example-full-creature',
     'Example — Raptor (full creature)',
-    mechanisms,
-    assembly,
-    { controls: [yoke], controlClips: [headSweep] },
+    partsMechanism('full-creature', 'Full creature', parts),
+    groups,
+    { pointMasses, controls: [yoke], controlClips: [headSweep] },
   );
 }

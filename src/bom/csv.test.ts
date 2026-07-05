@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { JointRealization, MechanismElement } from '../schema';
 import { type Bom, computeBom } from './bom';
 import { bomToCsv } from './csv';
-import { BOM_SETTINGS, mech, node, testMaterials } from './testHelpers';
+import { mech, node, proj, testMaterials } from './testHelpers';
 
 const MATS = testMaterials();
 
@@ -29,13 +29,14 @@ function sampleBom(): Bom {
       cordageMaterialId: 'rope',
     },
   ];
-  return computeBom([mech(els, nodes)], MATS, BOM_SETTINGS);
+  return computeBom(proj(mech(els, nodes)));
 }
 
 describe('bomToCsv', () => {
-  it('emits the four sections with headers', () => {
+  it('emits the five sections with headers', () => {
     const csv = bomToCsv(sampleBom());
     expect(csv).toContain('Cut list');
+    expect(csv).toContain('Bend schedule');
     expect(csv).toContain('Fittings');
     expect(csv).toContain('Consumables');
     expect(csv).toContain('Weights');
@@ -52,6 +53,47 @@ describe('bomToCsv', () => {
     expect(lines.some((l) => l.includes('Rope (incl. waste),2.4'))).toBe(true);
   });
 
+  it('emits bend-schedule rows with angle° and twist° columns', () => {
+    // two bends: first in-plane (twist 0), second turning up +z (twist +90°)
+    const nodes = [node('A', 0, 0, 0), node('B', 1, 0, 0), node('C', 1, 1, 0), node('D', 1, 1, 1)];
+    const bent: MechanismElement = {
+      id: 'bent',
+      type: 'bentLink',
+      maturity: 'engineered',
+      nodeIds: ['A', 'B', 'C', 'D'],
+      filletRadiiM: [0.05, 0],
+      pipeMaterialId: 'PA',
+      pointMasses: [],
+    };
+    const csv = bomToCsv(computeBom(proj(mech([bent], nodes))));
+    const lines = csv.split('\r\n');
+    const header = lines[lines.indexOf('Bend schedule') + 1]!;
+    expect(header).toBe('Element,Bend,Node,angle°,twist°,Radius (m)');
+    expect(lines).toContain('bent,1,B,90,0,0.05');
+    expect(lines).toContain('bent,2,C,90,90,0');
+  });
+
+  it('labels per-group weight rows with the group name', () => {
+    const nodes = [node('A', 0, 0), node('B', 2, 0)];
+    const els: MechanismElement[] = [
+      {
+        id: 'L',
+        type: 'link',
+        maturity: 'engineered',
+        nodeA: 'A',
+        nodeB: 'B',
+        pipeMaterialId: 'PA',
+        pointMasses: [],
+      },
+    ];
+    const csv = bomToCsv(
+      computeBom(
+        proj(mech(els, nodes), { groups: [{ id: 'g1', name: 'Neck', elementIds: ['L'] }] }),
+      ),
+    );
+    expect(csv.split('\r\n')).toContain('Group: Neck,1');
+  });
+
   it('RFC 4180-quotes fields containing comma, quote, or newline', () => {
     const nodes = [node('A', 0, 0), node('B', 1, 0)];
     const nasty = {
@@ -59,7 +101,7 @@ describe('bomToCsv', () => {
       pipes: MATS.pipes.map((p) => (p.id === 'PA' ? { ...p, name: 'Pipe "A", 3/4"\nspecial' } : p)),
     };
     const bom = computeBom(
-      [
+      proj(
         mech(
           [
             {
@@ -74,9 +116,8 @@ describe('bomToCsv', () => {
           ],
           nodes,
         ),
-      ],
-      nasty,
-      BOM_SETTINGS,
+        { materials: nasty },
+      ),
     );
     const csv = bomToCsv(bom);
     // embedded quotes doubled, whole field wrapped

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-leg-exoskeleton",
   "name": "Example — leg exoskeleton",
   "unitsPreference": "imperial",
@@ -622,317 +622,392 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
+  "mechanism": {
+    "id": "leg-exo-left",
+    "name": "Leg exoskeleton (left)",
+    "nodes": [
+      {
+        "id": "frameHip",
+        "kind": "anchor",
+        "position": {
+          "x": -0.06,
+          "y": 0.98,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "frameSide",
+        "kind": "anchor",
+        "position": {
+          "x": -0.1,
+          "y": 0.75,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "wHip",
+        "kind": "free",
+        "position": {
+          "x": 0,
+          "y": 0.9275,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "wKnee",
+        "kind": "free",
+        "position": {
+          "x": 0,
+          "y": 0.49875,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "wShoe",
+        "kind": "free",
+        "position": {
+          "x": 0.1,
+          "y": 0,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eKnee",
+        "kind": "free",
+        "position": {
+          "x": 0.08,
+          "y": 0.52,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eAnkle",
+        "kind": "free",
+        "position": {
+          "x": 0.05,
+          "y": 0.1,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eHeel",
+        "kind": "free",
+        "position": {
+          "x": -0.05,
+          "y": 0.13,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eToeJ",
+        "kind": "free",
+        "position": {
+          "x": 0.18,
+          "y": 0.045,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eToePad",
+        "kind": "free",
+        "position": {
+          "x": 0.18,
+          "y": -0.02,
+          "z": 0.18
+        }
+      },
+      {
+        "id": "eToe",
+        "kind": "free",
+        "position": {
+          "x": 0.3,
+          "y": 0.03,
+          "z": 0.18
+        }
+      }
+    ],
+    "elements": [
+      {
+        "id": "exoFemur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "frameHip",
+        "nodeB": "eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "exoTibia",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eKnee",
+        "nodeB": "eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-075",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "exoFootMain",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eAnkle",
+        "nodeB": "eToeJ",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "exoHeelSpur",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eAnkle",
+        "nodeB": "eHeel",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "exoToePadBar",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eToeJ",
+        "nodeB": "eToePad",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "exoToe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eToeJ",
+        "nodeB": "eToe",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "tieKnee",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "wKnee",
+        "nodeB": "eKnee",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "tieShoe",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "wShoe",
+        "nodeB": "eAnkle",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "ropeLashing",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "kneePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "eKnee",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": [
+          "exoFemur",
+          "exoTibia",
+          "tieKnee"
+        ],
+        "welds": [],
+        "angleLimit": {
+          "memberA": "exoFemur",
+          "memberB": "exoTibia",
+          "minRad": -1.5,
+          "maxRad": 0.05
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "anklePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "eAnkle",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": [
+          "exoTibia",
+          "exoFootMain",
+          "exoHeelSpur",
+          "tieShoe"
+        ],
+        "welds": [
+          [
+            "exoFootMain",
+            "exoHeelSpur"
+          ]
+        ],
+        "angleLimit": {
+          "memberA": "exoTibia",
+          "memberB": "exoFootMain",
+          "minRad": 0.6,
+          "maxRad": 1.9
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "toePivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeId": "eToeJ",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          }
+        },
+        "memberIds": [
+          "exoFootMain",
+          "exoToe",
+          "exoToePadBar"
+        ],
+        "welds": [
+          [
+            "exoFootMain",
+            "exoToePadBar"
+          ]
+        ],
+        "angleLimit": {
+          "memberA": "exoFootMain",
+          "memberB": "exoToe",
+          "minRad": -0.6,
+          "maxRad": 0.35
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "heelLiftElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "frameSide",
+        "nodeB": "eHeel",
+        "restLengthM": 0.45,
+        "stiffnessNPerM": 150,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee8"
+      },
+      {
+        "id": "toeLimitRope",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "path": [
+          "eToe",
+          "eToePad"
+        ],
+        "lengthM": 0.15,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "toeReturnElastic",
+        "type": "elastic",
+        "maturity": "engineered",
+        "subsystemTag": "leg",
+        "nodeA": "eToe",
+        "nodeB": "eToePad",
+        "restLengthM": 0.13,
+        "stiffnessNPerM": 60,
+        "tensionOnly": true,
+        "cordageMaterialId": "cord-bungee6"
+      }
+    ],
+    "pointMasses": [
+      {
+        "id": "pawMass",
+        "name": "paw claw",
+        "massKg": 0.1,
+        "nodeId": "eToe"
+      }
+    ],
+    "skeletonBindings": [
+      {
+        "id": "bindHip",
+        "point": "hipL",
+        "nodeId": "wHip"
+      },
+      {
+        "id": "bindKnee",
+        "point": "kneeL",
+        "nodeId": "wKnee"
+      },
+      {
+        "id": "bindShoe",
+        "point": "shoeL",
+        "nodeId": "wShoe"
+      }
+    ],
+    "anchorBindings": [],
+    "inputs": [],
+    "namedStates": []
+  },
+  "groups": [
     {
-      "id": "leg-exo-left",
+      "id": "grp-leg-exo",
       "name": "Leg exoskeleton (left)",
-      "viewOrientation": "side-left",
-      "gravityOn": true,
-      "nodes": [
-        {
-          "id": "frameHip",
-          "kind": "anchor",
-          "position": {
-            "x": -0.06,
-            "y": 0.98
-          }
-        },
-        {
-          "id": "frameSide",
-          "kind": "anchor",
-          "position": {
-            "x": -0.1,
-            "y": 0.75
-          }
-        },
-        {
-          "id": "wHip",
-          "kind": "free",
-          "position": {
-            "x": 0,
-            "y": 0.9275
-          }
-        },
-        {
-          "id": "wKnee",
-          "kind": "free",
-          "position": {
-            "x": 0,
-            "y": 0.49875
-          }
-        },
-        {
-          "id": "wShoe",
-          "kind": "free",
-          "position": {
-            "x": 0.1,
-            "y": 0
-          }
-        },
-        {
-          "id": "eKnee",
-          "kind": "free",
-          "position": {
-            "x": 0.08,
-            "y": 0.52
-          }
-        },
-        {
-          "id": "eAnkle",
-          "kind": "free",
-          "position": {
-            "x": 0.05,
-            "y": 0.1
-          }
-        },
-        {
-          "id": "eHeel",
-          "kind": "free",
-          "position": {
-            "x": -0.05,
-            "y": 0.13
-          }
-        },
-        {
-          "id": "eToeJ",
-          "kind": "free",
-          "position": {
-            "x": 0.18,
-            "y": 0.045
-          }
-        },
-        {
-          "id": "eToePad",
-          "kind": "free",
-          "position": {
-            "x": 0.18,
-            "y": -0.02
-          }
-        },
-        {
-          "id": "eToe",
-          "kind": "free",
-          "position": {
-            "x": 0.3,
-            "y": 0.03
-          }
-        }
-      ],
-      "elements": [
-        {
-          "id": "exoFemur",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "frameHip",
-          "nodeB": "eKnee",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "exoTibia",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eKnee",
-          "nodeB": "eAnkle",
-          "pipeMaterialId": "pipe-nps-sch40-075",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "exoFootMain",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eAnkle",
-          "nodeB": "eToeJ",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "exoHeelSpur",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eAnkle",
-          "nodeB": "eHeel",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "exoToePadBar",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eToeJ",
-          "nodeB": "eToePad",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "exoToe",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eToeJ",
-          "nodeB": "eToe",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "tieKnee",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "wKnee",
-          "nodeB": "eKnee",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "ropeLashing",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "tieShoe",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "wShoe",
-          "nodeB": "eAnkle",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "ropeLashing",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "kneePivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeId": "eKnee",
-          "memberIds": ["exoFemur", "exoTibia", "tieKnee"],
-          "welds": [],
-          "angleLimit": {
-            "memberA": "exoFemur",
-            "memberB": "exoTibia",
-            "minRad": -1.5,
-            "maxRad": 0.05
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "anklePivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeId": "eAnkle",
-          "memberIds": ["exoTibia", "exoFootMain", "exoHeelSpur", "tieShoe"],
-          "welds": [["exoFootMain", "exoHeelSpur"]],
-          "angleLimit": {
-            "memberA": "exoTibia",
-            "memberB": "exoFootMain",
-            "minRad": 0.6,
-            "maxRad": 1.9
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "toePivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeId": "eToeJ",
-          "memberIds": ["exoFootMain", "exoToe", "exoToePadBar"],
-          "welds": [["exoFootMain", "exoToePadBar"]],
-          "angleLimit": {
-            "memberA": "exoFootMain",
-            "memberB": "exoToe",
-            "minRad": -0.6,
-            "maxRad": 0.35
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "heelLiftElastic",
-          "type": "elastic",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "frameSide",
-          "nodeB": "eHeel",
-          "restLengthM": 0.45,
-          "stiffnessNPerM": 150,
-          "tensionOnly": true,
-          "cordageMaterialId": "cord-bungee8"
-        },
-        {
-          "id": "toeLimitRope",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "path": ["eToe", "eToePad"],
-          "lengthM": 0.15,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "toeReturnElastic",
-          "type": "elastic",
-          "maturity": "engineered",
-          "subsystemTag": "leg",
-          "nodeA": "eToe",
-          "nodeB": "eToePad",
-          "restLengthM": 0.13,
-          "stiffnessNPerM": 60,
-          "tensionOnly": true,
-          "cordageMaterialId": "cord-bungee6"
-        }
-      ],
-      "pointMasses": [
-        {
-          "id": "pawMass",
-          "name": "paw claw",
-          "massKg": 0.1,
-          "nodeId": "eToe"
-        }
-      ],
-      "skeletonBindings": [
-        {
-          "id": "bindHip",
-          "point": "hipL",
-          "nodeId": "wHip"
-        },
-        {
-          "id": "bindKnee",
-          "point": "kneeL",
-          "nodeId": "wKnee"
-        },
-        {
-          "id": "bindShoe",
-          "point": "shoeL",
-          "nodeId": "wShoe"
-        }
-      ],
-      "anchorBindings": [],
-      "inputs": [],
-      "namedStates": []
+      "elementIds": [
+        "exoFemur",
+        "exoTibia",
+        "exoFootMain",
+        "exoHeelSpur",
+        "exoToePadBar",
+        "exoToe",
+        "tieKnee",
+        "tieShoe",
+        "kneePivot",
+        "anklePivot",
+        "toePivot",
+        "heelLiftElastic",
+        "toeLimitRope",
+        "toeReturnElastic"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

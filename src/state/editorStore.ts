@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import type { ProposedChange } from '../design/autoResolve';
-import type { Vec2 } from '../schema';
+import type { Vec2, Vec3 } from '../schema';
 
 // Transient editor/UI state — never persisted, never in undo history.
+//
+// v7 (PLANFILE-3d-conversion.md): the quad workspace IS the app — the 2d/3d
+// mode switch and per-mechanism activation are gone (one compound mechanism
+// per project). Solved poses, traces, and equilibrium readouts are Vec3
+// document coordinates; panels project them for display.
 
 export type Tool =
   | 'select'
@@ -16,18 +21,19 @@ export type Tool =
   | 'torsionCable';
 
 /** The two lenses on one document (§8): sketch hides engineering, design
- * overlays it. A transient view choice, not a document property — switching
- * mechanisms or faces never destroys data. */
+ * overlays it. A transient view choice, not a document property. */
 export type Face = 'sketch' | 'design';
-
-/** Top-level editor mode (§8): the 2D per-mechanism editor (with sketch/design
- * faces), the global 3D Assembly viewport, or the quad workspace
- * (Top/Front/Side ortho panels + perspective, PLANFILE-quad-workspace).
- * Transient, never persisted. */
-export type Mode = '2d' | '3d' | 'quad';
 
 /** Quad-workspace panels; `persp` is the 3D perspective preview. */
 export type QuadPanelId = 'top' | 'front' | 'side' | 'persp';
+
+/** The three editable orthographic panels (perspective has no work plane). */
+export type OrthoPanelId = 'top' | 'front' | 'side';
+
+/** Work-plane depth along each ortho panel's normal, metres. Default 0;
+ * edited via the panel-header chip, and adopted from clicked/snapped
+ * geometry so connections land exactly (PLANFILE-3d-conversion.md). */
+export type PanelDepths = Record<OrthoPanelId, number>;
 
 /** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
  * alongside, materials (incl. nesting matrix) and BOM as siblings. */
@@ -54,9 +60,9 @@ export interface EquilibriumReadout {
   requiredInputs: Record<string, number>;
   ropesRequiringCompression: string[];
   /** settled pose per node id — the sag the real rig relaxes into (§5.2).
-   * Rendered by the canvas while the forces overlay is on; null when the
+   * Rendered by the panels while the forces overlay is on; null when the
    * solve is idle/unavailable, falling back to drawn geometry. */
-  positions: Record<string, Vec2> | null;
+  positions: Record<string, Vec3> | null;
 }
 
 export const IDLE_EQUILIBRIUM: EquilibriumReadout = {
@@ -76,12 +82,12 @@ export interface PendingConnect {
 }
 
 /** One floating popover/menu at a time (interface overhaul): joint popover at
- * a node, mechanism switcher, DOF conflict card, input-channel card, clip
- * picker, export menu. The snap-connect case keeps its data in
- * `pendingConnect`; opening any popover closes the others. */
+ * a node, DOF conflict card, input-channel card, clip picker, export menu.
+ * The snap-connect case keeps its data in `pendingConnect`; opening any
+ * popover closes the others. (The v6 mechanism switcher is gone — one
+ * compound mechanism per project.) */
 export type OpenPopover =
   | { kind: 'joint'; nodeId: string }
-  | { kind: 'mech' }
   | { kind: 'dof' }
   | { kind: 'inputs' }
   | { kind: 'clip' }
@@ -100,7 +106,6 @@ export interface LengthEdit {
  * the preview hides itself rather than applying against moved ground. */
 export interface AutoProposalState {
   docRef: unknown;
-  mechId: string;
   changes: ProposedChange[];
 }
 
@@ -127,19 +132,20 @@ export interface RecordFrame {
 }
 
 export interface EditorState {
-  activeMechanismId: string | null;
   tool: Tool;
-  mode: Mode;
   face: Face;
   rightTab: RightTab;
   focusHint: FocusHint | null;
-  /** multi-select (§8.2a): order = click order; empty = nothing selected */
+  /** multi-select (§8.2a): order = click order; empty = nothing selected.
+   * Selection is global across quad panels. */
   selectedElementIds: string[];
-  /** live solved pose during drag/playback; null = document positions */
-  posePositions: Record<string, Vec2> | null;
+  /** live solved pose during drag/playback (document space); null = document
+   * positions */
+  posePositions: Record<string, Vec3> | null;
   playback: PlaybackState;
   tracing: boolean;
-  tracePath: Vec2[];
+  /** traced node path in document space; panels project it for display */
+  tracePath: Vec3[];
   /** control-clip recording pass (§4.4): frames captured while it runs */
   recording: boolean;
   recordBuffer: RecordFrame[];
@@ -149,8 +155,8 @@ export interface EditorState {
   pendingConnect: PendingConnect | null;
   openPopover: OpenPopover;
   lengthEdit: LengthEdit | null;
-  /** one-shot request for the canvas to zoom to an element (DOF conflict
-   * click-to-zoom); the canvas consumes and clears it */
+  /** one-shot request for the panels to zoom to an element (DOF conflict
+   * click-to-zoom); the consumer clears it */
   focusElementId: string | null;
   /** ids flashed red because a limit/constraint was hit this frame */
   violated: string[];
@@ -161,17 +167,25 @@ export interface EditorState {
   equilibrium: EquilibriumReadout;
   /** pending auto-resolve preview; null = none */
   autoProposal: AutoProposalState | null;
-  /** 3D viewport render: wireframe tubes vs the solved pipe-and-fittings
+  /** perspective-panel render: wireframe tubes vs the solved pipe-and-fittings
    * model (PLANFILE-quad-workspace slice 3) */
   assemblyRender: 'wire' | 'pipe';
-  /** quad workspace: the panel currently maximized (double-click header) */
+  /** the panel currently maximized (double-click header); a maximized ortho
+   * panel is the old focused-2D feel */
   quadMaximized: QuadPanelId | null;
+  /** per-panel active work-plane depth along the panel normal (m) */
+  panelDepths: PanelDepths;
+  /** the panel that last received pointer input — floating per-selection UI
+   * (joint popover, selection card) renders only in this panel */
+  activePanel: QuadPanelId;
   /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
   controlsOpen: boolean;
 
-  setActiveMechanism(id: string | null): void;
+  /** Clear document-scoped transient state (selection, pose, trace,
+   * popovers, proposal) — call when a different project is opened. Replaces
+   * the v6 setActiveMechanism(id). */
+  resetTransient(): void;
   setTool(tool: Tool): void;
-  setMode(mode: Mode): void;
   setFace(face: Face): void;
   setRightTab(tab: RightTab): void;
   setFocusHint(hint: FocusHint | null): void;
@@ -182,14 +196,14 @@ export interface EditorState {
   /** replace the whole selection at once (marquee); deduped, order kept */
   setSelection(elementIds: string[]): void;
   clearSelection(): void;
-  setPosePositions(p: Record<string, Vec2> | null): void;
+  setPosePositions(p: Record<string, Vec3> | null): void;
   setPlayback(p: Partial<PlaybackState>): void;
   startRecording(): void;
   recordFrame(frame: RecordFrame): void;
   stopRecording(): RecordFrame[];
   setHeldChannels(channels: string[]): void;
   setTracing(on: boolean): void;
-  appendTrace(p: Vec2): void;
+  appendTrace(p: Vec3): void;
   clearTrace(): void;
   setPendingConnect(pc: PendingConnect | null): void;
   setOpenPopover(p: OpenPopover): void;
@@ -201,13 +215,13 @@ export interface EditorState {
   setAutoProposal(p: AutoProposalState | null): void;
   setAssemblyRender(render: 'wire' | 'pipe'): void;
   setQuadMaximized(panel: QuadPanelId | null): void;
+  setPanelDepth(panel: OrthoPanelId, depthM: number): void;
+  setActivePanel(panel: QuadPanelId): void;
   setControlsOpen(open: boolean): void;
 }
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
-  activeMechanismId: null,
   tool: 'select',
-  mode: '2d',
   face: 'sketch',
   rightTab: 'inspector',
   focusHint: null,
@@ -237,22 +251,23 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   autoProposal: null,
   assemblyRender: 'wire',
   quadMaximized: null,
+  panelDepths: { top: 0, front: 0, side: 0 },
+  activePanel: 'side',
   controlsOpen: false,
 
-  // face is deliberately kept on mechanism switch — it is a lens, not a
-  // per-mechanism property (§8)
-  setActiveMechanism: (id) =>
+  // face is deliberately kept across documents — it is a lens, not a
+  // document property (§8)
+  resetTransient: () =>
     set({
-      activeMechanismId: id,
       posePositions: null,
       selectedElementIds: [],
       tracePath: [],
       openPopover: null,
       lengthEdit: null,
       autoProposal: null,
+      panelDepths: { top: 0, front: 0, side: 0 },
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
-  setMode: (mode) => set({ mode, openPopover: null, lengthEdit: null, pendingConnect: null }),
   setFace: (face) => set({ face }),
   setRightTab: (rightTab) => set({ rightTab }),
   setFocusHint: (focusHint) => set({ focusHint }),
@@ -307,5 +322,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setAutoProposal: (autoProposal) => set({ autoProposal }),
   setAssemblyRender: (assemblyRender) => set({ assemblyRender }),
   setQuadMaximized: (quadMaximized) => set({ quadMaximized }),
+  setPanelDepth: (panel, depthM) =>
+    set((s) => ({ panelDepths: { ...s.panelDepths, [panel]: depthM } })),
+  setActivePanel: (activePanel) => set({ activePanel }),
   setControlsOpen: (controlsOpen) => set({ controlsOpen }),
 }));

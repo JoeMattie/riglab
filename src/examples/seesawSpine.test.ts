@@ -14,15 +14,22 @@ describe('bundled seesaw-spine example', () => {
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION);
   });
 
-  it('is a dimensionally plausible elevation truss with tagged pipes and masses', () => {
-    const mech = loadSeesawSpine().mechanisms[0]!;
-    expect(mech.viewOrientation).toBe('side-left');
-    expect(mech.gravityOn).toBe(true);
+  it('is a dimensionally plausible truss in the sagittal plane, tagged, with masses', () => {
+    const project = loadSeesawSpine();
+    const mech = project.mechanism;
+    // former side-left elevation sketch, lifted into the world x-y plane
+    for (const node of mech.nodes) expect(node.position.z, node.id).toBe(0);
+    // the hip-rect four-point rotating attachment stays grounded
+    const anchors = mech.nodes.filter((n) => n.kind === 'anchor').map((n) => n.id);
+    expect(anchors.sort()).toEqual(['hipBackBot', 'hipBackTop', 'hipFrontBot', 'hipFrontTop']);
     const tags = new Set(
       mech.elements.map((e) => ('subsystemTag' in e ? e.subsystemTag : undefined)),
     );
     expect(tags).toEqual(new Set(['neck', 'spine', 'tail']));
     expect(mech.pointMasses.map((m) => m.name).sort()).toEqual(['head', 'tail']);
+    // one group — the former mechanism — covers every element
+    expect(project.groups).toHaveLength(1);
+    expect(new Set(project.groups[0]!.elementIds)).toEqual(new Set(mech.elements.map((e) => e.id)));
     // no creature-specific language leaks into identifiers/strings
     const blob = JSON.stringify(mech).toLowerCase();
     expect(blob.includes('raptor')).toBe(false);
@@ -35,7 +42,7 @@ describe('bundled seesaw-spine example', () => {
  * so a heat-wrap end's partner OD equals the pipe's own OD. */
 describe('ACCEPTANCE Phase 3 (§11) — seesaw-spine cut list', () => {
   const project = loadSeesawSpine();
-  const mech: Mechanism = project.mechanisms[0]!;
+  const mech: Mechanism = project.mechanism;
   const pipe = project.materials.pipes.find((p) => p.id === 'pipe-nps-sch40-075')!;
   const coupling = project.materials.fittings.find(
     (f) => f.sizingSystem === 'NPS' && f.nominalSize === '3/4' && f.type === 'coupling',
@@ -58,7 +65,7 @@ describe('ACCEPTANCE Phase 3 (§11) — seesaw-spine cut list', () => {
       if (el.type !== 'link') continue;
       const a = posOf.get(el.nodeA)!;
       const b = posOf.get(el.nodeB)!;
-      const base = Math.hypot(a.x - b.x, a.y - b.y);
+      const base = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
       expected += Math.max(
         0,
         base + endAllowance(el.endRealizationA) + endAllowance(el.endRealizationB),
@@ -67,7 +74,7 @@ describe('ACCEPTANCE Phase 3 (§11) — seesaw-spine cut list', () => {
       if (el.endRealizationB && HEATWRAP.has(el.endRealizationB)) heatwrapEnds++;
     }
 
-    const bom = computeBom(mech ? [mech] : [], project.materials, project.bomSettings);
+    const bom = computeBom(project);
     const actual = bom.cutList
       .filter((p) => p.kind === 'pipe')
       .reduce((sum, p) => sum + p.lengthM * p.quantity, 0);
@@ -81,7 +88,7 @@ describe('ACCEPTANCE Phase 3 (§11) — seesaw-spine cut list', () => {
   });
 
   it('reports the four coupling fittings and no unresolved / missing-fitting issues', () => {
-    const bom = computeBom([mech], project.materials, project.bomSettings);
+    const bom = computeBom(project);
     const couplings = bom.fittings.find((f) => f.type === 'coupling' && f.nominalSize === '3/4');
     expect(couplings?.quantity).toBe(4);
     expect(couplings?.resolved).toBe(true);
@@ -91,19 +98,19 @@ describe('ACCEPTANCE Phase 3 (§11) — seesaw-spine cut list', () => {
   });
 
   it('changing a pipe size updates the weight rollup by the analytic delta', () => {
-    const before = computeBom([mech], project.materials, project.bomSettings);
+    const before = computeBom(project);
 
     // vertNeck has bolt-through ends (no heat-wrap connectors), so swapping its
     // material changes only its own pipe mass: Δ = length × (new − old) density.
     const swapped = structuredClone(project);
-    const vn = swapped.mechanisms[0]!.elements.find((e) => e.id === 'vertNeck')!;
+    const vn = swapped.mechanism.elements.find((e) => e.id === 'vertNeck')!;
     if (vn.type !== 'link') throw new Error('vertNeck must be a link');
     vn.pipeMaterialId = 'pipe-nps-sch40-100';
-    const after = computeBom(swapped.mechanisms, swapped.materials, swapped.bomSettings);
+    const after = computeBom(swapped);
 
     const a = posOf.get('tNeck')!;
     const b = posOf.get('bNeck')!;
-    const geomLen = Math.hypot(a.x - b.x, a.y - b.y); // 0.10 m
+    const geomLen = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); // 0.10 m
     const d075 = project.materials.pipes.find((p) => p.id === 'pipe-nps-sch40-075')!;
     const d100 = project.materials.pipes.find((p) => p.id === 'pipe-nps-sch40-100')!;
     const expectedDelta = geomLen * (d100.linearDensityKgPerM - d075.linearDensityKgPerM);

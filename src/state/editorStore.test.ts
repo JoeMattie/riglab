@@ -1,4 +1,5 @@
-// Multi-select + face-toggle semantics (§8, §8.2a).
+// Multi-select + face-toggle semantics (§8, §8.2a) and the v7 single-document
+// transient reset (PLANFILE-3d-conversion.md: no per-mechanism activation).
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useEditorStore } from './editorStore';
 
@@ -7,7 +8,7 @@ const state = () => useEditorStore.getState();
 beforeEach(() => {
   state().clearSelection();
   state().setFace('sketch');
-  state().setActiveMechanism(null);
+  state().resetTransient();
 });
 
 describe('selection', () => {
@@ -37,23 +38,27 @@ describe('selection', () => {
     expect(state().selectedElementIds).toEqual([]);
   });
 
-  it('clearSelection empties; switching mechanisms clears the selection', () => {
+  it('clearSelection empties; resetTransient (project switch) clears everything', () => {
     state().select('a');
     state().toggleSelect('b');
     state().clearSelection();
     expect(state().selectedElementIds).toEqual([]);
     state().select('a');
-    state().setActiveMechanism('m2');
+    state().setPosePositions({ n1: { x: 1, y: 2, z: 3 } });
+    state().appendTrace({ x: 0, y: 0, z: 0 });
+    state().resetTransient();
     expect(state().selectedElementIds).toEqual([]);
+    expect(state().posePositions).toBeNull();
+    expect(state().tracePath).toEqual([]);
   });
 });
 
 describe('popovers (interface overhaul: one at a time)', () => {
   it('opening a popover clears the inline length edit and pending connect', () => {
     state().setLengthEdit({ elementId: 'e1', draft: '10' });
-    state().setOpenPopover({ kind: 'mech' });
+    state().setOpenPopover({ kind: 'inputs' });
     expect(state().lengthEdit).toBeNull();
-    expect(state().openPopover).toEqual({ kind: 'mech' });
+    expect(state().openPopover).toEqual({ kind: 'inputs' });
   });
 
   it('a pending connect closes any open popover', () => {
@@ -68,12 +73,12 @@ describe('popovers (interface overhaul: one at a time)', () => {
     state().setPendingConnect(null);
   });
 
-  it('switching tools or mechanisms closes popovers and edits', () => {
+  it('switching tools or resetting closes popovers and edits', () => {
     state().setOpenPopover({ kind: 'joint', nodeId: 'n1' });
     state().setTool('pipe');
     expect(state().openPopover).toBeNull();
     state().setLengthEdit({ elementId: 'e1', draft: '1' });
-    state().setActiveMechanism('m2');
+    state().resetTransient();
     expect(state().lengthEdit).toBeNull();
     state().setTool('select');
   });
@@ -86,9 +91,25 @@ describe('face', () => {
     expect(state().face).toBe('design');
   });
 
-  it('is kept across mechanism switches — a lens, not a document property', () => {
+  it('is kept across document resets — a lens, not a document property', () => {
     state().setFace('design');
-    state().setActiveMechanism('m2');
+    state().resetTransient();
     expect(state().face).toBe('design');
+  });
+});
+
+describe('3D pose plumbing', () => {
+  it('pose positions and traces are Vec3 document coordinates', () => {
+    state().setPosePositions({ n1: { x: 1, y: 2, z: -0.2 } });
+    expect(state().posePositions).toEqual({ n1: { x: 1, y: 2, z: -0.2 } });
+    state().setTracing(true);
+    state().appendTrace({ x: 0, y: 1, z: 2 });
+    state().appendTrace({ x: 0, y: 1, z: 3 });
+    expect(state().tracePath).toEqual([
+      { x: 0, y: 1, z: 2 },
+      { x: 0, y: 1, z: 3 },
+    ]);
+    state().setTracing(false);
+    expect(state().tracePath).toEqual([]);
   });
 });

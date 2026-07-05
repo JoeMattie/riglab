@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "id": "example-steer-mirror",
   "name": "Example — steer mirror (plan)",
   "unitsPreference": "imperial",
@@ -622,266 +622,338 @@
     "genericPipeLinearDensityKgPerM": 0.25,
     "unitPrices": {}
   },
-  "mechanisms": [
+  "mechanism": {
+    "id": "steer-mirror",
+    "name": "Steer mirror (plan)",
+    "nodes": [
+      {
+        "id": "sBase",
+        "kind": "anchor",
+        "position": {
+          "x": 0.55,
+          "y": 1.43,
+          "z": 0
+        }
+      },
+      {
+        "id": "sMid",
+        "kind": "anchor",
+        "position": {
+          "x": 0.38,
+          "y": 1.43,
+          "z": 0
+        }
+      },
+      {
+        "id": "sTip",
+        "kind": "driven",
+        "position": {
+          "x": 0.16,
+          "y": 1.43,
+          "z": 0
+        },
+        "channelId": "chSteerPan"
+      },
+      {
+        "id": "sL",
+        "kind": "free",
+        "position": {
+          "x": 0.38,
+          "y": 1.43,
+          "z": 0.07
+        }
+      },
+      {
+        "id": "sR",
+        "kind": "free",
+        "position": {
+          "x": 0.38,
+          "y": 1.43,
+          "z": -0.07
+        }
+      },
+      {
+        "id": "hBase",
+        "kind": "anchor",
+        "position": {
+          "x": 0.95,
+          "y": 1.43,
+          "z": 0
+        }
+      },
+      {
+        "id": "hMid",
+        "kind": "anchor",
+        "position": {
+          "x": 1.12,
+          "y": 1.43,
+          "z": 0
+        }
+      },
+      {
+        "id": "hTip",
+        "kind": "free",
+        "position": {
+          "x": 1.34,
+          "y": 1.43,
+          "z": 0
+        }
+      },
+      {
+        "id": "hL",
+        "kind": "free",
+        "position": {
+          "x": 1.12,
+          "y": 1.43,
+          "z": 0.07
+        }
+      },
+      {
+        "id": "hR",
+        "kind": "free",
+        "position": {
+          "x": 1.12,
+          "y": 1.43,
+          "z": -0.07
+        }
+      }
+    ],
+    "elements": [
+      {
+        "id": "sCarrier",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "nodeA": "sBase",
+        "nodeB": "sMid",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "sArm",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "nodeA": "sMid",
+        "nodeB": "sTip",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "sBarL",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "nodeA": "sMid",
+        "nodeB": "sL",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "sBarR",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "nodeA": "sMid",
+        "nodeB": "sR",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "sPivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "nodeId": "sMid",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          }
+        },
+        "memberIds": [
+          "sCarrier",
+          "sArm",
+          "sBarL",
+          "sBarR"
+        ],
+        "welds": [
+          [
+            "sArm",
+            "sBarL"
+          ],
+          [
+            "sArm",
+            "sBarR"
+          ]
+        ],
+        "angleLimit": {
+          "memberA": "sCarrier",
+          "memberB": "sArm",
+          "minRad": -0.6,
+          "maxRad": 0.6
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "hCarrier",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeA": "hBase",
+        "nodeB": "hMid",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "hArm",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeA": "hMid",
+        "nodeB": "hTip",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "hBarL",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeA": "hMid",
+        "nodeB": "hL",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "hBarR",
+        "type": "link",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeA": "hMid",
+        "nodeB": "hR",
+        "pipeMaterialId": "pipe-nps-sch40-050",
+        "endRealizationA": "boltThrough",
+        "endRealizationB": "boltThrough",
+        "pointMasses": []
+      },
+      {
+        "id": "hPivot",
+        "type": "pivot",
+        "maturity": "engineered",
+        "subsystemTag": "head",
+        "nodeId": "hMid",
+        "joint": {
+          "kind": "hinge",
+          "axis": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          }
+        },
+        "memberIds": [
+          "hCarrier",
+          "hArm",
+          "hBarL",
+          "hBarR"
+        ],
+        "welds": [
+          [
+            "hArm",
+            "hBarL"
+          ],
+          [
+            "hArm",
+            "hBarR"
+          ]
+        ],
+        "angleLimit": {
+          "memberA": "hCarrier",
+          "memberB": "hArm",
+          "minRad": -0.6,
+          "maxRad": 0.6
+        },
+        "realization": "boltThrough"
+      },
+      {
+        "id": "ropeCrossLtoR",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "path": [
+          "sL",
+          "hR"
+        ],
+        "lengthM": 0.7531,
+        "cordageMaterialId": "cord-paracord550"
+      },
+      {
+        "id": "ropeCrossRtoL",
+        "type": "rope",
+        "maturity": "engineered",
+        "subsystemTag": "steer",
+        "path": [
+          "sR",
+          "hL"
+        ],
+        "lengthM": 0.7531,
+        "cordageMaterialId": "cord-paracord550"
+      }
+    ],
+    "pointMasses": [],
+    "skeletonBindings": [],
+    "anchorBindings": [],
+    "inputs": [
+      {
+        "id": "chSteerPan",
+        "name": "steer pan",
+        "kind": "angle",
+        "min": -0.5,
+        "max": 0.5,
+        "value": 0,
+        "locked": false
+      }
+    ],
+    "namedStates": []
+  },
+  "groups": [
     {
-      "id": "steer-mirror",
+      "id": "grp-steer-mirror",
       "name": "Steer mirror (plan)",
-      "viewOrientation": "top",
-      "gravityOn": false,
-      "nodes": [
-        {
-          "id": "sBase",
-          "kind": "anchor",
-          "position": {
-            "x": 0.55,
-            "y": 0
-          }
-        },
-        {
-          "id": "sMid",
-          "kind": "anchor",
-          "position": {
-            "x": 0.38,
-            "y": 0
-          }
-        },
-        {
-          "id": "hBase",
-          "kind": "anchor",
-          "position": {
-            "x": 0.95,
-            "y": 0
-          }
-        },
-        {
-          "id": "hMid",
-          "kind": "anchor",
-          "position": {
-            "x": 1.12,
-            "y": 0
-          }
-        },
-        {
-          "id": "sTip",
-          "kind": "driven",
-          "position": {
-            "x": 0.16,
-            "y": 0
-          },
-          "channelId": "chSteerPan"
-        },
-        {
-          "id": "sL",
-          "kind": "free",
-          "position": {
-            "x": 0.38,
-            "y": 0.07
-          }
-        },
-        {
-          "id": "sR",
-          "kind": "free",
-          "position": {
-            "x": 0.38,
-            "y": -0.07
-          }
-        },
-        {
-          "id": "hTip",
-          "kind": "free",
-          "position": {
-            "x": 1.34,
-            "y": 0
-          }
-        },
-        {
-          "id": "hL",
-          "kind": "free",
-          "position": {
-            "x": 1.12,
-            "y": 0.07
-          }
-        },
-        {
-          "id": "hR",
-          "kind": "free",
-          "position": {
-            "x": 1.12,
-            "y": -0.07
-          }
-        }
-      ],
-      "elements": [
-        {
-          "id": "sCarrier",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "nodeA": "sBase",
-          "nodeB": "sMid",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "sArm",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "nodeA": "sMid",
-          "nodeB": "sTip",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "sBarL",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "nodeA": "sMid",
-          "nodeB": "sL",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "sBarR",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "nodeA": "sMid",
-          "nodeB": "sR",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "hCarrier",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeA": "hBase",
-          "nodeB": "hMid",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "hArm",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeA": "hMid",
-          "nodeB": "hTip",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "hBarL",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeA": "hMid",
-          "nodeB": "hL",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "hBarR",
-          "type": "link",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeA": "hMid",
-          "nodeB": "hR",
-          "pipeMaterialId": "pipe-nps-sch40-050",
-          "endRealizationA": "boltThrough",
-          "endRealizationB": "boltThrough",
-          "pointMasses": []
-        },
-        {
-          "id": "sPivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "nodeId": "sMid",
-          "memberIds": ["sCarrier", "sArm", "sBarL", "sBarR"],
-          "welds": [["sArm", "sBarL"], ["sArm", "sBarR"]],
-          "angleLimit": {
-            "memberA": "sCarrier",
-            "memberB": "sArm",
-            "minRad": -0.6,
-            "maxRad": 0.6
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "hPivot",
-          "type": "pivot",
-          "maturity": "engineered",
-          "subsystemTag": "head",
-          "nodeId": "hMid",
-          "memberIds": ["hCarrier", "hArm", "hBarL", "hBarR"],
-          "welds": [["hArm", "hBarL"], ["hArm", "hBarR"]],
-          "angleLimit": {
-            "memberA": "hCarrier",
-            "memberB": "hArm",
-            "minRad": -0.6,
-            "maxRad": 0.6
-          },
-          "realization": "boltThrough"
-        },
-        {
-          "id": "ropeCrossLtoR",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "path": ["sL", "hR"],
-          "lengthM": 0.7531,
-          "cordageMaterialId": "cord-paracord550"
-        },
-        {
-          "id": "ropeCrossRtoL",
-          "type": "rope",
-          "maturity": "engineered",
-          "subsystemTag": "steer",
-          "path": ["sR", "hL"],
-          "lengthM": 0.7531,
-          "cordageMaterialId": "cord-paracord550"
-        }
-      ],
-      "pointMasses": [],
-      "skeletonBindings": [],
-      "anchorBindings": [],
-      "inputs": [
-        {
-          "id": "chSteerPan",
-          "name": "steer pan",
-          "kind": "angle",
-          "min": -0.5,
-          "max": 0.5,
-          "value": 0,
-          "locked": false
-        }
-      ],
-      "namedStates": []
+      "elementIds": [
+        "sCarrier",
+        "sArm",
+        "sBarL",
+        "sBarR",
+        "sPivot",
+        "hCarrier",
+        "hArm",
+        "hBarL",
+        "hBarR",
+        "hPivot",
+        "ropeCrossLtoR",
+        "ropeCrossRtoL"
+      ]
     }
   ],
-  "assembly": {
-    "instances": [],
-    "bindings": [],
-    "pointMasses": [],
-    "foamPlates": []
-  },
+  "pointMasses": [],
+  "foamPlates": [],
   "controls": [],
   "controlClips": [],
   "wearer": {

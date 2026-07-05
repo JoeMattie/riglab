@@ -4,9 +4,9 @@ import {
   type ControlAxis,
   type ControlClip,
   controlClipSchema,
+  createEmptyProject,
   projectSchema,
 } from '../schema';
-import { fixtureProject } from '../schema/fixtures';
 import {
   axisChannelValue,
   buildControlClip,
@@ -185,7 +185,7 @@ describe('buildControlClip — record by scrubbing', () => {
 describe('controls round-trip through the project schema', () => {
   it('preserves a populated control + control clip across JSON', () => {
     const project = {
-      ...fixtureProject(),
+      ...createEmptyProject('fixture-project', 'Fixture'),
       controls: [
         {
           id: 'yoke',

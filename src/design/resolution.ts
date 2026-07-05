@@ -14,13 +14,17 @@
 //   ropeRequiresCompression       from solve diagnostics, when available
 //   overconstrained               diagnostics classification warning
 //   unboundChannel                input channel with no driven node bound
+//   groupNote                     a group carrying a note (the v6→v7 migration
+//                                 writes "re-joint needed…" notes on formerly
+//                                 transform-driven planes); click-to-fix
+//                                 selects the group's elements
 //
 // Severity: 'todo' = an assignment the user must make (counts toward the
 // progress indicator); 'warning' = a computed problem with the current
 // assignments/geometry (no slot, but still blocks "buildable" — the checklist
 // reaching zero means buildable, §8.2).
 import { validateTelescopePair } from '../bom';
-import type { MaterialsDb, Maturity, Mechanism, MechanismElement } from '../schema';
+import type { Group, MaterialsDb, Maturity, Mechanism, MechanismElement } from '../schema';
 import type { SolveDiagnostics } from '../solver';
 
 export type ResolutionKind =
@@ -29,7 +33,8 @@ export type ResolutionKind =
   | 'telescopeNestingIncompatible'
   | 'ropeRequiresCompression'
   | 'overconstrained'
-  | 'unboundChannel';
+  | 'unboundChannel'
+  | 'groupNote';
 
 export interface ResolutionItem {
   /** stable unique id (kind-scoped), usable as a React key and for
@@ -38,6 +43,9 @@ export interface ResolutionItem {
   kind: ResolutionKind;
   elementId?: string;
   channelId?: string;
+  /** groupNote items: the group carrying the note — click-to-fix selects its
+   * elementIds */
+  groupId?: string;
   label: string;
   severity: 'todo' | 'warning';
 }
@@ -173,13 +181,15 @@ function slotCount(el: MechanismElement): number {
   }
 }
 
-/** All unresolved items for a mechanism plus the "K of N resolved" progress.
- * Pass the latest solve diagnostics when available to include the
- * rope-compression and constraint-classification warnings. */
+/** All unresolved items for the compound mechanism plus the "K of N resolved"
+ * progress. Pass the latest solve diagnostics when available to include the
+ * rope-compression and constraint-classification warnings, and the project's
+ * groups so migration notes ("re-joint needed…") surface in the checklist. */
 export function mechanismResolution(
   mechanism: Mechanism,
   materials: MaterialsDb,
   diagnostics?: SolveDiagnostics,
+  groups?: readonly Group[],
 ): MechanismResolution {
   const items: ResolutionItem[] = [];
   let total = 0;
@@ -215,6 +225,19 @@ export function mechanismResolution(
       id: 'overconstrained',
       kind: 'overconstrained',
       label: `mechanism is overconstrained (DOF ${diagnostics.dof}) — remove a constraint or free a node`,
+      severity: 'warning',
+    });
+  }
+
+  // group notes (v6→v7 migration warnings and any user note); clicking one
+  // selects the group's elements
+  for (const g of groups ?? []) {
+    if (!g.note) continue;
+    items.push({
+      id: `group-note:${g.id}`,
+      kind: 'groupNote',
+      groupId: g.id,
+      label: `${g.name}: ${g.note}`,
       severity: 'warning',
     });
   }

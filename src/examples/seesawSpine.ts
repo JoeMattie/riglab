@@ -1,19 +1,15 @@
-// Bundled example: "seesaw spine" (planfile §9 item 1). Elevation view; a
-// hip-rect four-point rotating attachment; a forward neck boom and aft tail
-// boom built as rope-braced trusses (parallel pipe chords + tension rope
-// X-braces); head and tail point masses; gravity on. Every pipe is engineered
-// with a seed material and an end realization, and carries a subsystem tag
-// (neck / spine / tail). Dimensionally plausible; creature-agnostic.
+// Bundled example: "seesaw spine" (planfile §9 item 1). A hip-rect four-point
+// rotating attachment; a forward neck boom and aft tail boom built as rope-
+// braced trusses (parallel pipe chords + tension rope X-braces); head and
+// tail point masses. Formerly a side-left planar mechanism; in v7 the same
+// elevation geometry lives natively in the world x-y plane at z = 0 (the
+// wearer's sagittal plane). No pivots — the truss is a rigid rope-braced body.
 //
 // This builder is the authoritative constructor; src/examples/seesaw-spine.json
 // is generated from it and is the bundled data artifact (a sync test guards
 // that they agree). "raptor" appears in no identifier or string here.
-import { DEFAULT_BOM_SETTINGS, DEFAULT_WEARER, SCHEMA_VERSION } from '../schema';
-import { emptyAssembly } from '../schema/assembly';
-import type { JointRealization } from '../schema/common';
-import type { Mechanism, MechanismElement } from '../schema/mechanism';
-import type { Project } from '../schema/project';
-import { seedMaterialsDb } from '../schema/seedMaterials';
+import type { JointRealization, MechanismElement, Project } from '../schema';
+import { exampleProject, groupOf, type MechParts, partsMechanism, v3 } from './shared';
 
 const PIPE = 'pipe-nps-sch40-075'; // all structural pipes share one size
 const CORD = 'cord-paracord550';
@@ -151,16 +147,18 @@ const ROPES: RopeSpec[] = [
   { id: 'braceNeck2', path: ['hipFrontBot', 'tNeck'], lengthM: 0.856, tag: 'neck' },
 ];
 
-export function buildSeesawSpineProject(): Project {
+/** Subsystem contribution, id-prefixable for the full-creature compound. */
+export function buildSeesawSpineParts(prefix = ''): MechParts {
+  const n = (id: string) => prefix + id;
   const elements: MechanismElement[] = [
     ...LINKS.map(
       (l): MechanismElement => ({
-        id: l.id,
+        id: n(l.id),
         type: 'link',
         maturity: 'engineered',
         subsystemTag: l.tag,
-        nodeA: l.a,
-        nodeB: l.b,
+        nodeA: n(l.a),
+        nodeB: n(l.b),
         pipeMaterialId: PIPE,
         endRealizationA: l.endA,
         endRealizationB: l.endB,
@@ -169,50 +167,39 @@ export function buildSeesawSpineProject(): Project {
     ),
     ...ROPES.map(
       (r): MechanismElement => ({
-        id: r.id,
+        id: n(r.id),
         type: 'rope',
         maturity: 'engineered',
         subsystemTag: r.tag,
-        path: r.path,
+        path: r.path.map(n),
         lengthM: r.lengthM,
         cordageMaterialId: CORD,
       }),
     ),
   ];
 
-  const mechanism: Mechanism = {
-    id: 'seesaw-spine',
-    name: 'Seesaw spine',
-    viewOrientation: 'side-left',
-    gravityOn: true,
-    nodes: NODES.map((n) => ({
-      id: n.id,
-      kind: n.anchor ? 'anchor' : 'free',
-      position: { x: n.x, y: n.y },
+  return {
+    nodes: NODES.map((node) => ({
+      id: n(node.id),
+      kind: node.anchor ? 'anchor' : 'free',
+      position: v3(node.x, node.y, 0),
     })),
     elements,
     pointMasses: [
-      { id: 'headMass', name: 'head', massKg: 1.5, nodeId: 'head' },
-      { id: 'tailMass', name: 'tail', massKg: 0.8, nodeId: 'tail' },
+      { id: n('headMass'), name: 'head', massKg: 1.5, nodeId: n('head') },
+      { id: n('tailMass'), name: 'tail', massKg: 0.8, nodeId: n('tail') },
     ],
     skeletonBindings: [],
-    anchorBindings: [],
     inputs: [],
-    namedStates: [],
   };
+}
 
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    id: 'example-seesaw-spine',
-    name: 'Example — seesaw spine',
-    unitsPreference: 'imperial',
-    materials: seedMaterialsDb(),
-    mechanisms: [mechanism],
-    assembly: emptyAssembly(),
-    controls: [],
-    controlClips: [],
-    wearer: { ...DEFAULT_WEARER },
-    wearerAnchorOverrides: {},
-    bomSettings: { ...DEFAULT_BOM_SETTINGS },
-  };
+export function buildSeesawSpineProject(): Project {
+  const parts = buildSeesawSpineParts();
+  return exampleProject(
+    'example-seesaw-spine',
+    'Example — seesaw spine',
+    partsMechanism('seesaw-spine', 'Seesaw spine', parts),
+    [groupOf('grp-spine', 'Seesaw spine', parts.elements)],
+  );
 }

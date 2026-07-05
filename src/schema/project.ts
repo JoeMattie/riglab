@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { idSchema, unitsPreferenceSchema, vec2Schema, vec3Schema, wearerAnchorSchema } from './common';
+import {
+  idSchema,
+  unitsPreferenceSchema,
+  vec2Schema,
+  vec3Schema,
+  wearerAnchorSchema,
+} from './common';
 import { controlClipSchema, controlSchema } from './controls';
 import { materialsDbSchema } from './materials';
 import { type Mechanism, mechanismSchema } from './mechanism';

@@ -1,8 +1,49 @@
 // Pure derived-information helpers for the info panel (§8.2a): geometry,
 // computed mass, connections, and channel bindings. Framework-free so the
 // panel's logic unit-tests without a DOM.
-import { deflectionAngleRad, developedLengthM, polylineLengthM } from '../geometry/pipe';
-import type { MaterialsDb, Mechanism, MechanismElement, Vec2 } from '../schema';
+//
+// v7 (PLANFILE-3d-conversion.md): positions are Vec3, so lengths/angles are
+// computed in 3D here. The Vec2 helpers in src/geometry/pipe.ts (shared with
+// the BOM bend schedule) are being generalized in parallel; once they are
+// Vec3, these local versions can fold back into that single source of truth.
+import { dot, length, sub } from '../geometry/math3';
+import type { MaterialsDb, Mechanism, MechanismElement, Vec3 } from '../schema';
+
+const distM = (a: Vec3, b: Vec3): number => length(sub(b, a));
+
+/** Sharp polyline (chord) length through the points, in 3D. */
+export function polylineLength3M(points: Vec3[]): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += distM(points[i - 1]!, points[i]!);
+  return total;
+}
+
+/** Deflection (turn) angle at an interior vertex in 3D: 0 = straight through,
+ * π = full reversal. */
+export function deflectionAngle3Rad(prev: Vec3, vertex: Vec3, next: Vec3): number {
+  const din = sub(vertex, prev);
+  const dout = sub(next, vertex);
+  const li = length(din);
+  const lo = length(dout);
+  if (li < 1e-12 || lo < 1e-12) return 0;
+  const cos = dot(din, dout) / (li * lo);
+  return Math.acos(Math.max(-1, Math.min(1, cos)));
+}
+
+/** Developed (centre-line) length of a heat-bent pipe through 3D points, with
+ * an optional fillet radius per interior vertex. A fillet of radius r at a
+ * vertex of deflection φ replaces 2·r·tan(φ/2) of sharp polyline with an r·φ
+ * arc: developed = Σ segments − Σ_vertices r·(2·tan(φ/2) − φ). Clamped ≥ 0. */
+export function developedLength3M(points: Vec3[], filletRadiiM: number[]): number {
+  let total = polylineLength3M(points);
+  for (let i = 1; i < points.length - 1; i++) {
+    const r = filletRadiiM[i - 1] ?? 0;
+    if (r <= 0) continue;
+    const phi = deflectionAngle3Rad(points[i - 1]!, points[i]!, points[i + 1]!);
+    total -= r * (2 * Math.tan(phi / 2) - phi);
+  }
+  return Math.max(0, total);
+}
 
 /** The nodes an element touches, in schema order. */
 export function elementNodeIds(el: MechanismElement, mech: Mechanism): string[] {
@@ -31,9 +72,9 @@ export function elementNodeIds(el: MechanismElement, mech: Mechanism): string[] 
   }
 }
 
-function positions(mech: Mechanism, nodeIds: string[]): Vec2[] {
+function positions(mech: Mechanism, nodeIds: string[]): Vec3[] {
   const byId = new Map(mech.nodes.map((n) => [n.id, n.position]));
-  return nodeIds.map((id) => byId.get(id)).filter((p): p is Vec2 => p !== undefined);
+  return nodeIds.map((id) => byId.get(id)).filter((p): p is Vec3 => p !== undefined);
 }
 
 export interface ElementGeometry {
@@ -43,8 +84,8 @@ export interface ElementGeometry {
   developedLengthM?: number;
   /** interior vertex deflection angles for bentLink, radians */
   vertexAnglesRad?: number[];
-  /** endpoint (or path) coordinates in mechanism space */
-  points: Vec2[];
+  /** endpoint (or path) coordinates in document (world) space */
+  points: Vec3[];
 }
 
 /** Geometry block for the info panel. Uses document positions. */
@@ -55,15 +96,15 @@ export function elementGeometry(el: MechanismElement, mech: Mechanism): ElementG
     case 'telescope':
     case 'elastic':
     case 'rope':
-      return { lengthM: polylineLengthM(pts), points: pts };
+      return { lengthM: polylineLength3M(pts), points: pts };
     case 'bentLink': {
       const angles: number[] = [];
       for (let i = 1; i < pts.length - 1; i++) {
-        angles.push(deflectionAngleRad(pts[i - 1]!, pts[i]!, pts[i + 1]!));
+        angles.push(deflectionAngle3Rad(pts[i - 1]!, pts[i]!, pts[i + 1]!));
       }
       return {
-        lengthM: polylineLengthM(pts),
-        developedLengthM: developedLengthM(pts, el.filletRadiiM),
+        lengthM: polylineLength3M(pts),
+        developedLengthM: developedLength3M(pts, el.filletRadiiM),
         vertexAnglesRad: angles,
         points: pts,
       };
@@ -87,13 +128,13 @@ export function elementMassKg(
     case 'link': {
       const pm = pipe(el.pipeMaterialId);
       if (!pm) return undefined;
-      return polylineLengthM(positions(mech, [el.nodeA, el.nodeB])) * pm.linearDensityKgPerM;
+      return polylineLength3M(positions(mech, [el.nodeA, el.nodeB])) * pm.linearDensityKgPerM;
     }
     case 'bentLink': {
       const pm = pipe(el.pipeMaterialId);
       if (!pm) return undefined;
       return (
-        developedLengthM(positions(mech, el.nodeIds), el.filletRadiiM) * pm.linearDensityKgPerM
+        developedLength3M(positions(mech, el.nodeIds), el.filletRadiiM) * pm.linearDensityKgPerM
       );
     }
     case 'telescope': {

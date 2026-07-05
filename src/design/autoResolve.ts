@@ -81,13 +81,8 @@ const END_FAMILY: Partial<Record<JointRealization, JointRealization>> = {
 const NESTED = new Set<JointRealization>(['nestedSleeve', 'nestedCoupler', 'clickDetachable']);
 const HEAT_WRAP = new Set<JointRealization>(['heatWrapPivot', 'heatWrapRigid']);
 
-export function autoResolve(
-  doc: Project,
-  mechId: string,
-  opts: AutoResolveOptions,
-): AutoResolveProposal {
-  const mech = doc.mechanisms.find((m) => m.id === mechId);
-  if (!mech) return { changes: [] };
+export function autoResolve(doc: Project, opts: AutoResolveOptions): AutoResolveProposal {
+  const mech = doc.mechanism;
   const resolveAssigned = opts.resolveAssigned ?? false;
   const inScope = (elementId: string): boolean =>
     opts.elementIds === undefined || opts.elementIds.includes(elementId);
@@ -97,16 +92,14 @@ export function autoResolve(
 
   // ── size palette: in-use sizes by use count (desc), then DB order ────────
   const useCount = new Map<string, number>();
-  for (const m of doc.mechanisms) {
-    for (const el of m.elements) {
-      const ids =
-        el.type === 'link' || el.type === 'bentLink'
-          ? [el.pipeMaterialId]
-          : el.type === 'telescope'
-            ? [el.outerPipeMaterialId, el.innerPipeMaterialId]
-            : [];
-      for (const id of ids) if (id) useCount.set(id, (useCount.get(id) ?? 0) + 1);
-    }
+  for (const el of mech.elements) {
+    const ids =
+      el.type === 'link' || el.type === 'bentLink'
+        ? [el.pipeMaterialId]
+        : el.type === 'telescope'
+          ? [el.outerPipeMaterialId, el.innerPipeMaterialId]
+          : [];
+    for (const id of ids) if (id) useCount.set(id, (useCount.get(id) ?? 0) + 1);
   }
   const dbIndex = new Map(pipes.map((p, i) => [p.id, i]));
   const palette = pipes

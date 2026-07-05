@@ -1,22 +1,19 @@
-// Bundled-example acceptance (§9 items 2–7): every artifact validates,
-// matches its authoritative builder, and each mechanism demonstrably DOES
-// the thing its planfile entry says it demonstrates, via solve().
+// Bundled-example acceptance (§9 items 2–7, rebuilt for the v7 fully-3D
+// compound documents): every artifact validates, matches its authoritative
+// builder, and carries the 3D geometry its planfile entry promises — world
+// frame +y up / +x wearer-front / +z wearer-left, hinge joints on the
+// correct plane normals, one namespace of ids across the whole document.
 //
-// Mode notes: rope/elastic/bowden coupling acts in equilibrium mode only
-// (kinematic leaves force elements inert by design), so channel-driven
-// behaviors are asserted in equilibrium; gait-following uses kinematic with
-// binding targets, exactly like clip playback.
+// Behavioral (solve-based) assertions live in the trailing
+// `describe.skip('post-integration …')` block: the 3D solver is being
+// rewritten in parallel, so the integrator enables them once solve() lands.
 import { describe, expect, it } from 'vitest';
 import { computeBom } from '../bom';
-import { DEFAULT_WEARER } from '../schema';
-import { solve } from '../solver';
-import { bindingTargets, getClip, samplePose } from '../wearer';
+import type { MechanismElement, PivotElement, Project, Vec3 } from '../schema';
+import { projectSchema } from '../schema';
 import { ARTIFACT_BUILDERS, EXAMPLES, loadExample } from '.';
-import { buildJawBowdenMechanism, JAW_PIVOT_Y } from './jawBowden';
-import { buildLegExoMechanism } from './legExo';
-import { buildNeckTrussMechanism } from './neckTruss';
-import { buildSteerMirrorMechanism } from './steerMirror';
-import { buildTailMechanism } from './tailBoom';
+import { JAW_PIVOT_Y, openHeelDistance } from './jawBowden';
+import { STEER_PLANE_Y } from './steerMirror';
 
 const FILE_BY_ID: Record<string, string> = {
   'example-seesaw-spine': 'seesaw-spine.json',
@@ -28,6 +25,61 @@ const FILE_BY_ID: Record<string, string> = {
   'example-full-creature': 'full-creature.json',
 };
 
+const pivotsOf = (p: Project): PivotElement[] =>
+  p.mechanism.elements.filter((e): e is PivotElement => e.type === 'pivot');
+
+const pivot = (p: Project, id: string): PivotElement => {
+  const found = pivotsOf(p).find((e) => e.id === id);
+  if (!found) throw new Error(`missing pivot ${id}`);
+  return found;
+};
+
+const nodePos = (p: Project, id: string): Vec3 => {
+  const node = p.mechanism.nodes.find((n) => n.id === id);
+  if (!node) throw new Error(`missing node ${id}`);
+  return node.position;
+};
+
+const dist3 = (a: Vec3, b: Vec3) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+/** node ids an element references */
+function nodeRefsOf(el: MechanismElement): string[] {
+  switch (el.type) {
+    case 'link':
+    case 'telescope':
+    case 'elastic':
+      return [el.nodeA, el.nodeB];
+    case 'bentLink':
+      return el.nodeIds;
+    case 'pivot':
+    case 'slider':
+      return [el.nodeId];
+    case 'rope':
+      return el.path;
+    case 'bowden':
+      return [el.a1, el.a2, el.b1, el.b2];
+    case 'torsionCable':
+      return [];
+  }
+}
+
+/** element ids an element references */
+function elementRefsOf(el: MechanismElement): string[] {
+  switch (el.type) {
+    case 'pivot': {
+      const limit = el.angleLimit ? [el.angleLimit.memberA, el.angleLimit.memberB] : [];
+      const spring = el.torsionSpring ? [el.torsionSpring.memberA, el.torsionSpring.memberB] : [];
+      return [...el.memberIds, ...el.welds.flat(), ...limit, ...spring];
+    }
+    case 'slider':
+      return [el.alongElementId];
+    case 'torsionCable':
+      return [el.pivotA, el.pivotB];
+    default:
+      return [];
+  }
+}
+
 describe('bundled example registry (§9)', () => {
   it('ships all seven examples, each JSON valid and matching its builder', () => {
     expect(EXAMPLES).toHaveLength(7);
@@ -35,6 +87,12 @@ describe('bundled example registry (§9)', () => {
       const project = example.load();
       const builder = ARTIFACT_BUILDERS[FILE_BY_ID[example.id]!]!;
       expect(project, example.id).toEqual(builder());
+    }
+  });
+
+  it('every builder output validates against projectSchema directly', () => {
+    for (const [file, builder] of Object.entries(ARTIFACT_BUILDERS)) {
+      expect(() => projectSchema.parse(builder()), file).not.toThrow();
     }
   });
 
@@ -57,157 +115,298 @@ describe('bundled example registry (§9)', () => {
   });
 });
 
-describe('example 2 — neck truss (pitch)', () => {
-  const mech = buildNeckTrussMechanism();
-  const solveAt = (steerPitch: number) =>
-    solve(mech, { channelValues: { 'steer pitch': steerPitch } }, 'equilibrium');
+describe('v7 compound-document integrity (every example)', () => {
+  for (const example of EXAMPLES) {
+    describe(example.id, () => {
+      const project = example.load();
+      const mech = project.mechanism;
+      const nodeIds = new Set(mech.nodes.map((n) => n.id));
+      const elementIds = new Set(mech.elements.map((e) => e.id));
 
-  it('settles neck-up at rest, held between the up/down rope pair', () => {
-    const rest = solveAt(0);
-    expect(rest.diagnostics.converged).toBe(true);
-    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
-    expect(rest.positions.head!.y).toBeGreaterThan(1.6);
-    expect(rest.positions.head!.y).toBeLessThan(1.8);
+      it('uses one flat id namespace without collisions', () => {
+        expect(nodeIds.size).toBe(mech.nodes.length);
+        expect(elementIds.size).toBe(mech.elements.length);
+        expect(new Set(mech.inputs.map((c) => c.id)).size).toBe(mech.inputs.length);
+        expect(new Set(mech.inputs.map((c) => c.name)).size).toBe(mech.inputs.length);
+      });
+
+      it('every element reference resolves', () => {
+        for (const el of mech.elements) {
+          for (const ref of nodeRefsOf(el)) expect(nodeIds.has(ref), `${el.id}→${ref}`).toBe(true);
+          for (const ref of elementRefsOf(el))
+            expect(elementIds.has(ref), `${el.id}→${ref}`).toBe(true);
+        }
+      });
+
+      it('every pivot carries a v7 joint; hinge axes are unit vectors', () => {
+        for (const piv of pivotsOf(project)) {
+          if (piv.joint.kind === 'hinge') {
+            const { x, y, z } = piv.joint.axis;
+            expect(Math.hypot(x, y, z), piv.id).toBeCloseTo(1, 9);
+          } else {
+            // spherical joints carry neither limits nor springs (v1 parity)
+            expect(piv.angleLimit, piv.id).toBeUndefined();
+            expect(piv.torsionSpring, piv.id).toBeUndefined();
+          }
+        }
+      });
+
+      it('groups cover every element exactly once and resolve', () => {
+        const grouped = project.groups.flatMap((g) => g.elementIds);
+        expect(new Set(grouped).size).toBe(grouped.length); // no double-membership
+        expect(new Set(grouped)).toEqual(elementIds); // full cover
+      });
+
+      it('channels and driven nodes pair up', () => {
+        const channelIds = new Set(mech.inputs.map((c) => c.id));
+        for (const node of mech.nodes) {
+          if (node.kind === 'driven') {
+            expect(node.channelId && channelIds.has(node.channelId), node.id).toBe(true);
+          }
+        }
+        for (const input of mech.inputs) {
+          expect(
+            mech.nodes.some((n) => n.kind === 'driven' && n.channelId === input.id),
+            input.name,
+          ).toBe(true);
+        }
+      });
+
+      it('project point masses attach to real nodes or wearer anchors', () => {
+        for (const mass of project.pointMasses) {
+          if (mass.attach.kind === 'node') {
+            expect(nodeIds.has(mass.attach.nodeId), mass.id).toBe(true);
+          }
+        }
+        for (const mass of mech.pointMasses) {
+          expect(nodeIds.has(mass.nodeId), mass.id).toBe(true);
+        }
+      });
+    });
+  }
+});
+
+describe('example 2 — neck truss (pitch), lifted into the sagittal plane', () => {
+  const project = loadExample('example-neck-truss')!;
+
+  it('lives in the world x-y plane (z = 0) with gravity along −y', () => {
+    for (const node of project.mechanism.nodes) expect(node.position.z, node.id).toBe(0);
   });
 
-  it('sliding the steer grip down pitches the head down, monotonically', () => {
-    const rest = solveAt(0);
-    const half = solveAt(-0.015);
-    const full = solveAt(-0.03);
-    expect(full.diagnostics.converged).toBe(true);
-    expect(half.positions.head!.y).toBeLessThan(rest.positions.head!.y - 0.03);
-    expect(full.positions.head!.y).toBeLessThan(half.positions.head!.y - 0.03);
+  it('models the conduit lashing as a sagittal-normal hinge with ±0.35 compliance', () => {
+    const box = pivot(project, 'boxPivot');
+    expect(box.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+    expect(box.angleLimit).toMatchObject({ minRad: -0.35, maxRad: 0.35 });
+    expect(box.realization).toBe('ropeLashing');
+  });
+
+  it('keeps the slider-based conduit box riding the guide rail', () => {
+    const sliders = project.mechanism.elements.filter((e) => e.type === 'slider');
+    expect(sliders.map((s) => s.alongElementId)).toEqual(['aGuide', 'aGuide']);
   });
 });
 
-describe('example 3 — steer mirror (plan, crossed ropes)', () => {
-  const mech = buildSteerMirrorMechanism();
-  const solveAt = (steerPan: number) =>
-    solve(mech, { channelValues: { 'steer pan': steerPan } }, 'equilibrium');
+describe('example 3 — steer mirror, genuinely horizontal (correct physics now)', () => {
+  const project = loadExample('example-steer-mirror')!;
 
-  it('panning the steer turns the head tip to the SAME side (the crossing)', () => {
-    for (const pan of [0.3, -0.3]) {
-      const result = solveAt(pan);
-      expect(result.diagnostics.converged).toBe(true);
-      const sY = result.positions.sTip!.y;
-      const hY = result.positions.hTip!.y;
-      expect(Math.abs(sY)).toBeGreaterThan(0.05);
-      expect(Math.sign(hY)).toBe(Math.sign(sY));
-      expect(hY).toBeCloseTo(sY, 1.5);
+  it('lies in a horizontal plane at working height — the old gravity-off hack is gone', () => {
+    for (const node of project.mechanism.nodes) {
+      expect(node.position.y, node.id).toBe(STEER_PLANE_Y);
     }
   });
 
-  it('the rope-coupled pair is a single-DOF mechanism', () => {
-    expect(solveAt(0).diagnostics.classification).toBe('mechanism');
+  it('pan pivots hinge about the plan-view normal (−y), so limits keep meaning', () => {
+    for (const id of ['sPivot', 'hPivot']) {
+      const piv = pivot(project, id);
+      expect(piv.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: -1, z: 0 } });
+      expect(piv.angleLimit).toMatchObject({ minRad: -0.6, maxRad: 0.6 });
+    }
+  });
+
+  it('ships the CROSSED rope pair, taut at the drawn pose', () => {
+    const ropes = project.mechanism.elements.filter((e) => e.type === 'rope');
+    expect(ropes.map((r) => r.path)).toEqual([
+      ['sL', 'hR'],
+      ['sR', 'hL'],
+    ]);
+    for (const rope of ropes) {
+      const taut = dist3(nodePos(project, rope.path[0]!), nodePos(project, rope.path[1]!));
+      expect(rope.lengthM, rope.id).toBeCloseTo(taut, 3);
+    }
   });
 });
 
 describe('example 4 — jaw + Bowden', () => {
-  const mech = buildJawBowdenMechanism();
-  const solveAt = (trigger: number) =>
-    solve(mech, { channelValues: { 'jaw trigger': trigger } }, 'equilibrium');
+  const project = loadExample('example-jaw-bowden')!;
 
-  it('rests open: the opening elastic swings the jaw tip down to the limit', () => {
-    const open = solveAt(0);
-    expect(open.diagnostics.converged).toBe(true);
-    expect(open.positions.jawTip!.y).toBeLessThan(JAW_PIVOT_Y - 0.1);
+  it('is head-local sagittal geometry hinged about +z at head height', () => {
+    for (const node of project.mechanism.nodes) expect(node.position.z, node.id).toBe(0);
+    expect(nodePos(project, 'jawPivot')).toEqual({ x: 0, y: JAW_PIVOT_Y, z: 0 });
+    const pin = pivot(project, 'jawPivotPin');
+    expect(pin.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+    expect(pin.angleLimit).toMatchObject({ minRad: -0.7, maxRad: 0 });
+    expect(pin.welds).toEqual([['jawMain', 'jawHeelSpur']]);
   });
 
-  it('squeezing the trigger closes the jaw through the cable', () => {
-    const half = solveAt(0.02);
-    const closed = solveAt(0.038);
-    expect(closed.diagnostics.converged).toBe(true);
-    expect(half.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.1);
-    expect(half.positions.jawTip!.y).toBeLessThan(JAW_PIVOT_Y - 0.05);
-    expect(closed.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
-  });
-
-  it('locking the trigger channel freezes the jaw (set-screw analogue)', () => {
-    const locked = structuredClone(mech);
-    locked.inputs[0]!.value = 0.038;
-    locked.inputs[0]!.locked = true;
-    // an override that would open the jaw is ignored while locked
-    const result = solve(locked, { channelValues: { 'jaw trigger': 0 } }, 'equilibrium');
-    expect(result.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
+  it('sizes the bite cable so the jaw can rest fully open', () => {
+    const cable = project.mechanism.elements.find((e) => e.id === 'biteCable');
+    if (cable?.type !== 'bowden') throw new Error('biteCable must be a bowden');
+    expect(cable.restLengthBM).toBeCloseTo(openHeelDistance(), 9);
   });
 });
 
-describe('example 5 — leg exoskeleton (driven by gait)', () => {
-  it('follows the wearer through a full walk cycle', () => {
-    const mech = buildLegExoMechanism('left');
-    const walk = getClip('walk')!;
+describe('example 5 — leg exoskeleton, on the wearer-left hip plane', () => {
+  const project = loadExample('example-leg-exoskeleton')!;
 
-    let maxKneeX = Number.NEGATIVE_INFINITY;
-    let minKneeX = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < 12; i++) {
-      const pose = samplePose(walk, (i / 12) * walk.durationS);
-      const targets = bindingTargets(mech, DEFAULT_WEARER, pose);
-      const result = solve(mech, { channelValues: {}, dragTargets: targets }, 'kinematic');
-      const p = result.positions;
-      // rigid femur holds while the leg is gait-driven
-      const femur = Math.hypot(p.eKnee!.x - p.frameHip!.x, p.eKnee!.y - p.frameHip!.y);
-      expect(femur).toBeCloseTo(0.4808, 2);
-      // toe stays within its stops (rope limit backed by the pivot stop)
-      const toe = Math.hypot(p.eToe!.x - p.eToePad!.x, p.eToe!.y - p.eToePad!.y);
-      expect(toe).toBeLessThan(0.155);
-      maxKneeX = Math.max(maxKneeX, p.eKnee!.x);
-      minKneeX = Math.min(minKneeX, p.eKnee!.x);
+  it('lies at z = +hipWidth/2 so bound nodes meet their true 3D skeleton points', () => {
+    for (const node of project.mechanism.nodes) {
+      expect(node.position.z, node.id).toBeCloseTo(0.18, 9);
     }
-    // the external knee visibly strides back and forth over the cycle
-    expect(maxKneeX - minKneeX).toBeGreaterThan(0.1);
+    expect(project.mechanism.skeletonBindings.map((b) => b.point)).toEqual([
+      'hipL',
+      'kneeL',
+      'shoeL',
+    ]);
   });
 
-  it('mirrors bindings for the right side', () => {
-    const right = buildLegExoMechanism('right');
-    expect(right.viewOrientation).toBe('side-right');
-    expect(right.skeletonBindings.map((b) => b.point)).toEqual(['hipR', 'kneeR', 'shoeR']);
+  it('hinges knee/ankle/toe about the sagittal normal with the drawn limits', () => {
+    expect(pivot(project, 'kneePivot').angleLimit).toMatchObject({ minRad: -1.5, maxRad: 0.05 });
+    expect(pivot(project, 'anklePivot').angleLimit).toMatchObject({ minRad: 0.6, maxRad: 1.9 });
+    expect(pivot(project, 'toePivot').angleLimit).toMatchObject({ minRad: -0.6, maxRad: 0.35 });
+    for (const id of ['kneePivot', 'anklePivot', 'toePivot']) {
+      expect(pivot(project, id).joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+    }
   });
 });
 
 describe('example 6 — tail', () => {
-  const mech = buildTailMechanism();
+  const project = loadExample('example-tail')!;
 
-  it('hangs on the hold rope and sags at the compliant joints under the tip mass', () => {
-    const rest = solve(mech, { channelValues: {} }, 'equilibrium');
-    expect(rest.diagnostics.converged).toBe(true);
-    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
-    const tip = rest.positions.tailTip!;
-    expect(tip.y).toBeLessThan(1.13); // sags below the drawn pose…
-    expect(tip.y).toBeGreaterThan(0.75); // …but the springs carry it
-  });
-
-  it('a heavier tip sags further', () => {
-    const heavy = structuredClone(mech);
-    heavy.pointMasses[0]!.massKg = 1.5;
-    const light = solve(mech, { channelValues: {} }, 'equilibrium');
-    const sagged = solve(heavy, { channelValues: {} }, 'equilibrium');
-    expect(sagged.positions.tailTip!.y).toBeLessThan(light.positions.tailTip!.y - 0.01);
+  it('keeps the torsion-sprung compliant hinges and hold rope in the sagittal plane', () => {
+    for (const node of project.mechanism.nodes) expect(node.position.z, node.id).toBe(0);
+    for (const id of ['tailFlex1', 'tailFlex2']) {
+      const flex = pivot(project, id);
+      expect(flex.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+      expect(flex.torsionSpring).toBeDefined();
+    }
+    const rope = project.mechanism.elements.find((e) => e.id === 'tailHoldRope');
+    if (rope?.type !== 'rope') throw new Error('tailHoldRope must be a rope');
+    expect(rope.lengthM).toBeCloseTo(
+      dist3(nodePos(project, 'spineTopA'), nodePos(project, 'j1')),
+      3,
+    );
   });
 });
 
-describe('example 7 — full creature (§9 item 7)', () => {
+describe('example 7 — full creature: ONE compound document (§9 item 7)', () => {
   const project = loadExample('example-full-creature')!;
+  const mech = project.mechanism;
 
-  it('bundles all eight mechanisms with 3D instances and body masses', () => {
-    expect(project.mechanisms.map((m) => m.id)).toEqual([
-      'seesaw-spine',
-      'neck-truss',
-      'steer-mirror',
-      'jaw-bowden',
-      'leg-exo-left',
-      'leg-exo-right',
-      'tail-boom',
-      'arms',
+  it('is a single mechanism whose groups are the former mechanisms', () => {
+    expect(project.groups.map((g) => g.name)).toEqual([
+      'Spine',
+      'Neck (pan × pitch)',
+      'Steer',
+      'Jaw + Bowden',
+      'Leg (left)',
+      'Leg (right)',
+      'Tail',
+      'Arm',
     ]);
-    // Phase 4: every mechanism is placed as a 3D assembly instance
-    expect(project.assembly.instances.map((i) => i.mechanismId).sort()).toEqual(
-      project.mechanisms.map((m) => m.id).sort(),
+  });
+
+  it('joins pan × pitch as real stacked 3D hinges sharing the bundle member', () => {
+    const pan = pivot(project, 'neck.panPivot');
+    const pitch = pivot(project, 'neck.pitchPivot');
+    // pan: vertical axis (plan normal) at the conduit-box base
+    expect(pan.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: -1, z: 0 } });
+    expect(pan.nodeId).toBe('neck.panBase');
+    // pitch: horizontal rest axis, carried by the pan-side bundle — the
+    // SHARED member is what makes the pitch plane rotate with pan
+    expect(pitch.joint).toEqual({ kind: 'hinge', axis: { x: 0, y: 0, z: 1 } });
+    expect(pitch.memberIds).toContain('neck.bundleCore');
+    expect(pan.memberIds).toContain('neck.bundleCore');
+    // the lashing compliance brackets the drawn rest deviation of the boom
+    const rest = Math.atan2(
+      nodePos(project, 'neck.head').y - nodePos(project, 'neck.pitchBase').y,
+      nodePos(project, 'neck.head').x - nodePos(project, 'neck.pitchBase').x,
     );
-    expect(project.assembly.pointMasses.map((m) => m.name).sort()).toEqual([
+    expect(pitch.angleLimit!.minRad).toBeLessThan(rest);
+    expect(pitch.angleLimit!.maxRad).toBeGreaterThan(rest);
+    expect(pitch.angleLimit!.maxRad - pitch.angleLimit!.minRad).toBeCloseTo(0.7, 3);
+  });
+
+  it('mirrors the steer pan to the neck bars through CROSSED taut ropes', () => {
+    const ropes = mech.elements.filter((e) => e.type === 'rope' && e.id.startsWith('steer.rope'));
+    expect(ropes.map((r) => (r.type === 'rope' ? r.path : []))).toEqual([
+      ['steer.sL', 'neck.barR'],
+      ['steer.sR', 'neck.barL'],
+    ]);
+    for (const rope of ropes) {
+      if (rope.type !== 'rope') continue;
+      const taut = dist3(nodePos(project, rope.path[0]!), nodePos(project, rope.path[1]!));
+      expect(rope.lengthM, rope.id).toBeCloseTo(taut, 3);
+    }
+    // welded cross-bars give both pan joints their rope lever arms
+    expect(pivot(project, 'steer.sPivot').welds).toEqual([
+      ['steer.sArm', 'steer.sBarL'],
+      ['steer.sArm', 'steer.sBarR'],
+    ]);
+    expect(pivot(project, 'neck.panPivot').welds).toEqual([
+      ['neck.bundleCore', 'neck.barLBar'],
+      ['neck.bundleCore', 'neck.barRBar'],
+    ]);
+  });
+
+  it('duplicates the legs as true mirror geometry across z = 0', () => {
+    const left = mech.nodes.filter((n) => n.id.startsWith('legL.'));
+    expect(left.length).toBeGreaterThan(0);
+    for (const node of left) {
+      const twin = mech.nodes.find((n) => n.id === node.id.replace('legL.', 'legR.'));
+      expect(twin, node.id).toBeDefined();
+      expect(twin!.position.x).toBe(node.position.x);
+      expect(twin!.position.y).toBe(node.position.y);
+      expect(twin!.position.z).toBeCloseTo(-node.position.z, 9);
+    }
+    // sagittal geometry in a z-normal plane is mirror-invariant about +z:
+    // same hinge axes, same limits (see legExo.ts)
+    for (const id of ['kneePivot', 'anklePivot', 'toePivot']) {
+      const l = pivot(project, `legL.${id}`);
+      const r = pivot(project, `legR.${id}`);
+      expect(r.joint).toEqual(l.joint);
+      expect(r.angleLimit?.minRad).toBe(l.angleLimit?.minRad);
+      expect(r.angleLimit?.maxRad).toBe(l.angleLimit?.maxRad);
+    }
+    const points = mech.skeletonBindings.map((b) => b.point);
+    for (const p of ['hipL', 'kneeL', 'shoeL', 'hipR', 'kneeR', 'shoeR']) {
+      expect(points).toContain(p);
+    }
+  });
+
+  it('showcases the spherical joint at the arm’s rope-lashed hang', () => {
+    const lash = pivot(project, 'arm.shoulderLash');
+    expect(lash.joint).toEqual({ kind: 'spherical' });
+    expect(lash.realization).toBe('ropeLashing');
+    // the elbow stays a limited hinge
+    expect(pivot(project, 'arm.armElbowPivot').joint.kind).toBe('hinge');
+  });
+
+  it('carries body masses at project level and node masses on the mechanism', () => {
+    expect(project.pointMasses.map((m) => m.name).sort()).toEqual([
       'battery pack',
       'head + foam',
       'speaker',
       'tail counterweight',
+    ]);
+    const nodeMassNames = mech.pointMasses.map((m) => m.name).sort();
+    expect(nodeMassNames).toEqual([
+      'arm claw',
+      'head',
+      'head',
+      'paw claw',
+      'paw claw',
+      'tail',
+      'tail tip',
     ]);
   });
 
@@ -225,21 +424,16 @@ describe('example 7 — full creature (§9 item 7)', () => {
     expect(Object.keys(clip!.tracks).sort()).toEqual(['jaw trigger', 'steer pan']);
   });
 
-  it('has working sliders: every input channel drives a driven node', () => {
-    const channels = project.mechanisms.flatMap((m) => m.inputs.map((c) => c.name));
-    expect(channels.sort()).toEqual(['jaw trigger', 'steer pan', 'steer pitch']);
-    for (const mech of project.mechanisms) {
-      for (const input of mech.inputs) {
-        expect(
-          mech.nodes.some((n) => n.kind === 'driven' && n.channelId === input.id),
-          `${mech.id}/${input.name}`,
-        ).toBe(true);
-      }
-    }
+  it('has working sliders: the three global channels each drive a driven node', () => {
+    expect(mech.inputs.map((c) => c.name).sort()).toEqual([
+      'jaw trigger',
+      'steer pan',
+      'steer pitch',
+    ]);
   });
 
   it('populates a fully resolved global BOM with a plausible creature weight', () => {
-    const bom = computeBom(project.mechanisms, project.materials, project.bomSettings);
+    const bom = computeBom(project);
     expect(bom.unresolved.count).toBe(0);
     // a wearable PVC creature: heavier than a prop, lighter than a person
     expect(bom.weights.grandTotalKg).toBeGreaterThan(3);
@@ -248,16 +442,133 @@ describe('example 7 — full creature (§9 item 7)', () => {
       .filter((p) => p.kind === 'pipe')
       .reduce((sum, p) => sum + p.lengthM * p.quantity, 0);
     expect(pipeLength).toBeGreaterThan(8); // meters of pipe across the build
+    // per-group rollup covers every former mechanism
+    expect(Object.keys(bom.weights.perGroupKg).sort()).toEqual(
+      project.groups.map((g) => g.id).sort(),
+    );
+    for (const group of project.groups) {
+      expect(bom.weights.perGroupKg[group.id]!, group.name).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// POST-INTEGRATION: behavioral acceptance through solve(). The 3D solver is
+// being rewritten in parallel (PLANFILE-3d-conversion.md phase 3D-1); the
+// integrator un-skips this block once solve() lands. Modules are imported
+// dynamically inside the tests so a mid-rewrite solver can't break this
+// suite's load.
+// ─────────────────────────────────────────────────────────────────────────
+describe.skip('post-integration — examples solve (enable with the 3D solver)', () => {
+  it('neck truss: settles neck-up at rest; steer grip down pitches the head down', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-neck-truss')!.mechanism;
+    const solveAt = (steerPitch: number) =>
+      solve(mech, { channelValues: { 'steer pitch': steerPitch } }, 'equilibrium');
+    const rest = solveAt(0);
+    expect(rest.diagnostics.converged).toBe(true);
+    expect(rest.diagnostics.ropesRequiringCompression).toHaveLength(0);
+    expect(rest.positions.head!.y).toBeGreaterThan(1.6);
+    expect(rest.positions.head!.y).toBeLessThan(1.8);
+    const half = solveAt(-0.015);
+    const full = solveAt(-0.03);
+    expect(full.diagnostics.converged).toBe(true);
+    expect(half.positions.head!.y).toBeLessThan(rest.positions.head!.y - 0.03);
+    expect(full.positions.head!.y).toBeLessThan(half.positions.head!.y - 0.03);
   });
 
-  it('every NEW mechanism solves cleanly at its default channel values', () => {
-    // seesaw-spine is exercised by its own §11 acceptance suite; the XPBD
-    // residual it settles to under gravity predates this example set
-    for (const mech of project.mechanisms.filter((m) => m.id !== 'seesaw-spine')) {
-      const mode = mech.gravityOn ? 'equilibrium' : 'kinematic';
-      const result = solve(mech, { channelValues: {} }, mode);
-      expect(result.diagnostics.violated, mech.id).toHaveLength(0);
-      expect(result.diagnostics.residual, mech.id).toBeLessThan(1e-3);
+  it('steer mirror: panning turns the head tip to the SAME side (crossed ropes)', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-steer-mirror')!.mechanism;
+    for (const pan of [0.3, -0.3]) {
+      const result = solve(mech, { channelValues: { 'steer pan': pan } }, 'equilibrium');
+      expect(result.diagnostics.converged).toBe(true);
+      // plan-view lateral coordinate is world z now
+      const sZ = result.positions.sTip!.z;
+      const hZ = result.positions.hTip!.z;
+      expect(Math.abs(sZ)).toBeGreaterThan(0.05);
+      expect(Math.sign(hZ)).toBe(Math.sign(sZ));
+      expect(hZ).toBeCloseTo(sZ, 1.5);
     }
+  });
+
+  it('jaw: rests open, closes through the cable, freezes when locked', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-jaw-bowden')!.mechanism;
+    const solveAt = (trigger: number) =>
+      solve(mech, { channelValues: { 'jaw trigger': trigger } }, 'equilibrium');
+    expect(solveAt(0).positions.jawTip!.y).toBeLessThan(JAW_PIVOT_Y - 0.1);
+    expect(solveAt(0.038).positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
+    const locked = structuredClone(mech);
+    locked.inputs[0]!.value = 0.038;
+    locked.inputs[0]!.locked = true;
+    const result = solve(locked, { channelValues: { 'jaw trigger': 0 } }, 'equilibrium');
+    expect(result.positions.jawTip!.y).toBeGreaterThan(JAW_PIVOT_Y - 0.02);
+  });
+
+  it('leg exoskeleton: follows the wearer through a full walk cycle', async () => {
+    const { solve } = await import('../solver');
+    const { bindingTargets, getClip, samplePose } = await import('../wearer');
+    const { DEFAULT_WEARER } = await import('../schema');
+    const mech = loadExample('example-leg-exoskeleton')!.mechanism;
+    const walk = getClip('walk')!;
+    let maxKneeX = Number.NEGATIVE_INFINITY;
+    let minKneeX = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < 12; i++) {
+      const pose = samplePose(walk, (i / 12) * walk.durationS);
+      const targets = bindingTargets(mech, DEFAULT_WEARER, pose);
+      const result = solve(mech, { channelValues: {}, dragTargets: targets }, 'kinematic');
+      const p = result.positions;
+      const femur = dist3(p.eKnee!, p.frameHip!);
+      expect(femur).toBeCloseTo(0.4808, 2);
+      expect(dist3(p.eToe!, p.eToePad!)).toBeLessThan(0.155);
+      maxKneeX = Math.max(maxKneeX, p.eKnee!.x);
+      minKneeX = Math.min(minKneeX, p.eKnee!.x);
+    }
+    expect(maxKneeX - minKneeX).toBeGreaterThan(0.1);
+  });
+
+  it('tail: hangs on the hold rope and sags at the compliant joints', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-tail')!.mechanism;
+    const rest = solve(mech, { channelValues: {} }, 'equilibrium');
+    expect(rest.diagnostics.converged).toBe(true);
+    expect(rest.positions.tailTip!.y).toBeLessThan(1.13);
+    expect(rest.positions.tailTip!.y).toBeGreaterThan(0.75);
+    const heavy = structuredClone(mech);
+    heavy.pointMasses.find((m) => m.id === 'tailTipMass')!.massKg = 1.5;
+    const sagged = solve(heavy, { channelValues: {} }, 'equilibrium');
+    expect(sagged.positions.tailTip!.y).toBeLessThan(rest.positions.tailTip!.y - 0.01);
+  });
+
+  it('full creature: pan REALLY carries pitch — the head pans and pitches in 3D', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-full-creature')!.mechanism;
+    const solveAt = (pan: number, pitch: number) =>
+      solve(mech, { channelValues: { 'steer pan': pan, 'steer pitch': pitch } }, 'equilibrium');
+    const rest = solveAt(0, 0);
+    expect(rest.diagnostics.converged).toBe(true);
+    // pan: head swings to the same side as the steer tip (crossed ropes)
+    for (const pan of [0.3, -0.3]) {
+      const panned = solveAt(pan, 0);
+      const sZ = panned.positions['steer.sTip']!.z;
+      const hZ = panned.positions['neck.head']!.z;
+      expect(Math.abs(hZ)).toBeGreaterThan(0.02);
+      expect(Math.sign(hZ)).toBe(Math.sign(sZ));
+    }
+    // pitch still works while panned: the pitch plane rode the pan joint
+    const pannedDown = solveAt(0.3, -0.03);
+    const panned = solveAt(0.3, 0);
+    expect(pannedDown.positions['neck.head']!.y).toBeLessThan(
+      panned.positions['neck.head']!.y - 0.03,
+    );
+  });
+
+  it('full creature: solves cleanly at default channel values', async () => {
+    const { solve } = await import('../solver');
+    const mech = loadExample('example-full-creature')!.mechanism;
+    const result = solve(mech, { channelValues: {} }, 'equilibrium');
+    expect(result.diagnostics.violated).toHaveLength(0);
+    expect(result.diagnostics.residual).toBeLessThan(1e-3);
   });
 });

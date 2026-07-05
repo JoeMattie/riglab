@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { attachTargetSchema } from './assembly';
-import { idSchema } from './common';
+import { idSchema, wearerAnchorSchema } from './common';
 
 // Controls (§4.4): virtual input devices grouping a manipulation widget over
 // the existing global input-channel machinery (§4.2). A control has a type
@@ -8,6 +7,14 @@ import { idSchema } from './common';
 // node), and axes; each axis maps its own range onto one input channel.
 
 export const controlTypeSchema = z.enum(['lever', 'yoke', 'twistGrip', 'trigger', 'slider2d']);
+
+/** Where a control mounts (v7): a mechanism node or a wearer anchor; absent =
+ * desk-fixed. Same shape as project.ts's attachTargetSchema — defined locally
+ * because project.ts imports this module (a shared import would be a cycle). */
+export const controlMountSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('node'), nodeId: idSchema }),
+  z.object({ kind: z.literal('wearerAnchor'), anchor: wearerAnchorSchema }),
+]);
 
 /** A named axis with its own range/limits and a linear mapping onto one global
  * input channel (name, output range, invert). `locked` freezes its channel. */
@@ -32,9 +39,9 @@ export const controlSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   type: controlTypeSchema,
-  /** rides a wearer anchor or instance node through movement clips; absent =
-   * desk-fixed. Reuses the assembly attach target (§4.3). */
-  mount: attachTargetSchema.optional(),
+  /** rides a wearer anchor or mechanism node through movement clips; absent =
+   * desk-fixed (§4.3, v7). */
+  mount: controlMountSchema.optional(),
   axes: z.array(controlAxisSchema),
 });
 
@@ -77,6 +84,7 @@ export const controlClipSchema = z
   );
 
 export type ControlType = z.infer<typeof controlTypeSchema>;
+export type ControlMount = z.infer<typeof controlMountSchema>;
 export type ControlAxis = z.infer<typeof controlAxisSchema>;
 export type Control = z.infer<typeof controlSchema>;
 export type ChannelTrack = z.infer<typeof channelTrackSchema>;

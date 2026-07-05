@@ -1,5 +1,6 @@
 // Hand-rolled CSV export (DECISIONS.md: export-only, ~20 lines, RFC 4180
-// quoting). Covers cut list + fittings + consumables + weights (§6.2).
+// quoting). Covers cut list + bend schedule + fittings + consumables +
+// weights (§6.2).
 import type { Bom } from './bom';
 
 /** RFC 4180: a field containing a comma, double-quote, CR or LF is wrapped in
@@ -13,6 +14,11 @@ function row(fields: Array<string | number>): string {
   return fields.map(csvField).join(',');
 }
 
+/** Radians → degrees, rounded to 0.1° — a shop-usable bender setting. */
+function deg(rad: number): number {
+  return Math.round(((rad * 180) / Math.PI) * 10) / 10;
+}
+
 /** Serialize a BOM to a CSV string (CRLF line endings, RFC 4180 style). */
 export function bomToCsv(bom: Bom): string {
   const lines: string[] = [];
@@ -21,6 +27,19 @@ export function bomToCsv(bom: Bom): string {
   lines.push(row(['Material', 'Size', 'System', 'Kind', 'Length (m)', 'Quantity']));
   for (const p of bom.cutList) {
     lines.push(row([p.materialName, p.nominalSize, p.sizingSystem, p.kind, p.lengthM, p.quantity]));
+  }
+  lines.push('');
+
+  // twist° = bend-plane rotation relative to the previous bend (0 for the
+  // first bend of each part; see geometry/pipe.ts bendDihedralsRad).
+  lines.push('Bend schedule');
+  lines.push(row(['Element', 'Bend', 'Node', 'angle°', 'twist°', 'Radius (m)']));
+  for (const b of bom.bendSchedule) {
+    b.vertices.forEach((v, i) => {
+      lines.push(
+        row([b.elementId, i + 1, v.nodeId, deg(v.angleRad), deg(v.dihedralRad), v.radiusM]),
+      );
+    });
   }
   lines.push('');
 
@@ -49,6 +68,11 @@ export function bomToCsv(bom: Bom): string {
     a.localeCompare(b),
   )) {
     lines.push(row([`Tag: ${tag === '' ? '(untagged)' : tag}`, kg]));
+  }
+  for (const [gid, kg] of Object.entries(bom.weights.perGroupKg).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    lines.push(row([`Group: ${bom.weights.groupNames[gid] ?? gid}`, kg]));
   }
   lines.push(row(['Grand total', bom.weights.grandTotalKg]));
 
