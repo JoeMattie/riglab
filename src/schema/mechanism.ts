@@ -111,14 +111,18 @@ export const pivotJointSchema = z.discriminatedUnion('kind', [
 
 /** Pin joint at a shared node. Multi-pivot: 3+ members share the pin; pairs
  * rotate freely unless welded. Optional limits/torsion spring between two
- * designated members model hose joints and fiberglass return rods (§4.2). */
+ * designated members model hose joints and fiberglass return rods (§4.2).
+ * A single-member pivot at an ANCHORED node is a ground hinge: the pin is
+ * fixed to the frame, so the member rotates only about the (frame-fixed)
+ * axis — what double-click anchoring in a panel creates, keeping panel
+ * sketches planar instead of coning about a bare spherical anchor. */
 export const pivotElementSchema = z.object({
   ...elementBase,
   type: z.literal('pivot'),
   nodeId: idSchema,
   joint: pivotJointSchema,
-  /** element ids joined at this pin */
-  memberIds: z.array(idSchema).min(2),
+  /** element ids joined at this pin (1 = ground hinge at an anchored node) */
+  memberIds: z.array(idSchema).min(1),
   /** pairs of member element ids rigidly welded to each other */
   welds: z.array(z.tuple([idSchema, idSchema])),
   /** relative angle = signed deviation from the straight continuation of

@@ -29,6 +29,10 @@ export const VIRTUAL_AXIS_SUFFIX = '#axis';
 export const virtualAxisId = (pivotElementId: string): string =>
   `${pivotElementId}${VIRTUAL_AXIS_SUFFIX}`;
 
+/** Drawn axial offsets below this are treated as numerical drift, not design
+ * intent, for FRAME-FIXED (pinned-axis) hinge ties — see hingePlan. */
+const AXIAL_SNAP_M = 1e-4;
+
 /** The member's node adjacent to the pivot node — the lever arm used for
  * welds, angle features and drive frames (same convention as the 2D solver). */
 export function adjacentNodeId(el: MechanismElement, pivotNodeId: string): string | null {
@@ -72,13 +76,6 @@ export function tieNodeIds(el: MechanismElement, pivotNodeId: string): string[] 
   return [];
 }
 
-/** All node ids a member occupies (for the axis-pinning rule). */
-function memberNodeIds(el: MechanismElement): string[] | null {
-  if (el.type === 'link' || el.type === 'telescope') return [el.nodeA, el.nodeB];
-  if (el.type === 'bentLink') return [...el.nodeIds];
-  return null;
-}
-
 export interface HingeTie {
   nodeId: string;
   rest: number;
@@ -108,10 +105,15 @@ const dist3 = (a: Vec3, b: Vec3): number =>
  * (then the pivot degrades to the shared-node spherical behaviour, mirroring
  * how the 2D solver skipped unresolvable welds).
  *
- * Pinning rule: when the pivot node is held (anchor/driven/drag-held) AND at
- * least one member is fully held, the axis is rigidly determined by ground —
- * distance ties alone would leave it free to precess about that member, so
- * the virtual is pinned at (current pivot + drawn axis·h) with weight 0. */
+ * Pinning rule: when the PIVOT NODE is held (anchor/driven/drag-held), the
+ * pin's body is bolted to the frame, so its axis is frame-fixed too — the
+ * virtual is pinned at (current pivot + drawn axis·h) with weight 0. Distance
+ * ties alone would instead let the axis precess about a member (a cone
+ * manifold that keeps out-of-plane drift injected by violated drags — the
+ * planar-sketch feel demands a drawn side-panel four-bar stay planar). A
+ * single-member pivot at an anchored node is exactly a GROUND HINGE (pin
+ * fixed to the frame); at a free node a single-member hinge is inert but
+ * harmless. Hinges whose pivot node is mobile keep a free virtual. */
 export function hingePlan(
   el: PivotElement,
   posOf: ReadonlyMap<string, Vec3>,
@@ -127,12 +129,9 @@ export function hingePlan(
   const ties: HingeTie[] = [];
   const seen = new Set<string>([el.nodeId]);
   let minArm = Number.POSITIVE_INFINITY;
-  let anyMemberFullyHeld = false;
   for (const memberId of el.memberIds) {
     const member = elementById.get(memberId);
     if (!member) continue;
-    const nodes = memberNodeIds(member);
-    if (nodes?.every((id) => isHeld(id))) anyMemberFullyHeld = true;
     for (const nodeId of tieNodeIds(member, el.nodeId)) {
       if (seen.has(nodeId)) continue;
       seen.add(nodeId);
@@ -148,7 +147,23 @@ export function hingePlan(
   // conditioning range for metre-scale rigs
   const h = Number.isFinite(minArm) ? Math.min(Math.max(0.5 * minArm, 1e-3), 0.5) : 0.1;
   const drawnVirtualPos = add(pivotPos, scale(axis, h));
-  for (const tie of ties) tie.rest = dist3(drawnVirtualPos, posOf.get(tie.nodeId)!);
+  const pinned = isHeld(el.nodeId);
+  for (const tie of ties) {
+    let p = posOf.get(tie.nodeId)!;
+    if (pinned) {
+      // Axial-offset snap for frame-fixed hinges: tie rests otherwise
+      // PRESERVE whatever axial offset the drawn node carries, so per-frame
+      // solver residue (a hard toggle pose can leave ~1e-5) fed back as new
+      // drawn geometry would ratchet a sketched-planar linkage off its plane
+      // forever. Sub-threshold offsets are numerical noise, never design
+      // intent (real axial offsets are ≥ tenths of a millimetre), so the
+      // rest is computed as if the node sat exactly on the pin's plane —
+      // the solve then pulls the drift back to zero instead of keeping it.
+      const off = dot(sub(p, pivotPos), axis);
+      if (Math.abs(off) < AXIAL_SNAP_M) p = sub(p, scale(axis, off));
+    }
+    tie.rest = dist3(drawnVirtualPos, p);
+  }
 
   return {
     virtualId: virtualAxisId(el.id),
@@ -157,7 +172,7 @@ export function hingePlan(
     h,
     drawnVirtualPos,
     ties,
-    pinned: isHeld(el.nodeId) && anyMemberFullyHeld,
+    pinned,
   };
 }
 

@@ -1828,8 +1828,9 @@ trick — an engine wrapper would have forced a full re-integration.
 CLAUDE.md pauses for human review after the planfile and solver phases. Joe
 (2026-07-04, heading out): "Use subagents to just gobble up all this shit.
 Don't stop until you run out of token usage or you are done." The run executes
-all phases end-to-end on worktree branch `worktree-3d-conversion` (unmerged;
-Joe reviews the whole branch instead). Per-commit CI green applies to main;
+all phases end-to-end on worktree branch `worktree-3d-conversion`. Joe later
+directed (same night): merge to main and push to GitHub when done, so the
+branch-review step is waived too; he reviews on main. Per-commit CI green applies to main;
 this branch may carry WIP checkpoints but ends green. Implementation is
 parallelized across subagents with disjoint file ownership; decisions made by
 agents land under this heading's sub-entries.
@@ -1870,3 +1871,53 @@ Perspective node dragging renders small node-handle spheres and drags on the
 camera-parallel plane through the node (raycast against a THREE.Plane),
 feeding the same solve-then-moveNodes loop as the 2D panels; OrbitControls
 disable while a drag is live.
+
+### DECISION: 3D solver design (hinge = pinned-or-free virtual axis particle)
+A hinge is one solver-internal virtual particle per pivot (`<pivotId>#axis`,
+never in schema or results) at pivot + axis·h, distance-tied to the pivot
+node and each member's pivot-adjacent node(s); bentLinks tie two chain
+neighbors (a two-particle bar cannot represent twist). The virtual is pinned
+(frame-fixed axis) when the pivot node is held; free otherwise, so a mobile
+hinge's axis rides its bodies. Signed angles are measured about the live
+axis with the same 0-=-straight convention as 2D and reduce exactly to the
+2D formula on planar/+z rigs; angle limits, torsion springs, and torsion
+cables act only on hinge joints. DOF = 3·(mobile nodes incl. free virtuals)
+− independent equalities (slider now counts 2; bentLink caps 3k−6).
+Kinematic release-settle runs adaptive 100-sweep blocks (≤10) because
+out-of-plane rigid-body relaxation converges ~30× slower than in-plane;
+extreme unreachable drags may still report converged:false honestly. Floor
+y ≥ 0 is global (virtuals exempt). Drag-solve measured 6–8 ms at ~230
+particles (16 ms budget).
+
+### DECISION: anchoring materializes a ground hinge
+Integration e2e caught a planarity leak: with bare spherical anchors a
+panel-drawn four-bar has cone DOF and drifted ~6 cm out of plane in one
+drag gesture (hinge-tie projections inject z; feed-forward accumulates).
+Double-click anchoring now materializes a single-member pivot (schema:
+memberIds.min(1)) with a hinge ⊥ the panel; with the pivot node anchored
+the solver pins the axis, giving the classic frame-fixed pin joint — the
+drawn four-bar is DOF 1 again and sketches stay strictly planar. Spherical
+remains selectable per joint afterward.
+
+### DECISION: examples rebuilt natively (not migrated); spherical showcase on the arm
+All seven examples are authored directly in 3D world coordinates from their
+v6 builders' dimensional data (ids namespaced per subsystem). Full-creature
+merges everything into one document: neck pan (vertical-axis hinge at the
+conduit base) carries pitch (horizontal-axis hinge) because the conduit
+bundle is a member of both pivots — real shared geometry replacing §5.4
+transform-drive. The spherical-joint showcase moved from the conduit (which
+must transmit pan torque — spherical transmits none) to the arm's
+rope-lashed hang, which is genuinely multi-DOF in the reference build.
+Steer-mirror's plan geometry now lies physically horizontal (gravity has no
+moment about vertical pan axes — the gravity-off hack is gone); the leg
+example sits at z = hipWidth/2 to meet true 3D skeleton points.
+
+### DECISION: bend-schedule dihedral convention
+`bendDihedralsRad` (src/geometry/pipe.ts): first real bend = 0 (it defines
+the reference plane); bend i = signed dihedral from the previous bend's
+plane about the shared segment, right-hand rule about the direction of
+travel; degenerate (collinear) vertices report 0 and keep the reference
+plane. Exported in the BOM/CSV as a "twist°" column beside "angle°" — the
+amount to rotate the pipe in the bender between bends. Cut lengths are
+transform-invariant, so migrated documents' BOM totals equal their v6
+values (asserted in tests).

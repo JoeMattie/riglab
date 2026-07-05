@@ -443,7 +443,10 @@ function JointMenu({
       return;
     }
     if (kind === 'anchor') {
-      updateCurrent((cur) => setNodeJoint(cur, nodeId, kind));
+      // grounding materializes a ground hinge about this panel's normal
+      updateCurrent((cur) =>
+        setNodeJoint(cur, nodeId, kind, { kind: 'hinge', axis: { ...frame.zAxis } }),
+      );
       return;
     }
     // pivot/weld materialized here hinge about the hosting panel's normal

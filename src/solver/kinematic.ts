@@ -28,8 +28,17 @@ const SETTLE_ITERATIONS = 100;
  * ordinary frames still pay exactly one block, pathological rotations keep
  * sweeping until the body is rigid again. Still deterministic — the exit
  * condition depends only on deterministic state (§12). */
-const SETTLE_BLOCKS = 10;
+const SETTLE_BLOCKS = 60;
 const CONVERGE_TOL = 1e-5;
+/** Settle-block early-exit threshold — deliberately two decades TIGHTER than
+ * CONVERGE_TOL. Residual-scale artifacts leak through constraint gradients
+ * amplified by O(1) factors (e.g. the hinge virtual-axis ties turn distance
+ * residual into out-of-plane z at ~2×), so exiting at CONVERGE_TOL would let
+ * a planar sketch float ~2e-5 off its plane every frame. Exiting at 1e-7
+ * puts that leakage well under 1e-6 while healthy rigs only pay ~1 extra
+ * block (geometric convergence); pathological cases hit the SETTLE_BLOCKS
+ * cap exactly as before. `converged` still reports against CONVERGE_TOL. */
+const SETTLE_EXIT_TOL = 1e-9;
 
 interface P {
   id: string;
@@ -481,7 +490,7 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
       for (let it = 0; it < SETTLE_ITERATIONS; it++) {
         for (const c of constraints) c.project();
       }
-      if (maxViolation() <= CONVERGE_TOL) return;
+      if (maxViolation() <= SETTLE_EXIT_TOL) return;
     }
   };
 

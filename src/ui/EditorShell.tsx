@@ -52,6 +52,7 @@ export function EditorShell() {
   const face = useEditorStore((s) => s.face);
   const controlsOpen = useEditorStore((s) => s.controlsOpen);
   const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
+  const onboardingDismissed = useEditorStore((s) => s.onboardingDismissed);
 
   // one global solve loop: diagnostics + playback pose + equilibrium overlay
   useGlobalSolve();
@@ -223,8 +224,9 @@ export function EditorShell() {
         <QuadView />
       </div>
 
-      {/* onboarding: a brand-new project has nothing drawn yet */}
-      {!hasElements && <EmptyState />}
+      {/* onboarding: a brand-new project has nothing drawn yet; "Start
+          drawing" dismisses the overlay so the canvas gets the pointer */}
+      {!hasElements && !onboardingDismissed && <EmptyState />}
 
       <ProjectChip />
       <ActionsChip />

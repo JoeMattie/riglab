@@ -929,7 +929,13 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         updateCurrent((cur) => addSkeletonBinding(cur, dropSnap.point, nodeId));
       } else if (dropSnap.kind === 'anchor') {
         updateCurrent((cur) =>
-          groundNodeAtAnchor(cur, nodeId, dropSnap.anchor, vec3OfSnap(dropSnap, depthM)),
+          groundNodeAtAnchor(
+            cur,
+            nodeId,
+            dropSnap.anchor,
+            vec3OfSnap(dropSnap, depthM),
+            panelHinge,
+          ),
         );
       }
       return;
@@ -1022,8 +1028,10 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       if (snap.kind === 'node') {
         const node = mech.nodes.find((n) => n.id === snap.nodeId);
         if (node) {
+          // anchoring materializes a ground hinge about this panel's normal
+          // (setNodeKind), so the anchored chain end stays in-plane
           updateCurrent((cur) =>
-            setNodeKind(cur, snap.nodeId, node.kind === 'anchor' ? 'free' : 'anchor'),
+            setNodeKind(cur, snap.nodeId, node.kind === 'anchor' ? 'free' : 'anchor', panelHinge),
           );
         }
       }

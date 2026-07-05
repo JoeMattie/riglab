@@ -184,6 +184,11 @@ export interface EditorState {
   /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
   controlsOpen: boolean;
 
+  /** onboarding empty-state dismissed for the current document ("Start
+   * drawing" must actually clear the overlay so the canvas gets the pointer) */
+  onboardingDismissed: boolean;
+  dismissOnboarding(): void;
+
   /** Clear document-scoped transient state (selection, pose, trace,
    * popovers, proposal) — call when a different project is opened. Replaces
    * the v6 setActiveMechanism(id). */
@@ -259,6 +264,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   panelDepths: { top: 0, front: 0, side: 0 },
   activePanel: 'side',
   controlsOpen: false,
+  onboardingDismissed: false,
+  dismissOnboarding: () => set({ onboardingDismissed: true }),
 
   // face is deliberately kept across documents — it is a lens, not a
   // document property (§8)
@@ -271,6 +278,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       lengthEdit: null,
       autoProposal: null,
       panelDepths: { top: 0, front: 0, side: 0 },
+      onboardingDismissed: false,
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
   setFace: (face) => set({ face }),

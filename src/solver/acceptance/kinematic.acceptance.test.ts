@@ -42,6 +42,31 @@ function circleTargets(center: Vec3, radius: number, steps: number): Vec3[] {
   });
 }
 
+/** The canonical UI-drawn four-bar: sketched in a side panel (plane z = 0,
+ * hinge axes ⊥ panel), the two ground nodes double-click-anchored. The
+ * grounded pivots are SINGLE-member ground hinges — a pin whose node is on
+ * the frame has a frame-fixed axis (hinge.ts pinning rule). */
+function drawnFourBar(): Mechanism {
+  const z: Vec3 = { x: 0, y: 0, z: 1 };
+  return mech(
+    [
+      node('O2', { x: 0, y: 1, z: 0 }, 'anchor'),
+      node('A', { x: 0, y: 1.2, z: 0 }),
+      node('B', { x: 0.42, y: 1.45, z: 0 }),
+      node('O4', { x: 0.6, y: 1, z: 0 }, 'anchor'),
+    ],
+    [
+      link('crank', 'O2', 'A'),
+      link('coupler', 'A', 'B'),
+      link('rocker', 'B', 'O4'),
+      hinge('pivO2', 'O2', ['crank'], z),
+      hinge('pivA', 'A', ['crank', 'coupler'], z),
+      hinge('pivB', 'B', ['coupler', 'rocker'], z),
+      hinge('pivO4', 'O4', ['rocker'], z),
+    ],
+  );
+}
+
 describe('ACCEPTANCE — bentLink rigidity in 3D', () => {
   function bentPipe(lift = 0): Mechanism {
     // L-shaped bent pipe through 4 vertices, anchored at one end
@@ -337,6 +362,16 @@ describe('ACCEPTANCE — DOF diagnostics (3D)', () => {
     expect(d.converged).toBe(true);
   });
 
+  it('classifies the UI-drawn four-bar (single-member ground hinges at anchors) as 1-DOF', () => {
+    // the canonical sketch-panel construction: hinges ⊥ panel at the two
+    // moving corners, double-click-anchored ground nodes carrying
+    // single-member GROUND hinges (pin fixed to the frame — no stub needed)
+    const d = solve(drawnFourBar(), { channelValues: {} }, 'kinematic').diagnostics;
+    expect(d.dof).toBe(1);
+    expect(d.classification).toBe('mechanism');
+    expect(d.converged).toBe(true);
+  });
+
   it('classifies a triangulated apex (tripod of links) as a structure (0 DOF)', () => {
     const m = mech(
       [
@@ -402,6 +437,36 @@ describe('ACCEPTANCE — DOF diagnostics (3D)', () => {
     expect(result.diagnostics.converged).toBe(false);
     expect(result.diagnostics.residual).toBeGreaterThan(0.01);
     expect(result.diagnostics.violated).toContain('piv');
+  });
+});
+
+describe('ACCEPTANCE — a drawn four-bar stays planar under in-plane drag', () => {
+  it('keeps every node at |z| < 1e-6 across a multi-frame feed-forward gesture', () => {
+    // integration regression: without pinned ground-hinge axes the hinge-tie
+    // projections inject z during violated drag iterations, the free-axis
+    // cone manifold keeps it, and per-frame rest-length recompute (exactly
+    // what the UI does) accumulated ~6 cm of out-of-plane drift over one
+    // gesture. With the anchored pivots' axes frame-pinned the constraint
+    // intersection is exactly the sketch plane, so z must stay at noise level.
+    let m = drawnFourBar();
+    let maxZ = 0;
+    for (let k = 1; k <= 48; k++) {
+      // a full crank revolution in 48 frames, targets in the sketch plane
+      const theta = Math.PI / 2 + (k * 2 * Math.PI) / 48;
+      const target: Vec3 = { x: 0.2 * Math.cos(theta), y: 1 + 0.2 * Math.sin(theta), z: 0 };
+      const result = solve(m, { channelValues: {}, dragTargets: { A: target } }, 'kinematic');
+      for (const id of ['A', 'B'] as const) {
+        maxZ = Math.max(maxZ, Math.abs(result.positions[id]!.z));
+      }
+      m = {
+        ...m,
+        nodes: m.nodes.map((n) => {
+          const p = result.positions[n.id];
+          return p ? { ...n, position: p } : n;
+        }),
+      };
+    }
+    expect(maxZ).toBeLessThan(1e-6);
   });
 });
 

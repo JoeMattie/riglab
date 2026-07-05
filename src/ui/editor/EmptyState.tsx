@@ -12,11 +12,13 @@ export function EmptyState() {
   const setTool = useEditorStore((s) => s.setTool);
   const setActivePanel = useEditorStore((s) => s.setActivePanel);
   const setQuadMaximized = useEditorStore((s) => s.setQuadMaximized);
+  const dismissOnboarding = useEditorStore((s) => s.dismissOnboarding);
 
   const startDrawing = () => {
     setActivePanel('side');
     setQuadMaximized('side');
     setTool('pipe'); // land with the pencil ready (§8.1)
+    dismissOnboarding(); // the overlay must yield the pointer to the canvas
   };
 
   return (

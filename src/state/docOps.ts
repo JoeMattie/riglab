@@ -320,6 +320,10 @@ export function addPipe(
     else if (start.pivotAt) m = addToPivot(m, start.pivotAt, elementId, joint);
     if (end.weldTo) m = addWeld(m, end.nodeId, elementId, end.weldTo, joint);
     else if (end.pivotAt) m = addToPivot(m, end.pivotAt, elementId, joint);
+    // ends drawn onto a wearer anchor are grounded — pin them as ground
+    // hinges about the draw plane's normal, not bare spherical anchors
+    if (startSpec.kind === 'anchorNode') m = ensureGroundHinge(m, start.nodeId, joint);
+    if (endSpec.kind === 'anchorNode') m = ensureGroundHinge(m, end.nodeId, joint);
     return m;
   });
   return { doc: newDoc, elementId };
@@ -508,11 +512,48 @@ export function moveNodes(doc: Project, positions: Record<string, Vec3>): Projec
   }));
 }
 
-export function setNodeKind(doc: Project, nodeId: string, kind: 'free' | 'anchor'): Project {
-  return withMechanism(doc, (m) => ({
-    ...m,
-    nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind } : n)),
-  }));
+/** Materialize a GROUND HINGE at an anchored node (PLANFILE-3d-conversion
+ * integration fix): if the node carries ≥1 rigid member and no pivot element
+ * yet, add a pivot over all members at the node. A single-member pivot at an
+ * anchored node pins the hinge to the frame (see pivotElementSchema), so a
+ * chain end anchored by double-click keeps rotating about the panel normal
+ * instead of coning about a bare spherical anchor. No-op when a pivot
+ * already exists (its joint is respected) or the node has no members. */
+function ensureGroundHinge(m: Mechanism, nodeId: string, joint: PivotJoint): Mechanism {
+  const hasPivot = m.elements.some((e) => e.type === 'pivot' && e.nodeId === nodeId);
+  if (hasPivot) return m;
+  const members = elementsAtNode(m, nodeId);
+  if (members.length < 1) return m;
+  const pivot: PivotElement = {
+    id: uid(),
+    type: 'pivot',
+    maturity: 'sketch',
+    nodeId,
+    joint,
+    memberIds: members,
+    welds: [],
+  };
+  return { ...m, elements: [...m.elements, pivot] };
+}
+
+/** Re-kind a node. Anchoring (kind 'anchor') additionally materializes a
+ * ground hinge in the same op — one undo step — with `joint` (the calling
+ * panel's normal; DEFAULT_PIVOT_JOINT when absent). Un-anchoring leaves any
+ * existing pivot alone: the ground hinge simply becomes a plain pivot over
+ * the same members, removable via its own delete. */
+export function setNodeKind(
+  doc: Project,
+  nodeId: string,
+  kind: 'free' | 'anchor',
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
+): Project {
+  return withMechanism(doc, (m) => {
+    const next = {
+      ...m,
+      nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind } : n)),
+    };
+    return kind === 'anchor' ? ensureGroundHinge(next, nodeId, joint) : next;
+  });
 }
 
 /** Delete an element plus dependents (pivots/sliders that reference it), any
@@ -658,16 +699,25 @@ export function groundNodeAtAnchor(
   nodeId: string,
   anchor: WearerAnchor,
   pos: Vec3,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
 ): Project {
-  return withMechanism(doc, (m) => ({
-    ...m,
-    nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
-    skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
-    anchorBindings: [
-      ...m.anchorBindings.filter((b) => b.nodeId !== nodeId),
-      { id: uid(), anchor, nodeId },
-    ],
-  }));
+  return withMechanism(doc, (m) =>
+    // grounding materializes a ground hinge like every other anchoring path
+    // (panel normal in `joint`), so the attached member cannot cone
+    ensureGroundHinge(
+      {
+        ...m,
+        nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor', position: pos } : n)),
+        skeletonBindings: m.skeletonBindings.filter((b) => b.nodeId !== nodeId),
+        anchorBindings: [
+          ...m.anchorBindings.filter((b) => b.nodeId !== nodeId),
+          { id: uid(), anchor, nodeId },
+        ],
+      },
+      nodeId,
+      joint,
+    ),
+  );
 }
 
 // ── design-face assignment ops (§8.2, §8.2a) ────────────────────────────────
@@ -931,7 +981,13 @@ export function setNodeJoint(
     const node = m.nodes.find((n) => n.id === nodeId);
     if (!node) return m;
     if (kind === 'anchor') {
-      return { ...m, nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor' } : n)) };
+      // anchoring from the joint popover materializes a ground hinge too
+      // (same as setNodeKind), so panel sketches stay planar
+      return ensureGroundHinge(
+        { ...m, nodes: m.nodes.map((n) => (n.id === nodeId ? { ...n, kind: 'anchor' } : n)) },
+        nodeId,
+        joint ?? DEFAULT_PIVOT_JOINT,
+      );
     }
     const members = elementsAtNode(m, nodeId);
     const existing = m.elements.find(
