@@ -23,6 +23,14 @@ const FILE_BY_ID: Record<string, string> = {
   'example-leg-exoskeleton': 'leg-exoskeleton.json',
   'example-tail': 'tail.json',
   'example-full-creature': 'full-creature.json',
+  // complete-costume samples C1–C5 (PLANFILE-fun-costume-samples.md);
+  // per-costume structural + solve acceptance lives in each costume's own
+  // test file (toweringFigure.test.ts, …)
+  'example-towering-figure': 'towering-figure.json',
+  'example-winged-costume': 'winged-costume.json',
+  'example-pincer-costume': 'pincer-costume.json',
+  'example-serpent-costume': 'serpent-costume.json',
+  'example-tall-quadruped': 'tall-quadruped.json',
 };
 
 const pivotsOf = (p: Project): PivotElement[] =>
@@ -81,8 +89,8 @@ function elementRefsOf(el: MechanismElement): string[] {
 }
 
 describe('bundled example registry (§9)', () => {
-  it('ships all seven examples, each JSON valid and matching its builder', () => {
-    expect(EXAMPLES).toHaveLength(7);
+  it('ships all twelve examples, each JSON valid and matching its builder', () => {
+    expect(EXAMPLES).toHaveLength(12);
     for (const example of EXAMPLES) {
       const project = example.load();
       const builder = ARTIFACT_BUILDERS[FILE_BY_ID[example.id]!]!;
