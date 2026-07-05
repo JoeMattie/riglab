@@ -1575,3 +1575,27 @@ Place for unplaced mechanisms (ghosts excluded from mass/CG), translucent
 generic tubes for sketch elements in the pipe model, and quad as a third mode
 alongside 2D/3D. No schema change is expected — ghost placement is derived
 from `viewOrientation`, and Place uses the existing instance schema.
+
+### DECISION: Quad ortho panels edit in the active mechanism's local frame
+The quad workspace's hosting panel does not rewrite SketchCanvas into world
+coordinates. Instead, ghost geometry of every other mechanism is projected
+*into the active mechanism's local sketch frame* (the exact inverse of the
+composition's node lift — `projectToLocal`, unit-tested against
+`defaultPlacement`), so the editor keeps its mechanism-local machinery
+untouched while the surrounding assembly appears correctly positioned around
+the thing being edited. Visually equivalent to world-space editing up to a
+translation of the (unlabeled) grid origin; it also sidesteps the x-flip that
+true world panels would need for side-right/back mechanisms. Click a ghost
+(in the hosting panel's overlay or in any read-only panel) to activate that
+mechanism; it then edits in whichever panel matches its view orientation.
+
+### [deviation] Quad slice scope trims
+Delivered per PLANFILE-quad-workspace: quad as a third mode, one hosted
+editor + read-only ghost panels with pan/zoom, perspective panel with the
+wireframe/pipe-model toggle, header double-click maximize. Trimmed from the
+ideal: no per-mechanism labels in ghost panels, no grid in the read-only
+panels, e2e does not drive a real ghost-click (pointer gesture — reserved
+for interactive checks per "scripted, not driven"; the handler is one line
+over unit-tested projection math), and the full-creature e2e asserts joint
+bodies > 0 rather than fittings > 0 because the bundled examples realize
+joints as wraps/bolts, not commercial fittings. Called out per CLAUDE.md.

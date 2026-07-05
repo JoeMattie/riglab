@@ -110,9 +110,13 @@ Goals:
   count/angle, telescope coaxial pair, sketch-ghost styling; scene-primitive
   extraction; ghosts excluded from mass/CG.
 - e2e smoke additions: load full creature → 3D → toggle pipe model →
-  `getAssemblyStats()` reports pipe mode with tubes > 0 and fittings > 0;
-  quad mode mounts 4 panels and click-to-activate switches
-  `activeMechanismId`.
+  `getAssemblyStats()` reports pipe mode with pipes > 0 and joint bodies
+  beyond the pipe runs (the bundled examples use wrap/bolt realizations, not
+  `fitting`, so the fitting count itself may be 0); quad mode mounts 4
+  panels, hosts exactly one 2D editor, and double-click maximize/restore
+  works. Driving an actual ghost click is a pointer-gesture check
+  (DECISIONS: "scripted, not driven") — the pick wiring is a one-line
+  `setActiveMechanism` handler over the unit-tested projection math.
 - Scripted browser verification per DECISIONS.md ("scripted, not driven"):
   built app under `vite preview`, one Playwright evaluate against
   `window.__riglab`.
