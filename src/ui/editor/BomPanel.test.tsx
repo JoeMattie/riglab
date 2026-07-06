@@ -70,6 +70,19 @@ describe('BomPanel', () => {
     expect(screen.getByTestId('bom-total-weight').textContent).toBe('2.5 kg');
   });
 
+  it('renders the shopping list with the stick count for the pipe stock', () => {
+    useAppStore.setState({ current: project([engineered]) });
+    render(<BomPanel />);
+    const line = screen.getByTestId('shopping-pipe');
+    // one 5 m cut > 3.048 m stock → two sticks (and an oversize warning)
+    expect(line.textContent).toBe('2× 3.048 m stick');
+    expect(
+      screen
+        .getAllByTestId('bom-warning')
+        .some((w) => w.textContent?.includes('exceeds the 3.048 m stock length')),
+    ).toBe(true);
+  });
+
   it('weight updates live when the pipe density is edited (§11)', () => {
     useAppStore.setState({ current: project([engineered]) });
     render(<BomPanel />);

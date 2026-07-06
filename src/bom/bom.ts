@@ -32,6 +32,14 @@ import type {
   Vec3,
 } from '../schema';
 import { validateTelescopePair } from './nesting';
+import {
+  DEFAULT_PIPE_STOCK_LENGTH_M,
+  type ItemShoppingLine,
+  type LengthShoppingLine,
+  type PipeShoppingLine,
+  packSticks,
+  type ShoppingList,
+} from './shopping';
 
 /** Default length of a heat-wrap connector piece (§1: wraps are fabricated as
  * separate short bent connectors). A fixed, editable-later reasonable default. */
@@ -139,7 +147,10 @@ export interface Cost {
   totalCost?: number;
 }
 
-export type BomWarningKind = 'telescopeNestingIncompatible' | 'missingFitting';
+export type BomWarningKind =
+  | 'telescopeNestingIncompatible'
+  | 'missingFitting'
+  | 'cutLongerThanStock';
 
 export interface BomWarning {
   kind: BomWarningKind;
@@ -158,6 +169,8 @@ export interface Bom {
   fittings: FittingCount[];
   techniqueSummary: TechniqueSummary;
   consumables: Consumables;
+  /** what to buy, consolidated (PLANFILE-bom-shopping-list.md) */
+  shoppingList: ShoppingList;
   weights: WeightRollup;
   cost: Cost;
   warnings: BomWarning[];
@@ -567,6 +580,66 @@ export function computeBom(project: Project): Bom {
         a.type.localeCompare(b.type),
     );
 
+  // ── shopping list (PLANFILE-bom-shopping-list.md): what to buy ──────────
+  // Pipe cuts of every kind come from the same stock, so wrap connectors
+  // pack into the same sticks as the main cuts.
+  const cutsByMaterial = new Map<string, { material: PipeMaterial; lengths: number[] }>();
+  for (const raw of cutRaw) {
+    const acc = cutsByMaterial.get(raw.material.id) ?? { material: raw.material, lengths: [] };
+    acc.lengths.push(raw.lengthM);
+    cutsByMaterial.set(raw.material.id, acc);
+  }
+  const shoppingPipes: PipeShoppingLine[] = [...cutsByMaterial.values()]
+    .map(({ material, lengths }) => {
+      const packed = packSticks(lengths, DEFAULT_PIPE_STOCK_LENGTH_M);
+      const totalCutM = lengths.reduce((a, b) => a + b, 0);
+      for (const len of packed.oversizeCuts) {
+        warnings.push({
+          kind: 'cutLongerThanStock',
+          message: `${material.name}: a ${len.toFixed(3)} m cut exceeds the ${DEFAULT_PIPE_STOCK_LENGTH_M} m stock length — plan a coupling or longer stock`,
+        });
+      }
+      return {
+        materialId: material.id,
+        materialName: material.name,
+        stockLengthM: DEFAULT_PIPE_STOCK_LENGTH_M,
+        sticksToBuy: packed.sticks,
+        cutCount: lengths.length,
+        totalCutM,
+        leftoverM: packed.sticks * DEFAULT_PIPE_STOCK_LENGTH_M - totalCutM,
+        oversizeCuts: packed.oversizeCuts,
+      };
+    })
+    .sort((a, b) => a.materialId.localeCompare(b.materialId));
+  const shoppingFittings: ItemShoppingLine[] = fittings.map((f) => ({
+    id: `${f.sizingSystem}|${f.nominalSize}|${f.type}`,
+    label: `${f.nominalSize}" ${f.sizingSystem} ${f.type}`,
+    quantity: f.quantity,
+  }));
+  const shoppingHardware: ItemShoppingLine[] = [...hardwareQtyByMaterial]
+    .map(([id, quantity]) => ({
+      id,
+      label: hardwareById.get(id)?.name ?? id,
+      quantity,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const shoppingCordage: LengthShoppingLine[] = [...cordageLengthByMaterial]
+    .map(([id, lengthM]) => {
+      const mat = cordageById.get(id);
+      return {
+        id,
+        label: mat?.name ?? id,
+        lengthM: mat?.kind === 'rope' ? lengthM * bomSettings.ropeWasteFactor : lengthM,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const shoppingList: ShoppingList = {
+    pipes: shoppingPipes,
+    fittings: shoppingFittings,
+    hardware: shoppingHardware,
+    cordage: shoppingCordage,
+  };
+
   // ── cost (§6.2): only materials with a unit price contribute ────────────
   const byMaterialId: Record<string, number> = {};
   let anyPriced = false;
@@ -595,6 +668,7 @@ export function computeBom(project: Project): Bom {
     fittings,
     techniqueSummary: technique,
     consumables,
+    shoppingList,
     weights: { grandTotalKg, breakdown, perGroupKg, groupNames, perSubsystemTagKg },
     cost: { byMaterialId, totalCost },
     warnings,

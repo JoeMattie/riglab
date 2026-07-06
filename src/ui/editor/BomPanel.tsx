@@ -113,6 +113,40 @@ export function BomPanel() {
         )}
       </Section>
 
+      <Section title="Shopping list">
+        {bom.shoppingList.pipes.length === 0 &&
+          bom.shoppingList.fittings.length === 0 &&
+          bom.shoppingList.hardware.length === 0 &&
+          bom.shoppingList.cordage.length === 0 && (
+            <div className="text-muted-foreground">nothing to buy yet</div>
+          )}
+        {bom.shoppingList.pipes.map((p) => (
+          <Row key={p.materialId} label={p.materialName}>
+            <span
+              data-testid="shopping-pipe"
+              title={`${p.cutCount} cuts totalling ${formatLength(p.totalCutM, units)}, ${formatLength(p.leftoverM, units)} spare`}
+            >
+              {p.sticksToBuy}× {formatLength(p.stockLengthM, units)} stick
+            </span>
+          </Row>
+        ))}
+        {bom.shoppingList.fittings.map((f) => (
+          <Row key={f.id} label={f.label}>
+            <span data-testid="shopping-fitting">{f.quantity}×</span>
+          </Row>
+        ))}
+        {bom.shoppingList.hardware.map((h) => (
+          <Row key={h.id} label={h.label}>
+            <span data-testid="shopping-hardware">{h.quantity}×</span>
+          </Row>
+        ))}
+        {bom.shoppingList.cordage.map((c) => (
+          <Row key={c.id} label={c.label}>
+            <span data-testid="shopping-cordage">{formatLength(c.lengthM, units)}</span>
+          </Row>
+        ))}
+      </Section>
+
       {bom.bendSchedule.length > 0 && (
         <Section title="Bend schedule">
           {bom.bendSchedule.map((b) => (

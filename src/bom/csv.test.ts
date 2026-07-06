@@ -33,12 +33,13 @@ function sampleBom(): Bom {
 }
 
 describe('bomToCsv', () => {
-  it('emits the five sections with headers', () => {
+  it('emits the six sections with headers', () => {
     const csv = bomToCsv(sampleBom());
     expect(csv).toContain('Cut list');
     expect(csv).toContain('Bend schedule');
     expect(csv).toContain('Fittings');
     expect(csv).toContain('Consumables');
+    expect(csv).toContain('Shopping list');
     expect(csv).toContain('Weights');
     // uses CRLF line endings (RFC 4180)
     expect(csv.includes('\r\n')).toBe(true);
@@ -51,6 +52,16 @@ describe('bomToCsv', () => {
     expect(lines.some((l) => l.startsWith('Pipe A,'))).toBe(true);
     // rope total = 2 × 1.2 waste
     expect(lines.some((l) => l.includes('Rope (incl. waste),2.4'))).toBe(true);
+  });
+
+  it('emits shopping-list rows for pipe stock, fittings, and cordage', () => {
+    const lines = bomToCsv(sampleBom()).split('\r\n');
+    const start = lines.indexOf('Shopping list');
+    expect(lines[start + 1]).toBe('Kind,Item,Quantity,Length (m)');
+    const section = lines.slice(start, lines.indexOf('', start));
+    expect(section).toContain('pipe stock,Pipe A (3.048 m stick),1,');
+    expect(section).toContain('fitting,"3/4"" NPS coupling",1,');
+    expect(section).toContain('cordage,rope,,2.4');
   });
 
   it('emits bend-schedule rows with angle° and twist° columns', () => {

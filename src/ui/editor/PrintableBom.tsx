@@ -57,6 +57,38 @@ export function PrintableBom({ doc }: { doc: Project }) {
         </tbody>
       </table>
 
+      <h2>Shopping list</h2>
+      <table>
+        <tbody>
+          {bom.shoppingList.pipes.map((p) => (
+            <tr key={p.materialId}>
+              <td>
+                {p.materialName} — {formatLength(p.stockLengthM, units)} stick
+              </td>
+              <td className="num">{p.sticksToBuy}×</td>
+            </tr>
+          ))}
+          {bom.shoppingList.fittings.map((f) => (
+            <tr key={f.id}>
+              <td>{f.label}</td>
+              <td className="num">{f.quantity}×</td>
+            </tr>
+          ))}
+          {bom.shoppingList.hardware.map((h) => (
+            <tr key={h.id}>
+              <td>{h.label}</td>
+              <td className="num">{h.quantity}×</td>
+            </tr>
+          ))}
+          {bom.shoppingList.cordage.map((c) => (
+            <tr key={c.id}>
+              <td>{c.label}</td>
+              <td className="num">{formatLength(c.lengthM, units)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       {bom.bendSchedule.length > 0 && (
         <>
           <h2>Bend schedule</h2>

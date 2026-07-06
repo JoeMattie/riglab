@@ -1,6 +1,6 @@
 // Hand-rolled CSV export (DECISIONS.md: export-only, ~20 lines, RFC 4180
 // quoting). Covers cut list + bend schedule + fittings + consumables +
-// weights (§6.2).
+// shopping list + weights (§6.2).
 import type { Bom } from './bom';
 
 /** RFC 4180: a field containing a comma, double-quote, CR or LF is wrapped in
@@ -55,6 +55,24 @@ export function bomToCsv(bom: Bom): string {
   lines.push(row(['Rope (incl. waste)', bom.consumables.ropeTotalM]));
   lines.push(row(['Elastic', bom.consumables.elasticTotalM]));
   lines.push(row(['Bowden cable', bom.consumables.bowdenTotalM]));
+  lines.push('');
+
+  lines.push('Shopping list');
+  lines.push(row(['Kind', 'Item', 'Quantity', 'Length (m)']));
+  for (const p of bom.shoppingList.pipes) {
+    lines.push(
+      row(['pipe stock', `${p.materialName} (${p.stockLengthM} m stick)`, p.sticksToBuy, '']),
+    );
+  }
+  for (const f of bom.shoppingList.fittings) {
+    lines.push(row(['fitting', f.label, f.quantity, '']));
+  }
+  for (const h of bom.shoppingList.hardware) {
+    lines.push(row(['hardware', h.label, h.quantity, '']));
+  }
+  for (const c of bom.shoppingList.cordage) {
+    lines.push(row(['cordage', c.label, '', c.lengthM]));
+  }
   lines.push('');
 
   lines.push('Weights');
