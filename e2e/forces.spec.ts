@@ -30,8 +30,10 @@ test('draw a rope, toggle equilibrium, lock an input, render force plumbing', as
   await page.goto('/');
   await page.getByTestId('new-project-name').fill('Forces Smoke');
   await page.getByTestId('create-project').click();
-  // the empty-state lands us in the maximized Side panel with the pipe tool
-  await page.getByTestId('empty-start-drawing').click();
+  // a fresh project lands in the plain quad view (no onboarding overlay);
+  // maximize the Side panel and arm the pipe tool for room to draw
+  await page.getByTestId('quad-title-side').dblclick();
+  await page.getByTestId('tool-pipe').click();
 
   const canvas = page.getByTestId('sketch-canvas-side');
   const box = (await canvas.boundingBox())!;

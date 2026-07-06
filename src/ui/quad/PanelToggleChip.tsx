@@ -4,7 +4,6 @@
 // ones (quadLayout.ts); the store refuses to hide the last visible panel.
 import { type QuadPanelId, useEditorStore } from '../../state/editorStore';
 import { T, toggleChipStyle } from '../editor/theme';
-import { PANEL_ORDER } from './quadLayout';
 
 /** Compact labels — "Perspective" is the 3D preview. */
 const SHORT_TITLES: Record<QuadPanelId, string> = {
@@ -13,6 +12,10 @@ const SHORT_TITLES: Record<QuadPanelId, string> = {
   front: 'Front',
   side: 'Side',
 };
+
+/** Menu order (Joe's request): ortho views reading left to right, 3D last —
+ * intentionally NOT quadLayout's PANEL_ORDER, which encodes grid slots. */
+const TOGGLE_ORDER: readonly QuadPanelId[] = ['top', 'front', 'side', 'persp'];
 
 export function PanelToggleChip() {
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
@@ -39,7 +42,7 @@ export function PanelToggleChip() {
       >
         Panels
       </span>
-      {PANEL_ORDER.map((id) => {
+      {TOGGLE_ORDER.map((id) => {
         const on = panelsVisible[id];
         return (
           <button

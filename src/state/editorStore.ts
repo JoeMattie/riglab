@@ -42,6 +42,16 @@ export type OrthoPanelId = 'top' | 'front' | 'side';
  * geometry so connections land exactly (PLANFILE-3d-conversion.md). */
 export type PanelDepths = Record<OrthoPanelId, number>;
 
+/** Top-bar snapping toggles: which snap sources attract while drawing and
+ * dragging. `length` is the ½ in / 1 cm endpoint-drag tick; the rest gate
+ * findSnap sources (grid points, pipe ends, pipe bodies). */
+export interface SnapPrefs {
+  grid: boolean;
+  length: boolean;
+  ends: boolean;
+  pipes: boolean;
+}
+
 /** Design-face right-dock tabs (§8.2/§8.3): inspector + checklist docked
  * alongside, materials (incl. nesting matrix) and BOM as siblings. */
 export type RightTab = 'inspector' | 'checklist' | 'materials' | 'bom';
@@ -180,6 +190,12 @@ export interface EditorState {
    * follow. A lens like equilibriumOn — not document state, not reset per
    * project. */
   constraintsOn: boolean;
+  /** which snap sources attract while drawing/dragging (top-bar toggles):
+   * grid points, length ticks (½ in / 1 cm), pipe ENDS (nodes), pipe bodies
+   * (onPipe). Wearer skeleton/anchor underlay points always snap. A lens
+   * like constraintsOn — not document state, not reset per project. */
+  snapPrefs: SnapPrefs;
+  toggleSnapPref(key: keyof SnapPrefs): void;
   equilibrium: EquilibriumReadout;
   /** pending auto-resolve preview; null = none */
   autoProposal: AutoProposalState | null;
@@ -209,11 +225,6 @@ export interface EditorState {
    * document-scoped) */
   clipboard: ClipboardPayload | null;
   setClipboard(payload: ClipboardPayload | null): void;
-
-  /** onboarding empty-state dismissed for the current document ("Start
-   * drawing" must actually clear the overlay so the canvas gets the pointer) */
-  onboardingDismissed: boolean;
-  dismissOnboarding(): void;
 
   /** Clear document-scoped transient state (selection, pose, trace,
    * popovers, proposal) — call when a different project is opened. Replaces
@@ -291,6 +302,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   dof: null,
   equilibriumOn: false,
   constraintsOn: false,
+  snapPrefs: { grid: true, length: true, ends: true, pipes: true },
   equilibrium: IDLE_EQUILIBRIUM,
   autoProposal: null,
   assemblyRender: 'wire',
@@ -302,8 +314,6 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   controlsOpen: false,
   clipboard: null,
   setClipboard: (clipboard) => set({ clipboard }),
-  onboardingDismissed: false,
-  dismissOnboarding: () => set({ onboardingDismissed: true }),
 
   // face is deliberately kept across documents — it is a lens, not a
   // document property (§8)
@@ -317,7 +327,6 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       autoProposal: null,
       clipboard: null,
       panelDepths: { top: 0, front: 0, side: 0 },
-      onboardingDismissed: false,
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
   setFace: (face) => set({ face }),
@@ -331,7 +340,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         : [...s.selectedElementIds, elementId],
     })),
   setSelection: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
-  clearSelection: () => set({ selectedElementIds: [] }),
+  // identity-stable when already empty: an Escape-time clear must not churn
+  // the array reference and force effects depending on it to re-register
+  // mid-dispatch (see SketchCanvas's escape-abort effect)
+  clearSelection: () =>
+    set((s) => (s.selectedElementIds.length === 0 ? s : { selectedElementIds: [] })),
   setPosePositions: (posePositions) => set({ posePositions }),
   setDragNode: (dragNodeId) => set({ dragNodeId }),
   setPlayback: (p) => set((s) => ({ playback: { ...s.playback, ...p } })),
@@ -372,6 +385,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM,
     }),
   setConstraintsOn: (constraintsOn) => set({ constraintsOn }),
+  toggleSnapPref: (key) =>
+    set((s) => ({ snapPrefs: { ...s.snapPrefs, [key]: !s.snapPrefs[key] } })),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
   setAutoProposal: (autoProposal) => set({ autoProposal }),
   setAssemblyRender: (assemblyRender) => set({ assemblyRender }),

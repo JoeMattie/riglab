@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { mech, node } from '../../bom/testHelpers';
-import type { LinkElement, SkeletonPoint, Vec2, WearerAnchor } from '../../schema';
+import type { BentLinkElement, LinkElement, SkeletonPoint, Vec2, WearerAnchor } from '../../schema';
 import type { Silhouette } from '../../wearer';
-import { dedupConsecutive, findSnap, isCoincidentFinish } from './snapping';
+import { dedupConsecutive, findBentLinkHit, findSnap, isCoincidentFinish } from './snapping';
 
 // Guards for Konva's time-based dblclick (fires for any two clicks within its
 // window, regardless of position). Regression coverage for the premature-finish
@@ -108,6 +108,93 @@ describe('findSnap excludeElements', () => {
       excludeElements: new Set(['L1']),
     });
     expect(snap.kind).toBe('grid');
+  });
+});
+
+// Top-bar snap toggles (SnapPrefs → SnapContext.sources): each source can be
+// switched off independently; with grid off the fallback carries the RAW
+// pointer position instead of rounding to the grid.
+describe('findSnap sources (top-bar snap toggles)', () => {
+  const L1: LinkElement = {
+    id: 'L1',
+    type: 'link',
+    maturity: 'sketch',
+    nodeA: 'n1',
+    nodeB: 'n2',
+    pointMasses: [],
+  };
+  const m = mech([L1], [node('n1', 0, 0), node('n2', 1, 0)]);
+  const positions = { n1: { x: 0, y: 0 }, n2: { x: 1, y: 0 } };
+  const ctx = (sources: { ends: boolean; pipes: boolean; grid: boolean }) => ({
+    mechanism: m,
+    positions,
+    silhouette: null,
+    tolM: 0.02,
+    sources,
+  });
+
+  it('ends off: a point on a node falls through to the pipe span or grid', () => {
+    const nearEnd = { x: 0.005, y: 0 };
+    expect(findSnap(nearEnd, ctx({ ends: true, pipes: true, grid: true })).kind).toBe('node');
+    expect(findSnap(nearEnd, ctx({ ends: false, pipes: true, grid: true })).kind).not.toBe('node');
+  });
+
+  it('pipes off: a point on the span falls through to the grid', () => {
+    const nearSpan = { x: 0.4, y: 0.005 };
+    expect(findSnap(nearSpan, ctx({ ends: true, pipes: true, grid: true })).kind).toBe('onPipe');
+    expect(findSnap(nearSpan, ctx({ ends: true, pipes: false, grid: true })).kind).toBe('grid');
+  });
+
+  it('grid off: the fallback keeps the raw pointer position', () => {
+    const raw = { x: 0.4031, y: 0.31 };
+    const rounded = findSnap(raw, ctx({ ends: true, pipes: false, grid: true }));
+    expect(rounded.pos.x).not.toBeCloseTo(raw.x, 6); // rounded to 0.5" grid
+    const free = findSnap(raw, ctx({ ends: true, pipes: false, grid: false }));
+    expect(free.kind).toBe('grid');
+    expect(free.pos).toEqual(raw); // untouched
+  });
+});
+
+// BentLinks emit no onPipe snap from findSnap (drawing can't attach
+// mid-polyline), so grabbing their body to MOVE them goes through this
+// dedicated segment hit-test — the regression here was polylines falling
+// through to the marquee instead of dragging.
+describe('findBentLinkHit', () => {
+  const bent: BentLinkElement = {
+    id: 'B1',
+    type: 'bentLink',
+    maturity: 'sketch',
+    nodeIds: ['n1', 'n2', 'n3'],
+    filletRadiiM: [0],
+    pointMasses: [],
+  };
+  const m = mech([bent], [node('n1', 0, 0), node('n2', 1, 0), node('n3', 1, 1)]);
+  const positions = { n1: { x: 0, y: 0 }, n2: { x: 1, y: 0 }, n3: { x: 1, y: 1 } };
+
+  it('hits the nearest segment point within tolerance', () => {
+    const hit = findBentLinkHit(
+      { x: 0.5, y: 0.01 },
+      { mechanism: m, positions, silhouette: null, tolM: 0.02 },
+    );
+    expect(hit).toMatchObject({ elementId: 'B1', nodeA: 'n1', nodeB: 'n2' });
+    expect(hit!.t).toBeCloseTo(0.5, 9);
+    expect(hit!.pos).toEqual({ x: 0.5, y: 0 });
+  });
+
+  it('picks the closer of two segments at a corner', () => {
+    const hit = findBentLinkHit(
+      { x: 0.99, y: 0.4 },
+      { mechanism: m, positions, silhouette: null, tolM: 0.05 },
+    );
+    expect(hit).toMatchObject({ nodeA: 'n2', nodeB: 'n3' });
+  });
+
+  it('misses outside the tolerance and respects excludeElements', () => {
+    const ctx = { mechanism: m, positions, silhouette: null, tolM: 0.02 };
+    expect(findBentLinkHit({ x: 0.5, y: 0.5 }, ctx)).toBeNull();
+    expect(
+      findBentLinkHit({ x: 0.5, y: 0.01 }, { ...ctx, excludeElements: new Set(['B1']) }),
+    ).toBeNull();
   });
 });
 

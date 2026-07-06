@@ -12,6 +12,7 @@ import { useAppStore } from '../../state/appStore';
 import {
   assignNodeRealization,
   detachNode,
+  releaseNodeConnection,
   setNodeJoint,
   setNodePivotJoint,
 } from '../../state/docOps';
@@ -76,7 +77,6 @@ export function JointPopover({
 }) {
   const pending = useEditorStore((s) => s.pendingConnect);
   const openPopover = useEditorStore((s) => s.openPopover);
-  const face = useEditorStore((s) => s.face);
 
   if (pending) return <ConnectMenu container={container} />;
   if (openPopover?.kind !== 'joint') return null;
@@ -87,16 +87,8 @@ export function JointPopover({
   const p = toScreen(view, p2);
   const origin = pageOrigin(container);
   const anchor = { x: origin.x + p.x - 33, y: origin.y + p.y + 20 };
-  // design face: every pivot-like joint (pivot, weld, or slider) gets the
-  // realization picker — the engineering question at that point — even when
-  // it is an implicit free pin with no explicit element yet. Anchors and free
-  // ends, and the whole sketch face, still get the joint-type menu.
-  const kind = jointKindAtNode(mech, node.id);
-  if (face === 'design' && (kind === 'pivot' || kind === 'weld' || kind === 'slider')) {
-    return (
-      <RealizationMenu mech={mech} nodeId={node.id} kind={kind} anchor={anchor} frame={frame} />
-    );
-  }
+  // ONE combined menu on every face (Joe's request — the old design-face
+  // realization popover is folded in as the right-hand column)
   return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} frame={frame} />;
 }
 
@@ -118,27 +110,22 @@ const REALIZATIONS_BY_KIND: Record<'pivot' | 'weld' | 'slider', ReadonlySet<Join
   slider: new Set(['conduitBox', 'nestedSleeve', 'clickDetachable']),
 };
 
-/** Design-face variant: the joint's physical realization (heat-wrap, fitting,
- * bolt-through, …) instead of joint types. Works on any pivot-like node — an
- * implicit free pin materializes a pivot element when realized. Assigning
- * re-derives maturity. */
-function RealizationMenu({
+/** Realization column of the combined joint menu (formerly the design-face
+ * popover): the joint's physical realization (heat-wrap, fitting,
+ * bolt-through, …). Works on any pivot-like node — an implicit free pin
+ * materializes a pivot element when realized. Assigning re-derives maturity. */
+function RealizationRows({
   mech,
   nodeId,
   kind,
-  anchor,
   frame,
 }: {
   mech: Mechanism;
   nodeId: string;
   kind: 'pivot' | 'weld' | 'slider';
-  /** page coordinates */
-  anchor: Vec2;
   frame: OrientationFrame;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
-  const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
-  const ref = useRef<HTMLDivElement>(null);
 
   // the explicit joint element, if any — carries the current realization;
   // absent for an implicit free pin (realized on first pick)
@@ -149,33 +136,17 @@ function RealizationMenu({
   const current = joint?.realization;
   const allowed = REALIZATIONS_BY_KIND[kind];
 
-  useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
-  }, []);
-
   const choose = (realization: JointRealization | undefined) => {
-    setOpenPopover(null);
-    // a materialized free pin hinges about the hosting panel's normal
+    // a materialized free pin hinges about the hosting panel's normal; the
+    // hosting menu stays open — the picked row's checkmark reads back
     updateCurrent((cur) =>
       assignNodeRealization(cur, nodeId, realization, { kind: 'hinge', axis: { ...frame.zAxis } }),
     );
   };
 
-  const pos = clampedPos(anchor, 196, 330);
-  return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
-    <div
-      ref={ref}
-      data-testid="realization-popover"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') setOpenPopover(null);
-        onMenuKeyDown(e);
-      }}
-      style={{ ...menuStyle, position: 'fixed', ...pos, width: 196, zIndex: 60 }}
-    >
-      <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
-        Realization · {kind} {nodeId.slice(0, 4)}
-      </div>
+  return (
+    <div data-testid="realization-rows">
+      <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Realization</div>
       {REALIZATION_OPTIONS.map((opt) => {
         // gate rows to the kind's physically-valid realizations; a currently
         // set-but-incompatible realization stays visible (disabled, checked) so
@@ -208,8 +179,7 @@ function RealizationMenu({
         unset (sketch)
         {current === undefined && <span style={{ marginLeft: 'auto' }}>✓</span>}
       </button>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -261,7 +231,7 @@ function ConnectMenu({ container }: { container: HTMLElement | null }) {
   );
 }
 
-type JointChoice = 'pivot' | 'weld' | 'slider' | 'anchor' | 'detach';
+type JointChoice = 'pivot' | 'weldPivot' | 'weld' | 'slider' | 'anchor';
 
 /** Quick hinge-axis presets: perpendicular to each ortho panel. */
 export const AXIS_PRESETS: Array<{ key: string; label: string; axis: () => PivotJoint }> = [
@@ -411,8 +381,11 @@ export function PivotJointControls({ pivot }: { pivot: PivotElement }) {
   );
 }
 
-/** Joint-change variant: current type checked; rows that cannot apply to
- * this node are disabled rather than hidden, keeping the menu stable. */
+/** The combined joint menu (Joe's request): attachment state on top, joint
+ * types on the left, the pivot's hinge controls and the realization picker
+ * side by side on the right — one menu on both faces, floating over the
+ * whole page. Rows that cannot apply to this node are disabled rather than
+ * hidden, keeping the menu stable. */
 function JointMenu({
   mech,
   nodeId,
@@ -433,6 +406,17 @@ function JointMenu({
     ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, []);
 
+  // the menu stays open while options are clicked (state edits read back
+  // live); it closes on ✕, Escape, or any pointerdown OUTSIDE it — the
+  // portal floats over the whole page, so listen at the document
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpenPopover(null);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [setOpenPopover]);
+
   const members = memberCountAtNode(mech, nodeId);
   const kind = jointKindAtNode(mech, nodeId);
   const current: JointChoice = kind === 'end' ? 'pivot' : kind;
@@ -441,42 +425,69 @@ function JointMenu({
   );
 
   const choose = (kind: JointChoice) => {
-    setOpenPopover(null);
     if (kind === 'slider') return; // shown only as the current state
-    if (kind === 'detach') {
-      updateCurrent((cur) => detachNode(cur, nodeId));
-      useEditorStore.getState().clearSelection();
-      return;
-    }
-    if (kind === 'anchor') {
-      // grounding materializes a ground hinge about this panel's normal
-      updateCurrent((cur) =>
-        setNodeJoint(cur, nodeId, kind, { kind: 'hinge', axis: { ...frame.zAxis } }),
-      );
-      return;
-    }
-    // pivot/weld materialized here hinge about the hosting panel's normal
+    // anchor/pivot/weld materialized here hinge about the panel's normal
+    // (grounding creates a ground hinge, keeping panel sketches planar);
+    // the menu stays open — the row's checkmark moves to the new state
     updateCurrent((cur) =>
       setNodeJoint(cur, nodeId, kind, { kind: 'hinge', axis: { ...frame.zAxis } }),
     );
   };
 
+  /** the "Attached" toggle: this node joins ≥2 pipes and/or rides a wearer
+   * point (skeleton binding / pack-frame anchor); clicking breaks every
+   * attachment so the end moves freely again */
+  const attachedPipes = members >= 2;
+  const skeletonBinding = mech.skeletonBindings.find((b) => b.nodeId === nodeId);
+  const anchorBinding = mech.anchorBindings.find((b) => b.nodeId === nodeId);
+  const attachedWearer = skeletonBinding !== undefined || anchorBinding !== undefined;
+  const attached = attachedPipes || attachedWearer;
+  const attachedLabel = attachedPipes
+    ? `Attached · joins ${members} pipes${attachedWearer ? ' + wearer' : ''}`
+    : skeletonBinding
+      ? `Attached · body · ${skeletonBinding.point}`
+      : anchorBinding
+        ? `Attached · frame · ${anchorBinding.anchor}`
+        : 'Not attached';
+  const breakAttachment = () => {
+    // the menu stays open and now reads "Not attached"
+    updateCurrent((cur) => {
+      let next = cur;
+      if (attachedWearer) next = releaseNodeConnection(next, nodeId);
+      if (attachedPipes) next = detachNode(next, nodeId);
+      return next;
+    });
+    useEditorStore.getState().clearSelection();
+  };
+
   const rows: Array<{ kind: JointChoice; glyph: JointGlyphName; disabled: boolean }> = [
     { kind: 'pivot', glyph: 'pivot', disabled: members < 2 && current !== 'anchor' },
+    // the mid-pipe junction default: straight-through pair welded (one
+    // physical pipe), every other member pivots — needs a 3rd member
+    { kind: 'weldPivot', glyph: 'weldPivot', disabled: members < 3 },
     { kind: 'weld', glyph: 'weld', disabled: members < 2 },
     { kind: 'slider', glyph: 'slider', disabled: current !== 'slider' },
     { kind: 'anchor', glyph: 'anchor', disabled: false },
-    { kind: 'detach', glyph: 'detach', disabled: members < 2 },
   ];
   const labels: Record<JointChoice, string> = {
     pivot: 'Pivot',
+    weldPivot: 'Weld + pivot',
     weld: 'Weld',
     slider: 'Slider',
     anchor: 'Anchor',
-    detach: 'Detach',
   };
 
-  const pos = clampedPos(anchor, WIDTH + 26, 310);
+  // right column: realizations for any pivot-like joint; hinge/spherical
+  // controls for joints that PIVOT (incl. the weld+pivot junction) — a full
+  // WELD is rigid, so axis controls make no sense there (hidden, Joe's
+  // request)
+  const showRealizations =
+    kind === 'pivot' || kind === 'weldPivot' || kind === 'weld' || kind === 'slider';
+  const showPivotControls = pivot !== undefined && (kind === 'pivot' || kind === 'weldPivot');
+  const twoCol = showRealizations || showPivotControls;
+
+  const width = twoCol ? 396 : WIDTH + 26;
+  const pos = clampedPos(anchor, width, 340);
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
     <div
@@ -486,37 +497,98 @@ function JointMenu({
         if (e.key === 'Escape') setOpenPopover(null);
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'fixed', ...pos, width: WIDTH + 26, zIndex: 60 }}
+      style={{ ...menuStyle, position: 'fixed', ...pos, width, zIndex: 60 }}
     >
-      <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
-        Joint · node {nodeId.slice(0, 4)}
-      </div>
-      {rows.map((r) => (
+      <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px 6px' }}>
+        <span style={captionStyle}>Joint · node {nodeId.slice(0, 4)}</span>
         <button
           type="button"
-          key={r.kind}
-          data-testid={`joint-${r.kind}`}
-          disabled={r.disabled}
-          onClick={() => choose(r.kind)}
+          data-testid="joint-popover-close"
+          title="close"
+          onClick={() => setOpenPopover(null)}
           style={{
-            ...rowStyle(current === r.kind),
-            ...(r.disabled ? { opacity: 0.4, cursor: 'default' } : {}),
+            marginLeft: 'auto',
+            border: 'none',
+            background: 'none',
+            color: T.faint,
+            cursor: 'pointer',
+            fontSize: 13,
+            padding: '0 2px',
+            lineHeight: 1,
           }}
         >
-          <span style={{ display: 'grid', placeItems: 'center', width: 18 }}>
-            <JointGlyph name={r.glyph} />
-          </span>
-          {labels[r.kind]}
-          {current === r.kind && <span style={{ marginLeft: 'auto' }}>✓</span>}
+          ✕
         </button>
-      ))}
-      {/* hinge / spherical choice + axis for the pivot living here (v7) */}
-      {pivot && (
-        <>
-          <div style={{ borderTop: `1px solid ${T.hairline}`, margin: '5px 4px' }} />
-          <PivotJointControls pivot={pivot} />
-        </>
-      )}
+      </div>
+      <button
+        type="button"
+        data-testid="joint-attached-toggle"
+        aria-pressed={attached}
+        disabled={!attached}
+        onClick={breakAttachment}
+        title={attached ? 'break the attachment — the ends move freely again' : undefined}
+        style={{
+          display: 'block',
+          width: 'calc(100% - 8px)',
+          margin: '0 4px 6px',
+          border: 'none',
+          borderRadius: 8,
+          padding: '6px 8px',
+          font: `500 12px ${T.sans}`,
+          textAlign: 'center',
+          cursor: attached ? 'pointer' : 'default',
+          background: attached ? T.accentTint : T.chip,
+          color: attached ? T.accentText : T.muted,
+        }}
+      >
+        {attachedLabel}
+      </button>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <div style={{ flex: `0 0 ${WIDTH - 24}px` }}>
+          {rows.map((r) => (
+            <button
+              type="button"
+              key={r.kind}
+              data-testid={`joint-${r.kind}`}
+              disabled={r.disabled}
+              onClick={() => choose(r.kind)}
+              style={{
+                ...rowStyle(current === r.kind),
+                ...(r.disabled ? { opacity: 0.4, cursor: 'default' } : {}),
+              }}
+            >
+              <span style={{ display: 'grid', placeItems: 'center', width: 18 }}>
+                <JointGlyph name={r.glyph} />
+              </span>
+              {labels[r.kind]}
+              {current === r.kind && <span style={{ marginLeft: 'auto' }}>✓</span>}
+            </button>
+          ))}
+          {/* hinge / spherical choice + axis for the pivot living here (v7) —
+              pivots only; a weld is rigid so the controls are hidden */}
+          {showPivotControls && pivot && (
+            <>
+              <div style={{ borderTop: `1px solid ${T.hairline}`, margin: '5px 4px' }} />
+              <PivotJointControls pivot={pivot} />
+            </>
+          )}
+        </div>
+        {showRealizations && (
+          <>
+            <div style={{ borderLeft: `1px solid ${T.hairline}`, margin: '0 6px' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* a weld+pivot junction MOVES as a pivot, so it gets the
+                  pivot realization set (heat-wrapped pivot, rope lashing, …) */}
+              <RealizationRows
+                mech={mech}
+                nodeId={nodeId}
+                kind={kind === 'weldPivot' ? 'pivot' : (kind as 'pivot' | 'weld' | 'slider')}
+                frame={frame}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>,
     document.body,
   );
@@ -533,13 +605,17 @@ function memberCountAtNode(mech: Mechanism, nodeId: string): number {
 }
 
 /** The joint kind rendered at a node — shared with the selection card's
- * End A/B chips and the canvas glyphs' popover checkmark. */
+ * End A/B chips and the canvas glyphs' popover checkmark. A PARTIAL weld set
+ * (mid-pipe junction: split halves welded, arrivals pivoting) reads as
+ * 'weldPivot'; 'weld' is reserved for a fully-welded junction. */
 export function jointKindAtNode(mech: Mechanism, nodeId: string): JointChoice | 'end' {
   const node = mech.nodes.find((n) => n.id === nodeId);
   if (!node) return 'end';
   if (node.kind === 'anchor') return 'anchor';
   if (mech.elements.some((e) => e.type === 'slider' && e.nodeId === nodeId)) return 'slider';
   const pivot = mech.elements.find((e) => e.type === 'pivot' && e.nodeId === nodeId);
-  if (pivot && pivot.type === 'pivot' && pivot.welds.length > 0) return 'weld';
+  if (pivot && pivot.type === 'pivot' && pivot.welds.length > 0) {
+    return pivot.welds.length >= pivot.memberIds.length - 1 ? 'weld' : 'weldPivot';
+  }
   return pivot || memberCountAtNode(mech, nodeId) >= 2 ? 'pivot' : 'end';
 }

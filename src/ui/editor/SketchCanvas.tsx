@@ -20,6 +20,10 @@ import {
   addRope,
   addSkeletonBinding,
   addTorsionCable,
+  attachNodes,
+  attachNodeToLink,
+  canAttachNodes,
+  canAttachNodeToLink,
   deleteElement,
   groundNodeAtAnchor,
   moveNodes,
@@ -50,12 +54,27 @@ import { selectionCardHost } from '../quad/quadLayout';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
 import { carriesForceLabel, forceLabelAnchor, formatForce, pickRenderPositions } from './forces';
-import { pinchStep, wheelGesture } from './gesture';
+import { pinchStep, wheelZoomFactor } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
-import { dedupConsecutive, findSnap, GRID_M, isCoincidentFinish, type Snap } from './snapping';
+import {
+  dedupConsecutive,
+  findBentLinkHit,
+  findSnap,
+  GRID_M,
+  isCoincidentFinish,
+  type Snap,
+} from './snapping';
 import { scenePalette } from './theme';
-import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
+import {
+  initialView,
+  panBy,
+  panTo,
+  toScreen,
+  toWorld,
+  type ViewTransform,
+  zoomAt,
+} from './viewTransform';
 
 const SNAP_TOL_PX = 14;
 /** Drag distance (screen px) past which a wearer-connected node tears off
@@ -183,6 +202,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const violated = useEditorStore((s) => s.violated);
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
   const constraintsOn = useEditorStore((s) => s.constraintsOn);
+  const snapPrefs = useEditorStore((s) => s.snapPrefs);
   const equilibrium = useEditorStore((s) => s.equilibrium);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const focusElementId = useEditorStore((s) => s.focusElementId);
@@ -234,7 +254,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   } | null>(null);
   const [bowdenA, setBowdenA] = useState<{ start: Snap; end: Snap; depthM: number } | null>(null);
   const [torsionA, setTorsionA] = useState<{ pivotId: string; nodeId: string } | null>(null);
-  const panRef = useRef<{ x: number; y: number } | null>(null);
+  /** while panning (middle-drag / space+drag): the world point grabbed at
+   * pan start — each move re-centers so it stays glued under the cursor */
+  const panRef = useRef<Vec2 | null>(null);
   /** where the last mousedown landed, to tell a click from a drag/pan */
   const mouseDownScreenRef = useRef<Vec2 | null>(null);
   /** marquee (drag-box) selection, in screen coords while dragging */
@@ -465,21 +487,28 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     return p ? { x: p.x, y: p.y } : null;
   };
 
+  /** Shared context for findSnap / findBentLinkHit — assumes `mech` checked. */
+  const snapContext = useCallback(
+    (exclude?: ReadonlySet<string>, excludeElements?: ReadonlySet<string>) => ({
+      mechanism: mech!,
+      positions: projected,
+      silhouette,
+      tolM: SNAP_TOL_PX / view.scale,
+      gridM: GRID_M,
+      exclude,
+      excludeElements,
+      sources: { ends: snapPrefs.ends, pipes: snapPrefs.pipes, grid: snapPrefs.grid },
+    }),
+    [view.scale, mech, projected, silhouette, snapPrefs],
+  );
+
   const snapAt = useCallback(
     (screen: Vec2, exclude?: ReadonlySet<string>, excludeElements?: ReadonlySet<string>): Snap => {
       const world = toWorld(view, screen);
       if (!mech) return { kind: 'grid', pos: world };
-      return findSnap(world, {
-        mechanism: mech,
-        positions: projected,
-        silhouette,
-        tolM: SNAP_TOL_PX / view.scale,
-        gridM: GRID_M,
-        exclude,
-        excludeElements,
-      });
+      return findSnap(world, snapContext(exclude, excludeElements));
     },
-    [view, mech, projected, silhouette],
+    [view, mech, snapContext],
   );
 
   /** Lift a panel-2D point into document space at a work-plane depth. */
@@ -629,15 +658,16 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     // right button never starts a drag/marquee/draft — it opens the joint
     // popover via onStageContextMenu
     if (e.evt.button === 2) return;
+    // middle-mouse or space+drag pans in EVERY tool — it must never draw,
+    // select, or extend a draft; plain drag on empty space marquees (select)
+    if (e.evt.button === 1 || spaceDownRef.current) {
+      panRef.current = toWorld(view, screen);
+      return;
+    }
     const snap = snapAt(screen);
 
     if (tool === 'select') {
       marqueeCommittedRef.current = false;
-      // middle-mouse or space+drag pans; plain drag on empty space marquees
-      if (e.evt.button === 1 || spaceDownRef.current) {
-        panRef.current = screen;
-        return;
-      }
       if (snap.kind === 'node') {
         adoptDepth(snap);
         const depthM = depthOfSnap(snap, workDepthM);
@@ -673,6 +703,14 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
                 incident.add(el.id);
               else if (el.type === 'bentLink' && el.nodeIds.includes(nodeId)) incident.add(el.id);
             }
+            // a wearer-connected endpoint holds its point until the pointer
+            // crosses the tear-off deadzone, same as the plain node drag
+            const endNode = mech.nodes.find((x) => x.id === nodeId);
+            const endConnected =
+              endNode?.kind === 'anchor' ||
+              mech.skeletonBindings.some((b) => b.nodeId === nodeId) ||
+              mech.anchorBindings.some((b) => b.nodeId === nodeId);
+            dragTetherRef.current = endConnected ? { torn: false } : null;
             beginGesture();
             setHoverSnap(null);
             setEndpointDrag({
@@ -699,23 +737,48 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         setDragNode({ nodeId: snap.nodeId, depthM });
         setDragNode3(snap.nodeId);
         useEditorStore.getState().clearTrace();
-      } else if (snap.kind === 'onPipe') {
+      } else {
         // grabbing a pipe BODY moves it (with the rest of the selection when
         // it is part of one, or when the modifier adds it) instead of
-        // drawing a marquee
+        // drawing a marquee. Straight pipes arrive as onPipe snaps; bent
+        // pipes emit no onPipe snap (drawing can't attach mid-polyline), so
+        // their body gets its own segment hit-test.
+        const bentHit =
+          snap.kind === 'onPipe' ? null : findBentLinkHit(toWorld(view, screen), snapContext());
+        const bodyElementId = snap.kind === 'onPipe' ? snap.elementId : bentHit?.elementId;
+        if (!bodyElementId) {
+          setMarquee({ start: screen, cursor: screen });
+          return;
+        }
         const withModifier = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
-        const inSelection = selectedElementIds.includes(snap.elementId);
+        const inSelection = selectedElementIds.includes(bodyElementId);
         const elementIds = inSelection
           ? [...selectedElementIds]
           : withModifier
-            ? [...selectedElementIds, snap.elementId]
-            : [snap.elementId];
+            ? [...selectedElementIds, bodyElementId]
+            : [bodyElementId];
         const nodeIds = groupDragNodeIds(mech, elementIds);
         if (nodeIds.length === 0) return;
         const wanted = new Set(nodeIds);
         const orig: Record<string, Vec3> = {};
         for (const n of mech.nodes) if (wanted.has(n.id)) orig[n.id] = n.position;
-        adoptDepth(snap);
+        if (snap.kind === 'onPipe') {
+          adoptDepth(snap);
+        } else if (bentHit) {
+          // same work-plane adoption as adoptDepth, lifted from the hit
+          // segment's endpoints at the hit parameter
+          const a3 = renderPositions[bentHit.nodeA];
+          const b3 = renderPositions[bentHit.nodeB];
+          if (a3 && b3) {
+            const pos3: Vec3 = {
+              x: a3.x + (b3.x - a3.x) * bentHit.t,
+              y: a3.y + (b3.y - a3.y) * bentHit.t,
+              z: a3.z + (b3.z - a3.z) * bentHit.t,
+            };
+            const depth = panelDepthOf(pos3, frame);
+            if (Math.abs(depth - workDepthM) > 1e-9) setPanelDepth(panelId, depth);
+          }
+        }
         beginGesture();
         setHoverSnap(null);
         setDragNode3(nodeIds[0]!);
@@ -726,10 +789,8 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
           moved: false,
           pendingSelect: inSelection
             ? null
-            : { elementId: snap.elementId, mode: withModifier ? 'add' : 'replace' },
+            : { elementId: bodyElementId, mode: withModifier ? 'add' : 'replace' },
         });
-      } else {
-        setMarquee({ start: screen, cursor: screen });
       }
       return;
     }
@@ -802,8 +863,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     if (!screen || !mech || !doc) return;
 
     if (panRef.current) {
-      setView((v) => panBy(v, screen.x - panRef.current!.x, screen.y - panRef.current!.y));
-      panRef.current = screen;
+      // capture the anchor NOW: the setView updater runs later, and mouseup
+      // may have nulled the ref by then (the crash Joe hit); panTo keeps the
+      // grabbed canvas point glued to the cursor with no incremental drift
+      const grabbed = panRef.current;
+      setView((v) => panTo(v, grabbed, screen));
       return;
     }
 
@@ -852,6 +916,16 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             channelValues,
             dragTargets: { ...bindingTargets(liveMech, liveDoc.wearer, pose), ...targets },
             groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+            // shift held: every dragged node locks to this panel's plane at
+            // its own depth (the translated target IS in that plane)
+            planeLocks: e.evt.shiftKey
+              ? Object.fromEntries(
+                  Object.entries(targets).map(([id, t]) => [
+                    id,
+                    { point: t, normal: { ...frame.zAxis } },
+                  ]),
+                )
+              : undefined,
           },
           'kinematic',
         );
@@ -871,6 +945,17 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     }
 
     if (tool === 'select' && endpointDrag) {
+      // tear-off (slice B, same as the node drag): a wearer-connected
+      // endpoint holds until the pointer leaves the deadzone, then the
+      // connection releases and the length edit continues live
+      const endTether = dragTetherRef.current;
+      if (endTether && !endTether.torn) {
+        const start = mouseDownScreenRef.current;
+        const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
+        if (movedPx < TEAR_OFF_PX) return;
+        endTether.torn = true;
+        updateCurrent((cur) => releaseNodeConnection(cur, endpointDrag.nodeId));
+      }
       // direct geometry edit: move ONE node; node/skeleton/anchor snaps win,
       // then length ticks (½ in / 1 cm), else the raw pointer lifted at the
       // node's own depth
@@ -898,7 +983,12 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         const raw = Math.hypot(d.x, d.y, d.z);
         const step = lengthStepM(doc.unitsPreference ?? 'imperial');
         const tick = Math.round(raw / step) * step;
-        if (raw > 1e-9 && Math.abs(tick - raw) < (SNAP_TOL_PX * 0.5) / view.scale && tick > 0) {
+        if (
+          snapPrefs.length &&
+          raw > 1e-9 &&
+          Math.abs(tick - raw) < (SNAP_TOL_PX * 0.5) / view.scale &&
+          tick > 0
+        ) {
           const s = tick / raw;
           pos = { x: other.x + d.x * s, y: other.y + d.y * s, z: other.z + d.z * s };
           snapped = true;
@@ -939,9 +1029,18 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       if (!liveDoc || !liveMech) return;
       // a drag that lands on a skeleton point snaps to it and binds on
       // release (planfile §7.3: bind silhouette points to nodes — available
-      // in select); a pack-frame anchor attracts the same way and grounds
+      // in select); a pack-frame anchor attracts the same way and grounds;
+      // another end / a pipe body attracts when a join is possible there
       const dropSnap = snapAt(screen, new Set([dragNode.nodeId]));
-      const bindSnap = dropSnap.kind === 'skeleton' || dropSnap.kind === 'anchor' ? dropSnap : null;
+      const bindSnap =
+        dropSnap.kind === 'skeleton' || dropSnap.kind === 'anchor'
+          ? dropSnap
+          : dropSnap.kind === 'node' && canAttachNodes(liveMech, dragNode.nodeId, dropSnap.nodeId)
+            ? dropSnap
+            : dropSnap.kind === 'onPipe' &&
+                canAttachNodeToLink(liveMech, dragNode.nodeId, dropSnap.elementId)
+              ? dropSnap
+              : null;
       setHoverSnap(bindSnap);
       // panel-plane-constrained target: the pointer moves the node in this
       // panel's plane at the node's own out-of-plane depth
@@ -967,6 +1066,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             channelValues,
             dragTargets: targets,
             groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+            // shift held: the dragged node locks to this panel's plane at
+            // its own depth (the drag target IS in that plane)
+            planeLocks: e.evt.shiftKey
+              ? { [dragNode.nodeId]: { point: target, normal: { ...frame.zAxis } } }
+              : undefined,
           },
           'kinematic',
         );
@@ -991,7 +1095,16 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     }
 
     const snap = snapAt(screen, dragNode ? new Set([dragNode.nodeId]) : undefined);
-    setHoverSnap(tool === 'select' ? (snap.kind === 'node' ? snap : null) : snap);
+    // idle select keeps node snaps (hotspot halo) plus skeleton/anchor snaps —
+    // the wearer handles are hidden until hovered, so the snap is what
+    // reveals the handle under the pointer
+    setHoverSnap(
+      tool === 'select'
+        ? snap.kind === 'node' || snap.kind === 'skeleton' || snap.kind === 'anchor'
+          ? snap
+          : null
+        : snap,
+    );
 
     if (draft) {
       if (draft.mode === 'freehand') {
@@ -1014,8 +1127,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
 
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
+    // a pan release must not fall through to the tool handlers (an active
+    // draft would otherwise commit a stroke at the release point)
+    const wasPanning = panRef.current !== null;
     panRef.current = null;
-    if (!screen || !mech) return;
+    if (wasPanning || !screen || !mech) return;
 
     if (tool === 'select' && marquee) {
       setMarquee(null);
@@ -1049,11 +1165,43 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     if (tool === 'select' && endpointDrag) {
       const start = mouseDownScreenRef.current;
       const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
-      const nodeId = endpointDrag.nodeId;
+      const { nodeId, depthM, incidentElementIds } = endpointDrag;
+      const tether = dragTetherRef.current;
       setEndpointDrag(null);
+      dragTetherRef.current = null;
       endGesture();
       // a stationary click on an endpoint handle selects the joint there
-      if (movedPx < 4) selectJointAtNode(nodeId, e.evt);
+      if (movedPx < 4) {
+        selectJointAtNode(nodeId, e.evt);
+        return;
+      }
+      // a connected endpoint released inside the deadzone never moved — the
+      // release point must not re-bind it elsewhere
+      if (tether && !tether.torn) return;
+      // dropping the end binds/joins exactly like the node drag: skeleton
+      // point → binding; pack-frame anchor → grounded there; another end →
+      // merge into one attached joint; a pipe body → split & pin (the ops
+      // refuse degenerate merges, e.g. the pipe's own other end)
+      const dropSnap = snapAt(screen, new Set([nodeId]), incidentElementIds);
+      if (dropSnap.kind === 'skeleton') {
+        updateCurrent((cur) => addSkeletonBinding(cur, dropSnap.point, nodeId));
+      } else if (dropSnap.kind === 'anchor') {
+        updateCurrent((cur) =>
+          groundNodeAtAnchor(
+            cur,
+            nodeId,
+            dropSnap.anchor,
+            vec3OfSnap(dropSnap, depthM),
+            panelHinge,
+          ),
+        );
+      } else if (dropSnap.kind === 'node') {
+        updateCurrent((cur) => attachNodes(cur, nodeId, dropSnap.nodeId, panelHinge));
+      } else if (dropSnap.kind === 'onPipe') {
+        updateCurrent((cur) =>
+          attachNodeToLink(cur, nodeId, dropSnap.elementId, dropSnap.t, panelHinge),
+        );
+      }
       return;
     }
 
@@ -1079,7 +1227,10 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       if (tether && !tether.torn) return;
       // dropped on a skeleton binding point → bind the node to it, so it now
       // tracks that body point during clip playback (planfile §7.3); dropped
-      // on a pack-frame anchor → ground it there, same as drawing onto one
+      // on a pack-frame anchor → ground it there, same as drawing onto one;
+      // dropped on another end / a pipe body → join them into one attached
+      // joint (the ops refuse degenerate merges — shared elements, existing
+      // joints on the dragged node)
       const dropSnap = snapAt(screen, new Set([nodeId]));
       if (dropSnap.kind === 'skeleton') {
         updateCurrent((cur) => addSkeletonBinding(cur, dropSnap.point, nodeId));
@@ -1092,6 +1243,12 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             vec3OfSnap(dropSnap, depthM),
             panelHinge,
           ),
+        );
+      } else if (dropSnap.kind === 'node') {
+        updateCurrent((cur) => attachNodes(cur, nodeId, dropSnap.nodeId, panelHinge));
+      } else if (dropSnap.kind === 'onPipe') {
+        updateCurrent((cur) =>
+          attachNodeToLink(cur, nodeId, dropSnap.elementId, dropSnap.t, panelHinge),
         );
       }
       return;
@@ -1205,16 +1362,16 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     }
   };
 
-  // Wheel navigation via the vendored gesture model (the zoompinch-spike
-  // fallback): ctrl+wheel / trackpad-pinch → cursor-anchored zoom; plain wheel /
-  // two-finger scroll → pan. Applied to `view` state (never a CSS transform), so
-  // Konva re-renders vector-sharp per point (§11 acceptance).
+  // Wheel navigation: every wheel scroll is a cursor-anchored zoom (mouse
+  // notch, trackpad scroll, and trackpad pinch alike — gesture.ts normalizes
+  // the deltas). Panning is middle-drag / space+drag / two-finger touch.
+  // Applied to `view` state (never a CSS transform), so Konva re-renders
+  // vector-sharp per point (§11 acceptance).
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const screen = stagePointer(e as unknown as Konva.KonvaEventObject<MouseEvent>);
     if (!screen) return;
-    const g = wheelGesture(e.evt);
-    setView((v) => (g.kind === 'zoom' ? zoomAt(v, screen, g.factor) : panBy(v, g.dxPx, g.dyPx)));
+    setView((v) => zoomAt(v, screen, wheelZoomFactor(e.evt)));
   };
 
   // space held = drag pans (the marquee took over plain empty-space drag);
@@ -1239,9 +1396,28 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     };
   }, []);
 
+  // escape aborts this panel's in-progress drafts/gestures. Its OWN effect,
+  // registered once (every setter here is identity-stable): the delete/nudge
+  // handler below re-registers whenever its deps change, and EditorShell's
+  // Escape handler clears the selection — a listener torn down and re-added
+  // DURING the Escape dispatch is not invoked for that very event, which is
+  // exactly how ESC used to fail to abort a mid-drag pipe (Joe's report).
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      setDraft(null);
+      setBindFrom(null);
+      setPendingConnect(null);
+      resetForceDrafts();
+      setEndpointDrag(null);
+      setMarquee(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setPendingConnect, resetForceDrafts]);
+
   // keyboard: delete selection (active panel only — one deleter for a global
-  // selection), arrows nudge the selection's nodes in this panel's plane,
-  // escape cancels this panel's draft/bind
+  // selection), arrows nudge the selection's nodes in this panel's plane
   useEffect(() => {
     const NUDGE: Record<string, Vec2> = {
       ArrowLeft: { x: -1, y: 0 },
@@ -1250,14 +1426,6 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       ArrowDown: { x: 0, y: -1 },
     };
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') {
-        setDraft(null);
-        setBindFrom(null);
-        setPendingConnect(null);
-        resetForceDrafts();
-        setEndpointDrag(null);
-        setMarquee(null);
-      }
       if (selectedElementIds.length === 0 || !mech || !doc || activePanel !== panelId) return;
       const target = ev.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
@@ -1415,6 +1583,12 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const units = doc.unitsPreference;
   const isActive = activePanel === panelId;
 
+  // wearer snap targets (skeleton points, pack-frame anchors) stay hidden
+  // until they matter: a node/endpoint drag in flight shows them ALL (they
+  // are drop targets); otherwise — armed draw tools included — only the one
+  // the cursor is snapping to / hovering shows (via hoverSnap)
+  const wearerTargetsVisible = dragNode !== null || endpointDrag !== null;
+
   return (
     <div
       ref={containerRef}
@@ -1486,33 +1660,40 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               closed
             />
           ))}
-          {/* skeleton binding points and structural anchors are always shown
-              (planfile §7.1: named anchors and skeleton points are snappable
-              underlay points) — a pivot dropped on a skeleton point binds to
+          {/* skeleton binding points and structural anchors stay snappable
+              underlay points (planfile §7.1) but only DRAW while a gesture
+              can use them or the pointer hovers one (wearerTargetsVisible;
+              DECISIONS.md) — a pivot dropped on a skeleton point binds to
               it; dropped on a pack-frame anchor it grounds there */}
           {silhouette &&
-            Object.entries(silhouette.points).map(([name, p]) => (
-              <Circle
-                key={`sp${name}`}
-                x={S(p).x}
-                y={S(p).y}
-                radius={4}
-                stroke="#7a9"
-                strokeWidth={1.5}
-              />
-            ))}
+            Object.entries(silhouette.points).map(([name, p]) =>
+              wearerTargetsVisible ||
+              (hoverSnap?.kind === 'skeleton' && hoverSnap.point === name) ? (
+                <Circle
+                  key={`sp${name}`}
+                  x={S(p).x}
+                  y={S(p).y}
+                  radius={4}
+                  stroke="#7a9"
+                  strokeWidth={1.5}
+                />
+              ) : null,
+            )}
           {silhouette &&
-            Object.entries(silhouette.anchors).map(([name, p]) => (
-              <Rect
-                key={`sa${name}`}
-                x={S(p).x - 3}
-                y={S(p).y - 3}
-                width={6}
-                height={6}
-                stroke="#a97"
-                strokeWidth={1.5}
-              />
-            ))}
+            Object.entries(silhouette.anchors).map(([name, p]) =>
+              wearerTargetsVisible ||
+              (hoverSnap?.kind === 'anchor' && hoverSnap.anchor === name) ? (
+                <Rect
+                  key={`sa${name}`}
+                  x={S(p).x - 3}
+                  y={S(p).y - 3}
+                  width={6}
+                  height={6}
+                  stroke="#a97"
+                  strokeWidth={1.5}
+                />
+              ) : null,
+            )}
         </Layer>
 
         <Layer>
@@ -1807,15 +1988,19 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             }
             if (boundNodes.has(n.id)) {
               return (
-                <Circle
-                  key={n.id}
-                  x={p.x}
-                  y={p.y}
-                  radius={7.5}
-                  fill={C.nodeFill}
-                  stroke="#2a2"
-                  strokeWidth={3}
-                />
+                <Group key={n.id}>
+                  <Circle
+                    x={p.x}
+                    y={p.y}
+                    radius={7.5}
+                    fill={C.nodeFill}
+                    stroke="#2a2"
+                    strokeWidth={3}
+                  />
+                  {(memberCount.get(n.id) ?? 0) >= 2 && (
+                    <Circle x={p.x} y={p.y} radius={2.2} fill="#2a2" listening={false} />
+                  )}
+                </Group>
               );
             }
             const slider = sliderByNode.get(n.id);
@@ -1863,18 +2048,24 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               );
             }
             if (pivot !== undefined || members >= 2) {
+              const stroke =
+                bindFrom === n.id ? '#d80' : pivot?.joint.kind === 'spherical' ? '#a6c' : '#28d';
               return (
-                <Circle
-                  key={n.id}
-                  x={p.x}
-                  y={p.y}
-                  radius={7.5}
-                  fill={C.nodeFill}
-                  stroke={
-                    bindFrom === n.id ? '#d80' : pivot?.joint.kind === 'spherical' ? '#a6c' : '#28d'
-                  }
-                  strokeWidth={3}
-                />
+                <Group key={n.id}>
+                  <Circle
+                    x={p.x}
+                    y={p.y}
+                    radius={7.5}
+                    fill={C.nodeFill}
+                    stroke={stroke}
+                    strokeWidth={3}
+                  />
+                  {/* attachment dot: this end JOINS ≥2 pipes (a hollow ring
+                      alone can also be a lone pipe's realized pin) */}
+                  {members >= 2 && (
+                    <Circle x={p.x} y={p.y} radius={2.2} fill={stroke} listening={false} />
+                  )}
+                </Group>
               );
             }
             return (
@@ -1906,16 +2097,22 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             );
           })}
 
-          {hoverSnap && (tool !== 'select' || hoverSnap.kind !== 'node') && (
-            <Circle
-              x={S(hoverSnap.pos).x}
-              y={S(hoverSnap.pos).y}
-              radius={8}
-              stroke={hoverSnap.kind === 'grid' ? C.snap : '#e33'}
-              strokeWidth={1.5}
-              listening={false}
-            />
-          )}
+          {/* red snap ring: in select mode only while a node drag is live
+              (bind feedback) — idle skeleton/anchor hover just reveals the
+              handle above, without suggesting an action. With grid snapping
+              off, the 'grid' fallback is the RAW pointer — no ring. */}
+          {hoverSnap &&
+            (snapPrefs.grid || hoverSnap.kind !== 'grid') &&
+            (tool !== 'select' || (hoverSnap.kind !== 'node' && dragNode !== null)) && (
+              <Circle
+                x={S(hoverSnap.pos).x}
+                y={S(hoverSnap.pos).y}
+                radius={8}
+                stroke={hoverSnap.kind === 'grid' ? C.snap : '#e33'}
+                strokeWidth={1.5}
+                listening={false}
+              />
+            )}
 
           {marquee && (
             <Rect

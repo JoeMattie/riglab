@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { wheelGesture } from './gesture';
-import { initialView, panBy, toScreen, toWorld, type ViewTransform, zoomAt } from './viewTransform';
+import { wheelZoomFactor } from './gesture';
+import {
+  initialView,
+  panBy,
+  panTo,
+  toScreen,
+  toWorld,
+  type ViewTransform,
+  zoomAt,
+} from './viewTransform';
 
 const V: ViewTransform = { scale: 200, cx: 0.25, cy: 0.95, w: 800, h: 500 };
 
@@ -56,14 +64,31 @@ describe('panBy', () => {
   });
 });
 
+describe('panTo (drag-pan: the grabbed canvas point rides the cursor)', () => {
+  it('puts the grabbed world point exactly under the given screen point', () => {
+    const grabbed = toWorld(V, { x: 610, y: 120 }); // grab here at pan start
+    const moved = panTo(V, grabbed, { x: 250, y: 340 }); // drag cursor here
+    const under = toWorld(moved, { x: 250, y: 340 });
+    expect(under.x).toBeCloseTo(grabbed.x, 12);
+    expect(under.y).toBeCloseTo(grabbed.y, 12);
+    expect(moved.scale).toBe(V.scale); // pure pan, no zoom
+  });
+
+  it('is absolute: skipping intermediate moves lands on the same view', () => {
+    const grabbed = toWorld(V, { x: 100, y: 100 });
+    const direct = panTo(V, grabbed, { x: 400, y: 300 });
+    const stepped = panTo(panTo(V, grabbed, { x: 33, y: 471 }), grabbed, { x: 400, y: 300 });
+    expect(stepped.cx).toBeCloseTo(direct.cx, 12);
+    expect(stepped.cy).toBeCloseTo(direct.cy, 12);
+  });
+});
+
 describe('wheel zoom stays pointer-anchored (§11 acceptance line)', () => {
-  it('a ctrl+wheel gesture applied via zoomAt pins the cursor world point', () => {
+  it('a plain wheel scroll applied via zoomAt pins the cursor world point', () => {
     const cursor = { x: 650, y: 90 };
-    const g = wheelGesture({ deltaX: 0, deltaY: -12, deltaMode: 0, ctrlKey: true });
-    expect(g.kind).toBe('zoom');
-    if (g.kind !== 'zoom') return;
+    const factor = wheelZoomFactor({ deltaY: -12, deltaMode: 0 });
     const worldBefore = toWorld(V, cursor);
-    const next = zoomAt(V, cursor, g.factor);
+    const next = zoomAt(V, cursor, factor);
     const worldAfter = toWorld(next, cursor);
     expect(next.scale).toBeGreaterThan(V.scale); // it zoomed in
     expect(worldAfter.x).toBeCloseTo(worldBefore.x, 9); // and stayed anchored

@@ -85,11 +85,19 @@ export function ThemeIcon({ night }: { night: boolean }): ReactElement {
     : wrap(<path d="M13.4 9.6 A5.9 5.9 0 1 1 6.4 2.6 A4.7 4.7 0 0 0 13.4 9.6 Z" {...stroke} />);
 }
 
-export type JointGlyphName = 'pivot' | 'weld' | 'slider' | 'anchor' | 'bound' | 'detach';
+export type JointGlyphName =
+  | 'pivot'
+  | 'weld'
+  | 'weldPivot'
+  | 'slider'
+  | 'anchor'
+  | 'bound'
+  | 'detach';
 
 /** 14×14 joint glyph matching the canvas glyph language: pivot = ring,
- * weld = filled square, slider = rounded slot, anchor = filled diamond,
- * bound = green ring, detach = gray ✕. */
+ * weld = filled square, weld+pivot = square inside a ring (mid-pipe
+ * junction: split halves welded, arrivals pivot), slider = rounded slot,
+ * anchor = filled diamond, bound = green ring, detach = gray ✕. */
 export function JointGlyph({ name }: { name: JointGlyphName }): ReactElement {
   const svg = (kid: ReactElement) => (
     <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block' }} aria-hidden="true">
@@ -101,6 +109,13 @@ export function JointGlyph({ name }: { name: JointGlyphName }): ReactElement {
       return svg(<circle cx={7} cy={7} r={4.5} fill={T.panel} stroke="#28d" strokeWidth={2.4} />);
     case 'weld':
       return svg(<rect x={3} y={3} width={8} height={8} fill={T.ink} />);
+    case 'weldPivot':
+      return svg(
+        <>
+          <circle cx={7} cy={7} r={5} fill={T.panel} stroke="#28d" strokeWidth={1.9} />
+          <rect x={5.1} y={5.1} width={3.8} height={3.8} fill={T.ink} />
+        </>,
+      );
     case 'slider':
       return svg(
         <rect

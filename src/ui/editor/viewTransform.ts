@@ -38,3 +38,14 @@ export function zoomAt(v: ViewTransform, screen: Vec2, factor: number): ViewTran
 export function panBy(v: ViewTransform, dxPx: number, dyPx: number): ViewTransform {
   return { ...v, cx: v.cx - dxPx / v.scale, cy: v.cy + dyPx / v.scale };
 }
+
+/** Pan so `grabbedWorld` (the world point under the cursor at pan start) sits
+ * exactly under `screen` — the canvas point rides the cursor. Absolute, not
+ * incremental, so batched/dropped move events can never make the grab drift. */
+export function panTo(v: ViewTransform, grabbedWorld: Vec2, screen: Vec2): ViewTransform {
+  return {
+    ...v,
+    cx: grabbedWorld.x - (screen.x - v.w / 2) / v.scale,
+    cy: grabbedWorld.y + (screen.y - v.h / 2) / v.scale,
+  };
+}

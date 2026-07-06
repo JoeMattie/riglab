@@ -2282,3 +2282,133 @@ how much room it takes is a preference. Covered by a component test
 (collapse hides labels/captions, icons still switch tools, remount restores
 the pref) and a scripted built-app check (collapse, persistence across
 reload, expand back).
+
+### DECISION: wheel scroll zooms; middle-drag pans in every tool (2026-07-06)
+Joe asked for desktop-mouse navigation: wheel scroll = zoom, middle-click
+drag = pan. Every wheel event is now a cursor-anchored zoom (`wheelZoomFactor`
+in gesture.ts — mouse notches, trackpad two-finger scrolls, and trackpad
+pinches all zoom, differing only in delta resolution), replacing the
+zoompinch-derived ctrlKey⇒zoom/else⇒pan split; §11's pointer-anchored-zoom
+acceptance still holds and is still unit-tested. The trade-off is deliberate:
+trackpad two-finger scroll no longer pans — panning is middle-drag (now armed
+in EVERY tool, never drawing or selecting), space+drag, or two-finger touch.
+Panning is absolute, not incremental: `panTo` pins the world point grabbed at
+pan start under the cursor each move (also fixes a crash where the pan ref
+was read lazily inside a state updater after mouseup nulled it). A pan
+release early-returns from mouseup so an active draft can't commit a stroke
+at the release point.
+
+### DECISION: wearer handles reveal on demand; pack frame renders in 3D (2026-07-06)
+Joe asked for the skeleton-point and pack-frame-anchor handles to show only
+when snapping or hovering, and for the pack frame to appear in the 3D view.
+The handles stay permanent SNAP targets (planfile §7.1) but only DRAW when a
+node/endpoint drag is in flight (all of them — they are drop targets) or the
+cursor is snapping to/hovering one (that one only, in any tool; idle-select
+hoverSnap now also carries skeleton/anchor snaps, without the red action
+ring). The perspective panel gains `packFrameTubes` (scene.ts): the hip
+rectangle + shoulder rails from the same anchors the 2D underlay strokes,
+as capsules slimmer than the mannequin bones.
+
+### DECISION: pipe-end attachments are explicit, visible, and reversible (2026-07-06)
+Joe's attachment UX: (a) an attached end (a node joining ≥2 pipes) draws a
+small dot inside its ring glyph, so a joint reads differently from two ends
+merely overlapping; (b) the joint popover is ONE combined menu on both faces
+— attachment state on top ("Attached · joins N pipes" / "· body · point" /
+"· frame · anchor"; clicking it breaks every attachment via detachNode +
+releaseNodeConnection), joint-type rows left, hinge/axis controls and the
+realization picker (formerly the design-face-only popover) side by side on
+the right; hinge controls are hidden for welds — a rigid junction has no
+axis. The floating SelectionCard no longer renders for a selected pivot (it
+duplicated this menu as a second popup). (c) Ends re-join by dragging: new
+docOps `attachNodes` (merge a dragged end into another end, rewriting every
+reference, pinned by one pivot whose memberIds cover all members) and
+`attachNodeToLink` (splitLink + merge), with `canAttach*` guards refusing
+degenerate merges (shared element → self-loop, joints on the dragged node,
+slider targets); both node drags and endpoint drags join on release, in both
+constraint modes. (d) The constraints-off endpoint drag (length edit) now
+carries the same wearer semantics as the node drag: tear-off past the
+deadzone releases a skeleton/anchor binding, and dropping on a body point /
+pack-frame anchor binds/grounds — previously only the plain node drag did,
+so pipe endpoints could snap to body points without ever attaching.
+Covered by docOps.attach.test.ts, overhaul.test.tsx, and a scripted
+built-app check (join, shared-pivot drag, bind, tear-off).
+
+### DECISION: onboarding overlay removed; projects open in the plain quad (2026-07-06)
+Joe found the "Draw your first pipe" empty-state overlay annoying — removed
+entirely (component, store flag, e2e clicks). A first replacement that
+auto-maximized Side with the pipe tool armed read as "my other panels are
+gone", so projects now open in the unmodified quad view with the select tool;
+the sketch/forces e2e specs maximize Side themselves by double-clicking the
+panel title (new `quad-title-<panel>` testid). The top-bar panel toggles
+reorder to Top · Front · Side · 3D (ortho views reading left to right, 3D
+last) — display order only; quadLayout's PANEL_ORDER still encodes grid
+slots. BentLink bodies also became draggable: findSnap deliberately emits no
+onPipe snap for them (drawing can't attach mid-polyline), so the select tool
+gets a dedicated segment hit-test (`findBentLinkHit`) feeding the same group
+body drag.
+
+### DECISION: the joint menu is modeless — options don't dismiss it (2026-07-06)
+Joe asked for the joint properties menu to stay open when an option is
+clicked, close via an ✕ at the top right, and dismiss on any click outside
+it. Every action in the menu (joint-type rows, the Attached toggle, hinge
+controls, realization rows) now leaves it open — the document edit reads
+back live, so the checkmark/state moves under the pointer instead of the
+menu vanishing. Dismissal is ✕, Escape, or a document-level pointerdown
+outside the portaled menu (the canvas-mousedown dismissal still applies —
+it IS an outside click). Covered by component tests (stays-open on option,
+✕, inside-vs-outside pointerdown) and the scripted built-app check.
+
+### DECISION: top-bar snapping toggles (2026-07-06)
+Joe asked for snapping config in the top bar: Grid / Length / Ends / Pipes
+toggles (SnapChip, next to the panel toggles). They gate findSnap's sources
+(`SnapContext.sources`) plus the endpoint-drag ½ in / 1 cm length tick; with
+Grid off the fallback carries the raw pointer position (still the 'grid'
+no-snap carrier, unrounded, no snap ring). Ends/Pipes off also disables
+drop-to-join, since joins ride those snaps. Wearer skeleton/anchor points
+always snap — they are attachment targets, not construction aids. A lens
+like constraintsOn (session state, not document state). Covered by snapping
+unit tests, a SnapChip component test, and scripted built-app checks.
+
+### DECISION: the mid-pipe junction is weld+pivot, and it is a first-class joint kind (2026-07-06)
+Joe specced the semantics for attaching a pipe end onto another pipe's body:
+the split halves stay welded (physically one pipe) while the arriving pipe
+pivots — which is exactly what splitLink+addToPivot already produced — and
+he wants to convert a junction between weld+pivot, a full weld, and a plain
+3-way pivot (universal = spherical / plane-bound = hinge) from the joint
+menu. So the PARTIAL weld set is now a first-class kind: `jointKindAtNode`
+returns 'weldPivot' when a pivot has welds but is not fully welded ('weld'
+now means fully welded), the joint menu gains a "Weld + pivot" row (glyph:
+square inside a ring; needs ≥3 members), and `setNodeJoint('weldPivot')`
+welds the most-collinear (straight-through) member pair only. A weld+pivot
+junction keeps the hinge/spherical controls and gets the PIVOT realization
+set (heat-wrapped pivot, rope lashing, …) since the junction moves.
+Covered in docOps.joints tests, overhaul component tests, and the scripted
+built-app check (draw onto a pipe → menu round-trips pivot ↔ weld+pivot).
+
+### DECISION: shift-drag locks translations to the view plane (solver planeLocks) (2026-07-06)
+Joe asked for shift held during node/pipe drags to lock the translation to
+the hosting view's plane in both constraint modes. Constraints-off drags are
+already exactly in-plane by construction; constraints-on drags go through
+the kinematic solve, whose drag targets are soft wishes — geometry could
+pull the dragged node out of plane. SolveInputs gains `planeLocks` (per-node
+point+normal): each becomes a PlaneLockC projected WITH the island's real
+constraints (firm through the drag loop and the settle, appended last so
+each sweep ends on-plane) but excluded from residual/DOF/violated — like
+dragTargets, it is a UI gesture, not document geometry. The canvas arms one
+lock per dragged node (its own depth) while shift is held, for both the
+single-node drag and the group body drag. Covered by a new solver
+acceptance suite (planeLock.acceptance.test.ts): locked node pinned to the
+plane with lengths holding, diagnostics unchanged, non-unit normals
+normalized, locks on anchors/unknown nodes ignored.
+
+### DECISION: ESC aborts an in-progress draw — and why it didn't (2026-07-06)
+Joe reported ESC not aborting a mid-drag pipe/polyline. The cancel logic
+existed but shared a window-keydown effect with the delete/nudge handler,
+whose deps include the selection; EditorShell's own Escape handler calls
+clearSelection(), which allocated a fresh [] every time — so the canvas
+effect tore down and re-registered DURING the very Escape dispatch, and a
+listener re-added mid-dispatch is not invoked for that event. The abort now
+lives in its own effect with identity-stable deps (registered once per
+mount), and clearSelection returns the same state when already empty so no
+effect churns on a no-op clear. Verified by scripted built-app checks (ESC
+mid-drag and mid-polyline leave the element count unchanged).

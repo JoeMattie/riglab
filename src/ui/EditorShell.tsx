@@ -21,11 +21,11 @@ import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
 import { copySelection, pasteClipboard } from './editor/clipboardActions';
 import { DofPill } from './editor/DofPill';
-import { EmptyState } from './editor/EmptyState';
 import { pickRenderPositions } from './editor/forces';
 import { ProjectChip } from './editor/ProjectChip';
 import { RightDock } from './editor/RightDock';
 import { publishedViews } from './editor/SketchCanvas';
+import { SnapChip } from './editor/SnapChip';
 import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
 import { EDGE, panelStyle, T } from './editor/theme';
@@ -54,7 +54,6 @@ export function EditorShell() {
   const redo = useAppStore((s) => s.redo);
   const face = useEditorStore((s) => s.face);
   const controlsOpen = useEditorStore((s) => s.controlsOpen);
-  const onboardingDismissed = useEditorStore((s) => s.onboardingDismissed);
 
   // one global solve loop: diagnostics + playback pose + equilibrium overlay
   useGlobalSolve();
@@ -225,8 +224,6 @@ export function EditorShell() {
 
   if (!current) return null;
 
-  const hasElements = current.mechanism.elements.length > 0;
-
   return (
     <div
       style={{
@@ -260,7 +257,10 @@ export function EditorShell() {
         <div style={{ justifySelf: 'start' }}>
           <ProjectChip />
         </div>
-        <PanelToggleChip />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <PanelToggleChip />
+          <SnapChip />
+        </div>
         <div style={{ justifySelf: 'end' }}>
           <ActionsChip />
         </div>
@@ -271,10 +271,6 @@ export function EditorShell() {
           every panel. */}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <QuadView />
-
-        {/* onboarding: a brand-new project has nothing drawn yet; "Start
-            drawing" dismisses the overlay so the canvas gets the pointer */}
-        {!hasElements && !onboardingDismissed && <EmptyState />}
 
         <ToolPill />
         <TransportPill />

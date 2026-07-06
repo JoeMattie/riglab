@@ -1,47 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { isPixelDelta, pinchStep, wheelGesture } from './gesture';
+import { isPixelDelta, pinchStep, wheelZoomFactor } from './gesture';
 
-describe('wheelGesture', () => {
-  it('treats ctrl+wheel as a zoom (browser trackpad-pinch encoding)', () => {
-    const inn = wheelGesture({ deltaX: 0, deltaY: -10, deltaMode: 0, ctrlKey: true });
-    expect(inn.kind).toBe('zoom');
-    if (inn.kind === 'zoom') expect(inn.factor).toBeGreaterThan(1); // scroll up → zoom in
-
-    const out = wheelGesture({ deltaX: 0, deltaY: 10, deltaMode: 0, ctrlKey: true });
-    expect(out.kind).toBe('zoom');
-    if (out.kind === 'zoom') expect(out.factor).toBeLessThan(1); // scroll down → zoom out
-  });
-
-  it('treats a plain (non-ctrl) wheel as a pan, viewport following the fingers', () => {
-    const g = wheelGesture({ deltaX: 6, deltaY: -4, deltaMode: 0, ctrlKey: false });
-    expect(g.kind).toBe('pan');
-    if (g.kind === 'pan') {
-      // pan matches the scroll delta on both axes (pixel mode is 1:1)
-      expect(g.dxPx).toBe(6);
-      expect(g.dyPx).toBe(-4);
-    }
+describe('wheelZoomFactor (every wheel scroll zooms — desktop-mouse decision)', () => {
+  it('scroll up zooms in, scroll down zooms out', () => {
+    expect(wheelZoomFactor({ deltaY: -10, deltaMode: 0 })).toBeGreaterThan(1);
+    expect(wheelZoomFactor({ deltaY: 10, deltaMode: 0 })).toBeLessThan(1);
   });
 
   it('applies gentler zoom to a small trackpad delta than a coarse mouse notch', () => {
-    const trackpad = wheelGesture({ deltaX: 0, deltaY: -8, deltaMode: 0, ctrlKey: true });
-    const mouseNotch = wheelGesture({ deltaX: 0, deltaY: -100, deltaMode: 0, ctrlKey: true });
-    if (trackpad.kind === 'zoom' && mouseNotch.kind === 'zoom') {
-      expect(trackpad.factor).toBeGreaterThan(1);
-      expect(trackpad.factor).toBeLessThan(mouseNotch.factor); // smaller step
-      expect(trackpad.factor).toBeCloseTo(Math.exp(0.04), 6); // 8/100 * 0.5
-    }
+    const trackpad = wheelZoomFactor({ deltaY: -8, deltaMode: 0 });
+    const mouseNotch = wheelZoomFactor({ deltaY: -100, deltaMode: 0 });
+    expect(trackpad).toBeGreaterThan(1);
+    expect(trackpad).toBeLessThan(mouseNotch); // smaller step
+    expect(trackpad).toBeCloseTo(Math.exp(0.04), 6); // 8/100 * 0.5
+  });
+
+  it('treats a line-mode delta as whole notches (classic mouse wheel)', () => {
+    // one line-mode notch ≈ one pixel-mode 100px notch, not 1/100th of it
+    expect(wheelZoomFactor({ deltaY: -1, deltaMode: 1 })).toBeCloseTo(
+      wheelZoomFactor({ deltaY: -100, deltaMode: 0 }),
+      9,
+    );
   });
 
   it('keeps the zoom factor positive and bounded for any delta (no slam/invert)', () => {
-    // the regression this guards: a coarse ctrl+wheel-down must not go ≤ 0
+    // the regression this guards: a coarse wheel-down must not go ≤ 0
     for (const deltaY of [-100000, -240, -100, -1, 1, 100, 240, 100000]) {
       for (const deltaMode of [0, 1]) {
-        const g = wheelGesture({ deltaX: 0, deltaY, deltaMode, ctrlKey: true });
-        if (g.kind === 'zoom') {
-          expect(g.factor).toBeGreaterThan(0);
-          expect(g.factor).toBeGreaterThanOrEqual(0.5);
-          expect(g.factor).toBeLessThanOrEqual(2);
-        }
+        const factor = wheelZoomFactor({ deltaY, deltaMode });
+        expect(factor).toBeGreaterThan(0);
+        expect(factor).toBeGreaterThanOrEqual(0.5);
+        expect(factor).toBeLessThanOrEqual(2);
       }
     }
   });

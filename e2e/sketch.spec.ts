@@ -44,8 +44,10 @@ test('sketch a four-bar, anchor it, drag it free and constrained — lengths fol
   await page.goto('/');
   await page.getByTestId('new-project-name').fill('Sketch Smoke');
   await page.getByTestId('create-project').click();
-  // the empty-state lands us in the maximized Side panel with the pipe tool
-  await page.getByTestId('empty-start-drawing').click();
+  // a fresh project lands in the plain quad view (no onboarding overlay);
+  // maximize the Side panel and arm the pipe tool for room to draw
+  await page.getByTestId('quad-title-side').dblclick();
+  await page.getByTestId('tool-pipe').click();
   await expect(page.getByTestId('dof-badge')).toBeVisible();
 
   const canvas = page.getByTestId('sketch-canvas-side');

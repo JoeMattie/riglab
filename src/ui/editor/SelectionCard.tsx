@@ -82,6 +82,10 @@ export function SelectionCard({
   const top = Math.max(8, Math.min(minY - 10 + offset.y, size.h - 260));
 
   const single = selected.length === 1 ? selected[0]! : null;
+  // a selected pivot gets NO floating card (Joe's request): the combined
+  // joint menu (right-click the node) is the pivot's one surface — the card
+  // duplicated it as a second popup
+  if (single?.type === 'pivot') return null;
   const isPipe = single !== null && (single.type === 'link' || single.type === 'telescope');
   const title = single
     ? `${elementTypeLabel(single.type)[0]!.toUpperCase()}${elementTypeLabel(single.type).slice(1)} · ${single.id.slice(0, 4)}`
@@ -282,7 +286,7 @@ function PipeRows({
         }}
       >
         {kind !== 'end' && <JointGlyph name={kind === 'anchor' ? 'anchor' : kind} />}
-        {kind === 'end' ? 'free end' : kind} ▾
+        {kind === 'end' ? 'free end' : kind === 'weldPivot' ? 'weld + pivot' : kind} ▾
       </button>
     );
   };

@@ -21,6 +21,7 @@ import { DofPill } from './DofPill';
 import { JointPopover } from './JointPopover';
 import { ProjectChip } from './ProjectChip';
 import { SelectionCard } from './SelectionCard';
+import { SnapChip } from './SnapChip';
 import { ToolPill } from './ToolPill';
 import { TransportPill } from './TransportPill';
 import { initialView } from './viewTransform';
@@ -84,6 +85,29 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+describe('SnapChip', () => {
+  it('toggles each snap source in the store, defaulting all on', () => {
+    render(<SnapChip />);
+    expect(useEditorStore.getState().snapPrefs).toEqual({
+      grid: true,
+      length: true,
+      ends: true,
+      pipes: true,
+    });
+    fireEvent.click(screen.getByTestId('snap-toggle-grid'));
+    fireEvent.click(screen.getByTestId('snap-toggle-pipes'));
+    expect(useEditorStore.getState().snapPrefs).toMatchObject({
+      grid: false,
+      pipes: false,
+      ends: true,
+      length: true,
+    });
+    expect(screen.getByTestId('snap-toggle-grid').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByTestId('snap-toggle-grid'));
+    expect(useEditorStore.getState().snapPrefs.grid).toBe(true);
+  });
+});
 
 describe('ToolPill', () => {
   it('clicking a row selects the tool; single-key shortcuts switch tools', () => {
@@ -253,41 +277,94 @@ describe('JointPopover', () => {
       />,
     );
 
-  it('weld re-realizes the joint and shows as current afterwards', () => {
+  it('weld re-realizes the joint, stays open, and shows as current afterwards', () => {
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r = renderPopover();
     fireEvent.click(screen.getByTestId('joint-weld'));
     const pivot = mech0().elements.find((e) => e.type === 'pivot');
     expect(pivot).toMatchObject({ nodeId: 'n2' });
-    expect(useEditorStore.getState().openPopover).toBeNull();
+    // picking an option does NOT close the menu — the state reads back
+    expect(useEditorStore.getState().openPopover).toEqual({ kind: 'joint', nodeId: 'n2' });
     r.unmount();
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
     expect(screen.getByTestId('joint-weld').textContent).toContain('✓');
   });
 
-  it('anchor and detach rows apply their ops', () => {
+  it('closes via the ✕ button and via a pointerdown outside the menu', () => {
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r = renderPopover();
-    fireEvent.click(screen.getByTestId('joint-anchor'));
-    expect(mech0().nodes.find((n) => n.id === 'n2')!.kind).toBe('anchor');
+    fireEvent.click(screen.getByTestId('joint-popover-close'));
+    expect(useEditorStore.getState().openPopover).toBeNull();
     r.unmount();
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
-    fireEvent.click(screen.getByTestId('joint-detach'));
-    expect(mech0().nodes.length).toBe(4); // n2 duplicated for the second member
+    // a pointerdown INSIDE keeps it open; one outside dismisses
+    fireEvent.pointerDown(screen.getByTestId('joint-attached-toggle'));
+    expect(useEditorStore.getState().openPopover).not.toBeNull();
+    fireEvent.pointerDown(document.body);
+    expect(useEditorStore.getState().openPopover).toBeNull();
   });
 
-  it('design face: a node with a joint element lists realizations instead of joint types', () => {
-    // give n2 an explicit pivot via the sketch-face menu first
+  it('the Attached toggle shows the pipe count and breaks the attachment', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    const toggle = screen.getByTestId('joint-attached-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toContain('Attached · joins 2 pipes');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(toggle);
+    expect(mech0().nodes.length).toBe(4); // n2 duplicated for the second member
+    // breaking keeps the menu open so the new "Not attached" state reads back
+    expect(useEditorStore.getState().openPopover).toEqual({ kind: 'joint', nodeId: 'n2' });
+  });
+
+  it('a free end shows the toggle disabled as "Not attached"', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n1' } });
+    renderPopover();
+    const toggle = screen.getByTestId('joint-attached-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toContain('Not attached');
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it('a body-bound end reads as attached; the toggle releases the binding', () => {
+    act(() =>
+      useAppStore.setState((s) => ({
+        current: {
+          ...s.current!,
+          mechanism: {
+            ...s.current!.mechanism,
+            skeletonBindings: [{ id: 'b1', point: 'handR', nodeId: 'n1' }],
+          },
+        },
+      })),
+    );
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n1' } });
+    renderPopover();
+    const toggle = screen.getByTestId('joint-attached-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toContain('Attached · body · handR');
+    fireEvent.click(toggle);
+    expect(mech0().skeletonBindings).toHaveLength(0);
+    expect(mech0().nodes).toHaveLength(3); // no pipe split — only the binding broke
+  });
+
+  it('anchor row applies its op', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    fireEvent.click(screen.getByTestId('joint-anchor'));
+    expect(mech0().nodes.find((n) => n.id === 'n2')!.kind).toBe('anchor');
+  });
+
+  it('the combined menu shows joint types and realizations side by side', () => {
+    // give n2 an explicit weld first
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r = renderPopover();
     fireEvent.click(screen.getByTestId('joint-weld'));
     r.unmount();
-    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
-    expect(screen.getByTestId('realization-popover')).toBeTruthy();
-    expect(screen.queryByTestId('joint-weld')).toBeNull();
+    // both halves live in ONE popover now (no design-face swap)
+    expect(screen.getByTestId('joint-weld')).toBeTruthy();
+    expect(screen.getByTestId('realization-rows')).toBeTruthy();
     // n2 is a weld, so a rigid realization (not the pivot-only heat-wrap) applies
     fireEvent.click(screen.getByTestId('realization-heatWrapRigid'));
     const pivot = mech0().elements.find((e) => e.type === 'pivot');
@@ -300,13 +377,12 @@ describe('JointPopover', () => {
     });
   });
 
-  it('design face: an implicit free-pin node lists realizations and materializes a pivot', () => {
+  it('an implicit free-pin node lists realizations and materializes a pivot', () => {
     // n2 joins L1 and L2 with no explicit pivot element — an implicit free pin
     expect(mech0().elements.some((e) => e.type === 'pivot')).toBe(false);
-    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
-    expect(screen.getByTestId('realization-popover')).toBeTruthy();
-    expect(screen.queryByTestId('joint-weld')).toBeNull();
+    expect(screen.getByTestId('realization-rows')).toBeTruthy();
     // the free pin is a pivot, so a pivot-native realization applies
     fireEvent.click(screen.getByTestId('realization-boltThrough'));
     const pivot = mech0().elements.find((e) => e.type === 'pivot');
@@ -325,10 +401,10 @@ describe('JointPopover', () => {
   const disabled = (id: string) =>
     (screen.getByTestId(`realization-${id}`) as HTMLButtonElement).disabled;
 
-  it('design face: realizations are gated to the joint kind (pivot vs weld)', () => {
+  it('realizations are gated to the joint kind (pivot vs weld)', () => {
     // implicit free pin at n2 is a pivot: pivot-native + dual-kind enabled,
     // rigid/slider-only realizations disabled
-    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r = renderPopover();
     expect(disabled('heatWrapPivot')).toBe(false);
     expect(disabled('boltThrough')).toBe(false);
@@ -340,17 +416,107 @@ describe('JointPopover', () => {
     r.unmount();
 
     // weld n2: the complementary set is enabled/disabled
-    useEditorStore.setState({ face: 'sketch', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r2 = renderPopover();
     fireEvent.click(screen.getByTestId('joint-weld'));
     r2.unmount();
-    useEditorStore.setState({ face: 'design', openPopover: { kind: 'joint', nodeId: 'n2' } });
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
     expect(disabled('heatWrapRigid')).toBe(false);
     expect(disabled('nestedCoupler')).toBe(false);
     expect(disabled('fitting')).toBe(false);
     expect(disabled('heatWrapPivot')).toBe(true); // pivot-only
     expect(disabled('conduitBox')).toBe(true); // slider-only
+  });
+
+  it('Weld + pivot: disabled at 2 members; welds only the through pair at 3', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    // n2 joins two pipes — the mixed junction needs a third member
+    expect((screen.getByTestId('joint-weldPivot') as HTMLButtonElement).disabled).toBe(true);
+    r.unmount();
+    // a third pipe arrives at n2 from n4, well off the L1→L2 line
+    act(() =>
+      useAppStore.setState((s) => ({
+        current: {
+          ...s.current!,
+          mechanism: {
+            ...s.current!.mechanism,
+            nodes: [
+              ...s.current!.mechanism.nodes,
+              { id: 'n4', kind: 'free', position: { x: 3, y: 0, z: 0 } },
+            ],
+            elements: [
+              ...s.current!.mechanism.elements,
+              { ...L1, id: 'L3', nodeA: 'n2', nodeB: 'n4' },
+            ],
+          },
+        },
+      })),
+    );
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    fireEvent.click(screen.getByTestId('joint-weldPivot'));
+    const pivot = mech0().elements.find((e) => e.type === 'pivot');
+    expect(pivot?.type === 'pivot' && pivot.welds).toHaveLength(1);
+    if (pivot?.type === 'pivot') {
+      expect(new Set(pivot.welds[0])).toEqual(new Set(['L1', 'L2'])); // through pair
+      expect(new Set(pivot.memberIds)).toEqual(new Set(['L1', 'L2', 'L3']));
+    }
+  });
+
+  it('a mixed junction reads as Weld + pivot and keeps the hinge controls', () => {
+    act(() =>
+      useAppStore.setState((s) => ({
+        current: {
+          ...s.current!,
+          mechanism: {
+            ...s.current!.mechanism,
+            nodes: [
+              ...s.current!.mechanism.nodes,
+              { id: 'n4', kind: 'free', position: { x: 3, y: 0, z: 0 } },
+            ],
+            elements: [
+              ...s.current!.mechanism.elements,
+              { ...L1, id: 'L3', nodeA: 'n2', nodeB: 'n4' },
+              {
+                id: 'P1',
+                type: 'pivot',
+                maturity: 'sketch',
+                nodeId: 'n2',
+                joint: { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } },
+                memberIds: ['L1', 'L2', 'L3'],
+                welds: [['L1', 'L2']],
+              },
+            ],
+          },
+        },
+      })),
+    );
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    expect(screen.getByTestId('joint-weldPivot').textContent).toContain('✓');
+    // the junction still pivots, so the hinge/axis controls stay visible
+    expect(screen.getByTestId('pivot-joint-controls')).toBeTruthy();
+    expect(screen.getByTestId('realization-rows')).toBeTruthy();
+  });
+
+  it('hinge controls are pivot-only: hidden once the joint is a weld', () => {
+    // pivot at n2 → controls visible
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-pivot'));
+    r.unmount();
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r2 = renderPopover();
+    expect(screen.getByTestId('pivot-joint-controls')).toBeTruthy();
+    // weld it → the same node's menu hides the hinge/spherical controls
+    fireEvent.click(screen.getByTestId('joint-weld'));
+    r2.unmount();
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    expect(screen.queryByTestId('pivot-joint-controls')).toBeNull();
+    expect(screen.getByTestId('realization-rows')).toBeTruthy();
   });
 
   it('renders the connect menu when a draw is pending; Pivot is the default', () => {

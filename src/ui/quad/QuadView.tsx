@@ -231,6 +231,7 @@ export function QuadView() {
           >
             <button
               type="button"
+              data-testid={`quad-title-${cell.panel}`}
               onDoubleClick={() =>
                 setQuadMaximized(quadMaximized === cell.panel ? null : cell.panel)
               }
