@@ -133,9 +133,8 @@ function bungee(id: string, nodeA: string, nodeB: string, a: Vec3, b: Vec3): Ela
     subsystemTag: 'frame',
     nodeA,
     nodeB,
-    restLengthM: round4(BUNGEE_REST_FACTOR * dist(a, b)),
+    slackLengthM: round4(BUNGEE_REST_FACTOR * dist(a, b)),
     stiffnessNPerM: BUNGEE_STIFFNESS,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_8,
   };
 }
@@ -297,9 +296,8 @@ function nestGuy(id: string, tipNodeId: string, tip: Vec3): ElasticElement {
     subsystemTag: 'neck',
     nodeA: 'neck.head',
     nodeB: tipNodeId,
-    restLengthM: round4(NEST_REST_FACTOR * dist(N.head, tip)),
+    slackLengthM: round4(NEST_REST_FACTOR * dist(N.head, tip)),
     stiffnessNPerM: NEST_STIFFNESS,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_6,
   };
 }
@@ -586,9 +584,8 @@ function buildLegParts(side: 'left' | 'right'): MechParts {
       subsystemTag: 'leg',
       nodeA: n('frameSide'),
       nodeB: n('eHeel'),
-      restLengthM: 0.45,
+      slackLengthM: 0.45,
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_8,
     },
     {
@@ -607,9 +604,8 @@ function buildLegParts(side: 'left' | 'right'): MechParts {
       subsystemTag: 'leg',
       nodeA: n('eToe'),
       nodeB: n('eToePad'),
-      restLengthM: dist(at('eToe'), at('eToePad')),
+      slackLengthM: dist(at('eToe'), at('eToePad')),
       stiffnessNPerM: 60,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
   ];

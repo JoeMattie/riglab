@@ -300,7 +300,7 @@ function BehaviorSection({
       );
     case 'elastic':
       return (
-        <Section title="Elastic">
+        <Section title="Rubber band">
           <Row label="k (N/m)">
             <NumberField
               value={el.stiffnessNPerM}
@@ -309,25 +309,22 @@ function BehaviorSection({
               onCommit={(v) => patch('elastic', { stiffnessNPerM: v })}
             />
           </Row>
-          <Row label={`rest length (${lu})`}>
+          <Row label={`slack length (${lu})`}>
             <LengthField
-              valueM={el.restLengthM}
+              valueM={el.slackLengthM}
               minM={1e-3}
               units={units}
-              onCommitM={(v) => patch('elastic', { restLengthM: v })}
+              testId="elastic-slack-field"
+              onCommitM={(v) => patch('elastic', { slackLengthM: Math.min(v, el.maxLengthM ?? v) })}
             />
           </Row>
-          <Row label="pretension (N)">
-            <NumberField
-              value={el.pretensionN ?? 0}
-              min={0}
-              onCommit={(v) => patch('elastic', { pretensionN: v })}
-            />
-          </Row>
-          <Row label="tension-only">
-            <Checkbox
-              checked={el.tensionOnly}
-              onCheckedChange={(c) => patch('elastic', { tensionOnly: c === true })}
+          <Row label={`max stretch (${lu})`}>
+            <LengthField
+              valueM={el.maxLengthM ?? el.slackLengthM * 3}
+              minM={1e-3}
+              units={units}
+              testId="elastic-max-field"
+              onCommitM={(v) => patch('elastic', { maxLengthM: Math.max(v, el.slackLengthM) })}
             />
           </Row>
         </Section>

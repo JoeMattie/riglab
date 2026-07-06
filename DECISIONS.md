@@ -2581,3 +2581,20 @@ pointerdowns landing on a sketch canvas — SketchCanvas's own mousedown still
 closes it for genuine empty-canvas clicks. Covered by pivotArc unit tests and
 a scripted built-app check (enlarge, drag max handle wider, menu stays open,
 empty click closes).
+
+### DECISION: elastic simplified to a rubber-band model (2026-07-06)
+Joe: the elastic was too complicated (restLengthM + pretensionN + tensionOnly
+— two ways to express installed tension). It is now a plain rubber band
+(schemaVersion 8→9): `slackLengthM` (natural length — no force at or below
+it, loose) and `maxLengthM` (a hard stretch cap it can't extend past, like a
+rope; optional, default 3× slack via elasticMaxLengthM). Force = k·(len −
+slack), tension-only, clamped ≥ 0; the cap is a rope-style DistanceC in the
+equilibrium solver. The midpoint drag handle now sets slackLengthM directly
+(setElasticSlackLength) — shortening it below the span pre-stretches the band
+so it pulls the ends together. addElastic defaults slack = drawn span (loose)
+and cap = 2× span. Migration folds the old effective rest
+(restLengthM − pretensionN/k) into slackLengthM and sets a roomy cap;
+tensionOnly is dropped (a rubber band is always tension-only). Inspector
+shows k / slack length / max stretch. Elastic is still equilibrium-only
+(inert in kinematic drag). Examples regenerated. The FEEL improvement of
+gradual force application is a separate follow-up.

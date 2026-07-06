@@ -175,7 +175,11 @@ describe('pivotAngleFrame / pivotAnglePoint (interactive handles)', () => {
     expect(f.ref.x).toBeCloseTo(1, 9);
     // θ=0 handle sits at center + r·ref = (0.2, 0, 0)
     const p0 = pivotAnglePoint(f, 0.2, 0);
-    expect(p0).toMatchObject({ x: expect.closeTo(0.2, 9), y: expect.closeTo(0, 9), z: expect.closeTo(0, 9) });
+    expect(p0).toMatchObject({
+      x: expect.closeTo(0.2, 9),
+      y: expect.closeTo(0, 9),
+      z: expect.closeTo(0, 9),
+    });
     // +90° about +z turns +x → +y
     const p90 = pivotAnglePoint(f, 0.2, Math.PI / 2);
     expect(p90.x).toBeCloseTo(0, 9);
@@ -186,4 +190,4 @@ describe('pivotAngleFrame / pivotAnglePoint (interactive handles)', () => {
     const { m, pivot, pos } = elbow(hingeZ);
     expect(pivotAngleFrame(m, pivot, pos)).toBeNull();
   });
-})
+});

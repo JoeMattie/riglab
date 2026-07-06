@@ -146,9 +146,8 @@ function elastic(
     subsystemTag: tag,
     nodeA,
     nodeB,
-    restLengthM: dist(a, b), // neutral at the drawn pose
+    slackLengthM: dist(a, b), // neutral at the drawn pose
     stiffnessNPerM,
-    tensionOnly: true,
     cordageMaterialId: materialId,
   };
 }

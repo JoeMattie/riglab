@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-winged-costume",
   "name": "Example — Storm bird",
   "unitsPreference": "imperial",
@@ -1176,9 +1176,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aShoulderL",
         "nodeB": "frameFrontL",
-        "restLengthM": 0.2174,
+        "slackLengthM": 0.2174,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1188,9 +1187,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aShoulderL",
         "nodeB": "frameBackL",
-        "restLengthM": 0.2298,
+        "slackLengthM": 0.2298,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1200,9 +1198,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aShoulderR",
         "nodeB": "frameFrontR",
-        "restLengthM": 0.2174,
+        "slackLengthM": 0.2174,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1212,9 +1209,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aShoulderR",
         "nodeB": "frameBackR",
-        "restLengthM": 0.2298,
+        "slackLengthM": 0.2298,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1356,9 +1352,8 @@
         "subsystemTag": "wing",
         "nodeA": "mastTop",
         "nodeB": "wingMidL",
-        "restLengthM": 0.4503,
+        "slackLengthM": 0.4503,
         "stiffnessNPerM": 6,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1419,9 +1414,8 @@
         "subsystemTag": "wing",
         "nodeA": "mastTop",
         "nodeB": "wingMidR",
-        "restLengthM": 0.4503,
+        "slackLengthM": 0.4503,
         "stiffnessNPerM": 6,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1581,9 +1575,8 @@
         "subsystemTag": "jaw",
         "nodeA": "crest",
         "nodeB": "jawHeel",
-        "restLengthM": 0.05,
+        "slackLengthM": 0.05,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {

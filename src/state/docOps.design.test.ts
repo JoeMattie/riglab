@@ -82,9 +82,8 @@ const elastic = (id: string): ElasticElement => ({
   maturity: 'sketch',
   nodeA: 'n1',
   nodeB: 'n2',
-  restLengthM: 1,
+  slackLengthM: 1,
   stiffnessNPerM: 200,
-  tensionOnly: true,
 });
 
 const project = (m: Mechanism): Project => projectWith(m);
@@ -269,7 +268,7 @@ describe('patchElement', () => {
 
   it('is a no-op when the element type does not match', () => {
     const doc = project(mech([rope('R1')], [node('n1', 0, 0), node('n2', 1, 0)]));
-    const next = patchElement(doc, 'R1', 'elastic', { restLengthM: 9 });
+    const next = patchElement(doc, 'R1', 'elastic', { slackLengthM: 9 });
     expect(elOf(next, 'R1')).toMatchObject({ lengthM: 1 });
     expect(elOf(next, 'R1')).not.toHaveProperty('restLengthM');
   });

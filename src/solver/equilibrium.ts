@@ -502,32 +502,21 @@ interface ForceGen {
   apply(): void;
 }
 
-/** Linear elastic force = k(len − rest_eff), tension-only by default, along
- * the axis (bungee/rubber can't push). rest_eff folds in pretension. */
+/** Rubber-band tension = k·(len − slack), zero when slack or shorter (loose),
+ * pulling the ends together (never pushes). The MAX-length hard cap is a
+ * separate rope-style constraint (RopeC), not part of the force. */
 function elasticForce(
-  el: {
-    restLengthM: number;
-    stiffnessNPerM: number;
-    tensionOnly: boolean;
-    pretensionN?: number;
-  },
+  el: { slackLengthM: number; stiffnessNPerM: number },
   a: Particle,
   b: Particle,
 ): number {
   const len = len3(a.x - b.x, a.y - b.y, a.z - b.z);
-  const restEff = el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
-  const f = el.stiffnessNPerM * (len - restEff);
-  return el.tensionOnly ? Math.max(0, f) : f;
+  return Math.max(0, el.stiffnessNPerM * (len - el.slackLengthM));
 }
 
 class ElasticForceGen implements ForceGen {
   constructor(
-    private readonly el: {
-      restLengthM: number;
-      stiffnessNPerM: number;
-      tensionOnly: boolean;
-      pretensionN?: number;
-    },
+    private readonly el: { slackLengthM: number; stiffnessNPerM: number },
     private readonly a: Particle,
     private readonly b: Particle,
   ) {}
@@ -1142,6 +1131,10 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
         break;
       case 'elastic':
         forceGens.push(new ElasticForceGen(el, get(el.nodeA), get(el.nodeB)));
+        // the band cannot stretch past its cap — a rope-style hard limit
+        constraints.push(
+          new RopeC(el.id, [get(el.nodeA), get(el.nodeB)], el.maxLengthM ?? el.slackLengthM * 3),
+        );
         break;
       case 'bowden':
         constraints.push(
@@ -1439,9 +1432,7 @@ function ropesRequiringCompression(
     const a = posOf.get(el.nodeA)!;
     const bb = posOf.get(el.nodeB)!;
     const len = dist3(a, bb);
-    const restEff = el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
-    let f = el.stiffnessNPerM * (len - restEff);
-    if (el.tensionOnly) f = Math.max(0, f);
+    const f = Math.max(0, el.stiffnessNPerM * (len - el.slackLengthM));
     const [ux, uy, uz] = unit(bb.x - a.x, bb.y - a.y, bb.z - a.z);
     addRhs(el.nodeA, f * ux, f * uy, f * uz); // pulls A toward B
     addRhs(el.nodeB, -f * ux, -f * uy, -f * uz);

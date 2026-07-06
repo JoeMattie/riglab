@@ -92,9 +92,8 @@ function rig(): Project {
     maturity: 'sketch',
     nodeA: 'n1',
     nodeB: 'n4',
-    restLengthM: 1,
+    slackLengthM: 1,
     stiffnessNPerM: 200,
-    tensionOnly: true,
   };
   const B1: BowdenElement = {
     id: 'B1',

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-body-frame",
   "name": "Example — Raptor body frame",
   "unitsPreference": "imperial",
@@ -1005,9 +1005,8 @@
         "subsystemTag": "suspension",
         "nodeA": "shoulderAnchL",
         "nodeB": "cornerFL",
-        "restLengthM": 0.513,
+        "slackLengthM": 0.513,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1017,9 +1016,8 @@
         "subsystemTag": "suspension",
         "nodeA": "shoulderAnchL",
         "nodeB": "cornerBL",
-        "restLengthM": 0.4899,
+        "slackLengthM": 0.4899,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1029,9 +1027,8 @@
         "subsystemTag": "suspension",
         "nodeA": "shoulderAnchR",
         "nodeB": "cornerFR",
-        "restLengthM": 0.513,
+        "slackLengthM": 0.513,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1041,9 +1038,8 @@
         "subsystemTag": "suspension",
         "nodeA": "shoulderAnchR",
         "nodeB": "cornerBR",
-        "restLengthM": 0.4899,
+        "slackLengthM": 0.4899,
         "stiffnessNPerM": 120,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {

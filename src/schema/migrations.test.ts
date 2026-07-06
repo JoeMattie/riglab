@@ -517,6 +517,39 @@ function v6LinkageMech2(id: string): Record<string, unknown> {
   });
 }
 
+describe('v8 → v9 elastic migration', () => {
+  it('folds restLengthM/pretensionN into slackLengthM and adds a stretch cap', () => {
+    const v8 = {
+      schemaVersion: 8,
+      mechanism: {
+        elements: [
+          {
+            id: 'e1',
+            type: 'elastic',
+            maturity: 'sketch',
+            nodeA: 'a',
+            nodeB: 'b',
+            restLengthM: 0.5,
+            pretensionN: 30, // 30 N of preload over k = 150 → 0.2 m of stretch
+            stiffnessNPerM: 150,
+            tensionOnly: true,
+          },
+        ],
+      },
+    };
+    const out = migrations[8]!(v8) as {
+      mechanism: { elements: Array<Record<string, unknown>> };
+    };
+    const el = out.mechanism.elements[0]!;
+    expect(el.slackLengthM).toBeCloseTo(0.3, 9); // 0.5 − 30/150
+    expect(el.maxLengthM).toBeCloseTo(1.5, 9); // 3× the natural rest 0.5
+    expect(el.restLengthM).toBeUndefined();
+    expect(el.pretensionN).toBeUndefined();
+    expect(el.tensionOnly).toBeUndefined();
+    expect(el.stiffnessNPerM).toBe(150);
+  });
+});
+
 describe('migrateToLatest', () => {
   it('passes a current-version document through validation', () => {
     const p = fixtureProject();

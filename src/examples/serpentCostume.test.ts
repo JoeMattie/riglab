@@ -98,7 +98,7 @@ describe('bundled serpent-costume example (C4) — structure', () => {
     expect(bungees).toHaveLength(4);
     for (const e of bungees) {
       if (e.type !== 'elastic') continue;
-      expect(e.restLengthM).toBeCloseTo(0.85 * dist3(at(e.nodeA), at(e.nodeB)), 3);
+      expect(e.slackLengthM).toBeCloseTo(0.85 * dist3(at(e.nodeA), at(e.nodeB)), 3);
     }
     const straps = mech.elements.filter((e) => e.type === 'rope' && e.id.startsWith('strap'));
     expect(straps).toHaveLength(4);

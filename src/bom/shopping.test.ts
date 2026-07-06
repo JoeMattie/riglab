@@ -168,9 +168,8 @@ describe('computeBom shopping list', () => {
         maturity: 'sketch',
         nodeA: 'A',
         nodeB: 'B',
-        restLengthM: 3,
+        slackLengthM: 3,
         stiffnessNPerM: 300,
-        tensionOnly: true,
         cordageMaterialId: 'bungee',
       },
     ];

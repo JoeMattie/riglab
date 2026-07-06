@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-serpent-costume",
   "name": "Example — Parade dragon",
   "unitsPreference": "imperial",
@@ -1040,9 +1040,8 @@
         "subsystemTag": "body",
         "nodeA": "susShoulderL",
         "nodeB": "hoopFL",
-        "restLengthM": 0.3067,
+        "slackLengthM": 0.3067,
         "stiffnessNPerM": 180,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1052,9 +1051,8 @@
         "subsystemTag": "body",
         "nodeA": "susShoulderR",
         "nodeB": "hoopFR",
-        "restLengthM": 0.3067,
+        "slackLengthM": 0.3067,
         "stiffnessNPerM": 180,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1064,9 +1062,8 @@
         "subsystemTag": "body",
         "nodeA": "susShoulderL",
         "nodeB": "hoopBL",
-        "restLengthM": 0.3267,
+        "slackLengthM": 0.3267,
         "stiffnessNPerM": 180,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1076,9 +1073,8 @@
         "subsystemTag": "body",
         "nodeA": "susShoulderR",
         "nodeB": "hoopBR",
-        "restLengthM": 0.3267,
+        "slackLengthM": 0.3267,
         "stiffnessNPerM": 180,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1328,9 +1324,8 @@
         "subsystemTag": "jaw",
         "nodeA": "crest",
         "nodeB": "jawHeel",
-        "restLengthM": 0.06,
+        "slackLengthM": 0.06,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {

@@ -124,9 +124,8 @@ function bungee(id: string, nodeA: string, nodeB: string): MechanismElement {
     subsystemTag: 'suspension',
     nodeA,
     nodeB,
-    restLengthM: round4(BUNGEE_REST_FACTOR * dist(P[nodeA]!, P[nodeB]!)),
+    slackLengthM: round4(BUNGEE_REST_FACTOR * dist(P[nodeA]!, P[nodeB]!)),
     stiffnessNPerM: BUNGEE_STIFFNESS_N_PER_M,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_8,
   };
 }

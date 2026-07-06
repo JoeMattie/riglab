@@ -304,9 +304,8 @@ describe('consumables', () => {
         maturity: 'sketch',
         nodeA: 'A',
         nodeB: 'B',
-        restLengthM: 0.5,
+        slackLengthM: 0.5,
         stiffnessNPerM: 300,
-        tensionOnly: true,
         cordageMaterialId: 'bungee',
       },
       {

@@ -99,8 +99,7 @@ describe('tall quadruped — structure (C5)', () => {
     expect(bungees).toHaveLength(4);
     for (const b of bungees) {
       const drawn = dist3(nodePos(b.nodeA), nodePos(b.nodeB));
-      expect(b.restLengthM, b.id).toBeCloseTo(0.85 * drawn, 3);
-      expect(b.tensionOnly, b.id).toBe(true);
+      expect(b.slackLengthM, b.id).toBeCloseTo(0.85 * drawn, 3);
     }
     const straps = mech.elements.filter(
       (e): e is RopeElement => e.type === 'rope' && e.id.startsWith('frame.strap'),
@@ -202,7 +201,7 @@ describe('tall quadruped — structure (C5)', () => {
     );
     expect(guys).toHaveLength(3);
     for (const g of guys) {
-      expect(g.restLengthM, g.id).toBeCloseTo(0.88 * dist3(nodePos(g.nodeA), nodePos(g.nodeB)), 3);
+      expect(g.slackLengthM, g.id).toBeCloseTo(0.88 * dist3(nodePos(g.nodeA), nodePos(g.nodeB)), 3);
     }
   });
 

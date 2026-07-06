@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-pincer-costume",
   "name": "Example — Crab colossus",
   "unitsPreference": "imperial",
@@ -1030,9 +1030,8 @@
         "subsystemTag": "shell",
         "nodeA": "aShoulderL",
         "nodeB": "hoopFrontL",
-        "restLengthM": 0.361,
+        "slackLengthM": 0.361,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1042,9 +1041,8 @@
         "subsystemTag": "shell",
         "nodeA": "aShoulderL",
         "nodeB": "hoopBackL",
-        "restLengthM": 0.3443,
+        "slackLengthM": 0.3443,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1054,9 +1052,8 @@
         "subsystemTag": "shell",
         "nodeA": "aShoulderR",
         "nodeB": "hoopFrontR",
-        "restLengthM": 0.361,
+        "slackLengthM": 0.361,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1066,9 +1063,8 @@
         "subsystemTag": "shell",
         "nodeA": "aShoulderR",
         "nodeB": "hoopBackR",
-        "restLengthM": 0.3443,
+        "slackLengthM": 0.3443,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1272,9 +1268,8 @@
         "subsystemTag": "claw",
         "nodeA": "crestL",
         "nodeB": "movHeelL",
-        "restLengthM": 0.0968,
+        "slackLengthM": 0.0968,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1470,9 +1465,8 @@
         "subsystemTag": "claw",
         "nodeA": "crestR",
         "nodeB": "movHeelR",
-        "restLengthM": 0.0968,
+        "slackLengthM": 0.0968,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1535,9 +1529,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipL",
         "nodeB": "hoopFrontL",
-        "restLengthM": 0.2615,
+        "slackLengthM": 0.2615,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1547,9 +1540,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipL",
         "nodeB": "hoopNoseR",
-        "restLengthM": 0.3,
+        "slackLengthM": 0.3,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1559,9 +1551,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipL",
         "nodeB": "eyeMastL",
-        "restLengthM": 0.2548,
+        "slackLengthM": 0.2548,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1596,9 +1587,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipR",
         "nodeB": "hoopFrontR",
-        "restLengthM": 0.2615,
+        "slackLengthM": 0.2615,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1608,9 +1598,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipR",
         "nodeB": "hoopNoseL",
-        "restLengthM": 0.3,
+        "slackLengthM": 0.3,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1620,9 +1609,8 @@
         "subsystemTag": "eyes",
         "nodeA": "eyeTipR",
         "nodeB": "eyeMastR",
-        "restLengthM": 0.2548,
+        "slackLengthM": 0.2548,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       }
     ],

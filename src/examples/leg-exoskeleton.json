@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-leg-exoskeleton",
   "name": "Example — leg exoskeleton",
   "unitsPreference": "imperial",
@@ -902,9 +902,8 @@
         "subsystemTag": "leg",
         "nodeA": "frameSide",
         "nodeB": "eHeel",
-        "restLengthM": 0.45,
+        "slackLengthM": 0.45,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -923,9 +922,8 @@
         "subsystemTag": "leg",
         "nodeA": "eToe",
         "nodeB": "eToePad",
-        "restLengthM": 0.13,
+        "slackLengthM": 0.13,
         "stiffnessNPerM": 60,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       }
     ],

@@ -233,9 +233,8 @@ export function buildNeckPanPitchParts(prefix = 'neck.'): MechParts {
         subsystemTag: 'neck',
         nodeA: n('mastTop'),
         nodeB: n('head'),
-        restLengthM: 0.65,
+        slackLengthM: 0.65,
         stiffnessNPerM: 185,
-        tensionOnly: true,
         cordageMaterialId: BUNGEE_8,
       },
       // the steer grip slides on the handle pipe (sliding telescope rail)

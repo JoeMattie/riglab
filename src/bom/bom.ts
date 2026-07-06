@@ -496,15 +496,20 @@ export function computeBom(project: Project): Bom {
         break;
       }
       case 'elastic': {
-        consumables.elasticTotalM += el.restLengthM;
-        addCordage(el.cordageMaterialId, el.restLengthM, cordageById, cordageLengthByMaterial, () =>
-          addWeight(
-            el.restLengthM *
-              (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
-            el.id,
-            tag,
-            'cordageKg',
-          ),
+        consumables.elasticTotalM += el.slackLengthM;
+        addCordage(
+          el.cordageMaterialId,
+          el.slackLengthM,
+          cordageById,
+          cordageLengthByMaterial,
+          () =>
+            addWeight(
+              el.slackLengthM *
+                (cordageById.get(el.cordageMaterialId ?? '')?.linearDensityKgPerM ?? 0),
+              el.id,
+              tag,
+              'cordageKg',
+            ),
         );
         break;
       }

@@ -401,8 +401,10 @@ export function addRope(doc: Project, path: EndSpec[]): { doc: Project; elementI
   return { doc: newDoc, elementId };
 }
 
-/** Draw an elastic (linear spring) between two points. Rest length defaults to
- * the drawn length so a fresh elastic sits at zero force. */
+/** Draw a rubber band between two points. Its slack (natural) length defaults
+ * to the drawn distance — a fresh band sits loose at zero force; the user
+ * shortens the slack via the midpoint handle to add pull. The stretch cap
+ * defaults to twice the drawn distance. */
 export function addElastic(
   doc: Project,
   startSpec: EndSpec,
@@ -413,16 +415,16 @@ export function addElastic(
     const { mechanism, nodeIds } = resolveChain(m0, [startSpec, endSpec]);
     const [a, b] = nodeIds as [string, string];
     if (a === b) return m0;
-    const rest = Math.max(segLength(nodePosition(mechanism, a), nodePosition(mechanism, b)), 1e-3);
+    const span = Math.max(segLength(nodePosition(mechanism, a), nodePosition(mechanism, b)), 1e-3);
     const elastic: ElasticElement = {
       id: elementId,
       type: 'elastic',
       maturity: 'sketch',
       nodeA: a,
       nodeB: b,
-      restLengthM: rest,
+      slackLengthM: span,
+      maxLengthM: span * 2,
       stiffnessNPerM: DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
-      tensionOnly: true,
     };
     return { ...mechanism, elements: [...mechanism.elements, elastic] };
   });
@@ -979,28 +981,27 @@ export function setLinkLength(doc: Project, elementId: string, lengthM: number):
   });
 }
 
-/** Set an elastic's EFFECTIVE rest length (the midpoint drag handle, Joe's
- * request): the length at which the spring would sit at zero force. The
- * geometry (nodeA/nodeB) and the natural `restLengthM` stay put — the
- * shortfall below the natural length is stored as preload `pretensionN`
- * (tension-only, so clamped ≥ 0), which is exactly what "auto-adjusts the
- * pretension accordingly" means. Installed tension at span S is
- * stiffness·(S − restEff): unchanged whether expressed via restLengthM or
- * pretensionN. `restEffM` clamps to (0, restLengthM]; a value ≥ restLengthM
- * is slack (pretension 0). No-op for non-elastic ids. */
-export function setElasticRestLength(doc: Project, elementId: string, restEffM: number): Project {
-  return mapElements(doc, (el) => {
-    if (el.id !== elementId || el.type !== 'elastic') return el;
-    const restEff = Math.max(1e-3, Math.min(restEffM, el.restLengthM));
-    const pretensionN = el.stiffnessNPerM * (el.restLengthM - restEff);
-    return { ...el, pretensionN: pretensionN > 1e-9 ? pretensionN : undefined };
-  });
+/** Set a rubber band's SLACK (natural) length — the midpoint drag handle
+ * (Joe's model). Below this length the band is loose (zero force); shortening
+ * it below the current span pre-stretches the band so it pulls the ends
+ * together. Clamps to (0, maxLengthM]. No-op for non-elastic ids. */
+export function setElasticSlackLength(doc: Project, elementId: string, slackM: number): Project {
+  return mapElements(doc, (el) =>
+    el.id === elementId && el.type === 'elastic'
+      ? { ...el, slackLengthM: Math.max(1e-3, Math.min(slackM, elasticMaxLengthM(el))) }
+      : el,
+  );
 }
 
-/** An elastic's current effective rest length — inverse of
- * setElasticRestLength, for the drag handle's live position. */
-export function elasticRestEffM(el: ElasticElement): number {
-  return el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
+/** A rubber band's slack length — the drag handle's live position. */
+export function elasticSlackLengthM(el: ElasticElement): number {
+  return el.slackLengthM;
+}
+
+/** A rubber band's effective max-stretch length: the stored cap, or a roomy
+ * 3× the slack length when unset (matches the schema default). */
+export function elasticMaxLengthM(el: ElasticElement): number {
+  return el.maxLengthM ?? el.slackLengthM * 3;
 }
 
 // ── interface-overhaul ops (dimension chips + joint popover) ────────────────

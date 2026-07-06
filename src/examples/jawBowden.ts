@@ -129,9 +129,8 @@ export function buildJawBowdenParts(prefix = ''): MechParts {
       subsystemTag: 'jaw',
       nodeA: n('crest'),
       nodeB: n('jawHeel'),
-      restLengthM: 0.1,
+      slackLengthM: 0.1,
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
     // brake-cable jaw drive: both casing ends fixed, routing-independent

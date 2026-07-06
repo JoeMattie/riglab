@@ -173,16 +173,21 @@ export const ropeElementSchema = z.object({
   cordageMaterialId: idSchema.optional(),
 });
 
+/** A rubber band between two points (simplified, Joe's model): a tension-only
+ * force with a SLACK length (at or below which it exerts no force — loose) and
+ * a MAX length it cannot stretch past (a hard cap, like a rope). Between the
+ * two it pulls the ends together with `stiffnessNPerM` per metre of stretch. */
 export const elasticElementSchema = z.object({
   ...elementBase,
   type: z.literal('elastic'),
   nodeA: idSchema,
   nodeB: idSchema,
-  restLengthM: z.number().positive(),
+  /** natural length — no force at or below it (loose band) */
+  slackLengthM: z.number().positive(),
+  /** hard stretch cap — the band cannot extend past this. Absent ⇒ a roomy
+   * default of 3× the slack length (elasticMaxLengthM). */
+  maxLengthM: z.number().positive().optional(),
   stiffnessNPerM: z.number().positive(),
-  /** bungee/rubber can't push (default true at creation) */
-  tensionOnly: z.boolean(),
-  pretensionN: z.number().nonnegative().optional(),
   cordageMaterialId: idSchema.optional(),
 });
 

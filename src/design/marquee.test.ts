@@ -96,9 +96,8 @@ function testMech(): Mechanism {
         type: 'elastic',
         nodeA: 'n1',
         nodeB: 'n2',
-        restLengthM: 1,
+        slackLengthM: 1,
         stiffnessNPerM: 100,
-        tensionOnly: true,
       },
       {
         ...base,

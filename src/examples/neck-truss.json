@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-neck-truss",
   "name": "Example — neck truss (pitch)",
   "unitsPreference": "imperial",
@@ -876,9 +876,8 @@
         "subsystemTag": "neck",
         "nodeA": "mastTop",
         "nodeB": "head",
-        "restLengthM": 0.65,
+        "slackLengthM": 0.65,
         "stiffnessNPerM": 185,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {

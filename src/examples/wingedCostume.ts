@@ -215,9 +215,8 @@ function buildFrameParts(prefix: string): MechParts {
     subsystemTag: 'suspension',
     nodeA: n(a),
     nodeB: n(b),
-    restLengthM: round4(0.85 * dist(N[a], N[b])),
+    slackLengthM: round4(0.85 * dist(N[a], N[b])),
     stiffnessNPerM: 120,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_8,
   });
   const strap = (
@@ -405,9 +404,8 @@ function buildWingParts(side: 'left' | 'right', prefix: string): MechParts {
         subsystemTag: 'wing',
         nodeA: n('mastTop'),
         nodeB: n(`wingMid${S}`),
-        restLengthM: round4(0.52 * dist(N.mastTop, g.mid)),
+        slackLengthM: round4(0.52 * dist(N.mastTop, g.mid)),
         stiffnessNPerM: 6,
-        tensionOnly: true,
         cordageMaterialId: BUNGEE_8,
       },
       // the flap drive: hand → front-corner eyelet → spar attachment
@@ -526,9 +524,8 @@ function buildNeckJawParts(prefix: string): MechParts {
         subsystemTag: 'jaw',
         nodeA: n('crest'),
         nodeB: n('jawHeel'),
-        restLengthM: round4(dist(N.crest, N.jawHeel) - 0.067),
+        slackLengthM: round4(dist(N.crest, N.jawHeel) - 0.067),
         stiffnessNPerM: 120,
-        tensionOnly: true,
         cordageMaterialId: BUNGEE_6,
       },
       // brake-cable close: trigger side on the belt rail, jaw side anchored

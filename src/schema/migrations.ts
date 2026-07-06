@@ -52,7 +52,30 @@ export const migrations: Record<number, Migration> = {
   // v7 → v8: pivots gained OPTIONAL axisLocked (absent = free hinge axis, the
   // prior behavior), so v7 documents are already valid v8 documents — stamp.
   7: (doc) => doc,
+  // v8 → v9: elastics become a rubber-band model — restLengthM/pretensionN/
+  // tensionOnly collapse to slackLengthM (the zero-force length = the old
+  // effective rest) plus a maxLengthM stretch cap (new; a roomy default that
+  // preserves the old uncapped feel). The mechanism is the single top-level
+  // `mechanism` since v7.
+  8: (doc) => migrateV8Elastics(doc),
 };
+
+/** v8 → v9 elastic reshape (see the migration table). Pure JSON. */
+function migrateV8Elastics(doc: Json): Json {
+  const mech = doc.mechanism as Json | undefined;
+  if (!mech || !Array.isArray(mech.elements)) return doc;
+  const elements = (mech.elements as Json[]).map((el) => {
+    if (el.type !== 'elastic') return el;
+    const rest = typeof el.restLengthM === 'number' ? el.restLengthM : 0.1;
+    const k =
+      typeof el.stiffnessNPerM === 'number' && el.stiffnessNPerM > 0 ? el.stiffnessNPerM : 1;
+    const pre = typeof el.pretensionN === 'number' ? el.pretensionN : 0;
+    const slack = Math.max(1e-3, rest - pre / k);
+    const { restLengthM: _r, pretensionN: _p, tensionOnly: _t, ...keep } = el;
+    return { ...keep, slackLengthM: slack, maxLengthM: Math.max(slack, rest) * 3 };
+  });
+  return { ...doc, mechanism: { ...mech, elements } };
+}
 
 // ---------------------------------------------------------------------------
 // v6 → v7 support. Everything in this section is FROZEN MIGRATION DATA/MATH:

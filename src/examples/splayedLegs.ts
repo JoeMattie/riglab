@@ -267,9 +267,8 @@ export function buildSplayedLegParts(side: Side, prefix: string): MechParts {
       subsystemTag: 'leg',
       nodeA: n('frameSide'),
       nodeB: n('eHeel'),
-      restLengthM: round4(HEEL_REST_FACTOR * dist(at('frameSide', side), at('eHeel', side))),
+      slackLengthM: round4(HEEL_REST_FACTOR * dist(at('frameSide', side), at('eHeel', side))),
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_8,
     },
     {
@@ -288,9 +287,8 @@ export function buildSplayedLegParts(side: Side, prefix: string): MechParts {
       subsystemTag: 'leg',
       nodeA: n('eToe'),
       nodeB: n('eToePad'),
-      restLengthM: dist(at('eToe', side), at('eToePad', side)),
+      slackLengthM: dist(at('eToe', side), at('eToePad', side)),
       stiffnessNPerM: 60,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
   ];

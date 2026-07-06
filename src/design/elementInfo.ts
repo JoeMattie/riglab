@@ -152,7 +152,7 @@ export function elementMassKg(
     }
     case 'elastic': {
       const cm = cord(el.cordageMaterialId);
-      return cm ? el.restLengthM * cm.linearDensityKgPerM : undefined;
+      return cm ? el.slackLengthM * cm.linearDensityKgPerM : undefined;
     }
     case 'bowden': {
       const cm = cord(el.cordageMaterialId);

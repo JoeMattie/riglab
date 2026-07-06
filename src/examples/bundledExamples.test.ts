@@ -496,7 +496,7 @@ describe('example 8 — body frame (suspended), fully-3D closed frame', () => {
     for (const el of mech.elements) {
       if (el.type === 'elastic' && el.id.startsWith('bungee')) {
         const drawn = dist3(nodePos(project, el.nodeA), nodePos(project, el.nodeB));
-        expect(el.restLengthM, el.id).toBeCloseTo(0.85 * drawn, 3);
+        expect(el.slackLengthM, el.id).toBeCloseTo(0.85 * drawn, 3);
       }
       if (el.type === 'rope' && el.id.startsWith('strap')) {
         const drawn = dist3(nodePos(project, el.path[0]!), nodePos(project, el.path[1]!));
@@ -604,7 +604,7 @@ describe('example 9 — splayed legs (3D gait), hinge axes off every panel norma
       const heel = mech.elements.find((e) => e.id === `${side}.heelLiftElastic`);
       if (heel?.type !== 'elastic') throw new Error('heel elastic expected');
       const hang = dist3(nodePos(project, heel.nodeA), nodePos(project, heel.nodeB));
-      expect(heel.restLengthM).toBeCloseTo(0.72 * hang, 3);
+      expect(heel.slackLengthM).toBeCloseTo(0.72 * hang, 3);
     }
   });
 

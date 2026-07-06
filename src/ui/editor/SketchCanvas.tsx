@@ -26,11 +26,11 @@ import {
   canAttachNodes,
   canAttachNodeToLink,
   deleteElement,
-  elasticRestEffM,
+  elasticSlackLengthM,
   groundNodeAtAnchor,
   moveNodes,
   releaseNodeConnection,
-  setElasticRestLength,
+  setElasticSlackLength,
   setNodeKind,
   setPivotAngleLimit,
 } from '../../state/docOps';
@@ -252,7 +252,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
    * unit A→B, and the grab point (world 2D) — along-axis drag scrubs rest */
   const [elasticDrag, setElasticDrag] = useState<{
     id: string;
-    startRestEff: number;
+    startSlack: number;
     axis: Vec2;
     startWorld: Vec2;
   } | null>(null);
@@ -488,7 +488,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       id: el.id,
       mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
       axis,
-      restEffM: elasticRestEffM(el),
+      slackM: elasticSlackLengthM(el),
     };
   }, [mech, selectedElementIds, projected]);
 
@@ -805,7 +805,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
           setHoverSnap(null);
           setElasticDrag({
             id: elasticHandle.id,
-            startRestEff: elasticHandle.restEffM,
+            startSlack: elasticHandle.slackM,
             axis: elasticHandle.axis,
             startWorld: toWorld(view, screen),
           });
@@ -1042,8 +1042,8 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       const along =
         (world2.x - elasticDrag.startWorld.x) * elasticDrag.axis.x +
         (world2.y - elasticDrag.startWorld.y) * elasticDrag.axis.y;
-      const restEff = elasticDrag.startRestEff + along;
-      updateCurrent((cur) => setElasticRestLength(cur, elasticDrag.id, restEff));
+      const slack = elasticDrag.startSlack + along;
+      updateCurrent((cur) => setElasticSlackLength(cur, elasticDrag.id, slack));
       return;
     }
 
@@ -2438,7 +2438,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
                     Math.max(
                       0,
                       seg3(renderPositions[el.nodeA], renderPositions[el.nodeB]) -
-                        elasticRestEffM(el),
+                        elasticSlackLengthM(el),
                     )
                   : 0;
               return (

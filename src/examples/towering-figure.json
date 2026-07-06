@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-towering-figure",
   "name": "Example — Towering dance figure",
   "unitsPreference": "imperial",
@@ -1037,9 +1037,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aSpine",
         "nodeB": "barTipL",
-        "restLengthM": 0.9417,
+        "slackLengthM": 0.9417,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1049,9 +1048,8 @@
         "subsystemTag": "suspension",
         "nodeA": "aSpine",
         "nodeB": "barTipR",
-        "restLengthM": 0.9417,
+        "slackLengthM": 0.9417,
         "stiffnessNPerM": 200,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1332,9 +1330,8 @@
         "subsystemTag": "head",
         "nodeA": "head",
         "nodeB": "spreadF",
-        "restLengthM": 0.5,
+        "slackLengthM": 0.5,
         "stiffnessNPerM": 400,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1344,9 +1341,8 @@
         "subsystemTag": "head",
         "nodeA": "head",
         "nodeB": "spreadL",
-        "restLengthM": 0.5001,
+        "slackLengthM": 0.5001,
         "stiffnessNPerM": 400,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1356,9 +1352,8 @@
         "subsystemTag": "head",
         "nodeA": "head",
         "nodeB": "spreadR",
-        "restLengthM": 0.5001,
+        "slackLengthM": 0.5001,
         "stiffnessNPerM": 400,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1446,9 +1441,8 @@
         "subsystemTag": "arm",
         "nodeA": "mastMid",
         "nodeB": "armMidL",
-        "restLengthM": 0.6683,
+        "slackLengthM": 0.6683,
         "stiffnessNPerM": 40,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1545,9 +1539,8 @@
         "subsystemTag": "arm",
         "nodeA": "mastMid",
         "nodeB": "armMidR",
-        "restLengthM": 0.6683,
+        "slackLengthM": 0.6683,
         "stiffnessNPerM": 40,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {

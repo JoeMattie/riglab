@@ -131,9 +131,8 @@ export function buildLegExoParts(side: 'left' | 'right', prefix = ''): MechParts
       subsystemTag: 'leg',
       nodeA: n('frameSide'),
       nodeB: n('eHeel'),
-      restLengthM: 0.45,
+      slackLengthM: 0.45,
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_8,
     },
     {
@@ -152,9 +151,8 @@ export function buildLegExoParts(side: 'left' | 'right', prefix = ''): MechParts
       subsystemTag: 'leg',
       nodeA: n('eToe'),
       nodeB: n('eToePad'),
-      restLengthM: dist(at('eToe'), at('eToePad')),
+      slackLengthM: dist(at('eToe'), at('eToePad')),
       stiffnessNPerM: 60,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
   ];

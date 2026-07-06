@@ -193,9 +193,8 @@ export function buildNeckTrussParts(prefix = ''): MechParts {
       subsystemTag: 'neck',
       nodeA: n('mastTop'),
       nodeB: n('head'),
-      restLengthM: 0.65,
+      slackLengthM: 0.65,
       stiffnessNPerM: 185,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_8,
     },
     // the up/down rope pair from the original build: sliding the grip down

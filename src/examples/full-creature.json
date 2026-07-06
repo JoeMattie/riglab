@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "id": "example-full-creature",
   "name": "Example — Raptor (full creature)",
   "unitsPreference": "imperial",
@@ -1589,9 +1589,8 @@
         "subsystemTag": "neck",
         "nodeA": "neck.mastTop",
         "nodeB": "neck.head",
-        "restLengthM": 0.65,
+        "slackLengthM": 0.65,
         "stiffnessNPerM": 185,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -1799,9 +1798,8 @@
         "subsystemTag": "jaw",
         "nodeA": "jaw.crest",
         "nodeB": "jaw.jawHeel",
-        "restLengthM": 0.1,
+        "slackLengthM": 0.1,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -1992,9 +1990,8 @@
         "subsystemTag": "leg",
         "nodeA": "legL.frameSide",
         "nodeB": "legL.eHeel",
-        "restLengthM": 0.45,
+        "slackLengthM": 0.45,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -2013,9 +2010,8 @@
         "subsystemTag": "leg",
         "nodeA": "legL.eToe",
         "nodeB": "legL.eToePad",
-        "restLengthM": 0.13,
+        "slackLengthM": 0.13,
         "stiffnessNPerM": 60,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {
@@ -2193,9 +2189,8 @@
         "subsystemTag": "leg",
         "nodeA": "legR.frameSide",
         "nodeB": "legR.eHeel",
-        "restLengthM": 0.45,
+        "slackLengthM": 0.45,
         "stiffnessNPerM": 150,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee8"
       },
       {
@@ -2214,9 +2209,8 @@
         "subsystemTag": "leg",
         "nodeA": "legR.eToe",
         "nodeB": "legR.eToePad",
-        "restLengthM": 0.13,
+        "slackLengthM": 0.13,
         "stiffnessNPerM": 60,
-        "tensionOnly": true,
         "cordageMaterialId": "cord-bungee6"
       },
       {

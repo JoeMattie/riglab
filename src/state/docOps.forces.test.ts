@@ -9,9 +9,9 @@ import {
   addTorsionCable,
   DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
   type EndSpec,
-  elasticRestEffM,
+  elasticSlackLengthM,
   removeInputChannel,
-  setElasticRestLength,
+  setElasticSlackLength,
   setInputChannel,
 } from './docOps';
 
@@ -45,8 +45,8 @@ describe('addRope', () => {
   });
 });
 
-describe('addElastic', () => {
-  it('creates a tension-only spring at rest = drawn length with the sketch default stiffness', () => {
+describe('addElastic (rubber-band model)', () => {
+  it('creates a loose band: slack = drawn length, a 2× stretch cap, default stiffness', () => {
     const { doc: next, elementId } = addElastic(
       createEmptyProject('p', 'p'),
       newNode(0, 0),
@@ -54,57 +54,44 @@ describe('addElastic', () => {
     );
     const el = mechOf(next).elements.find((e) => e.id === elementId)!;
     if (el.type !== 'elastic') throw new Error('not an elastic');
-    expect(el.restLengthM).toBeCloseTo(0.5, 9);
+    expect(el.slackLengthM).toBeCloseTo(0.5, 9); // loose at the drawn span
+    expect(el.maxLengthM).toBeCloseTo(1.0, 9); // 2× the drawn span
     expect(el.stiffnessNPerM).toBe(DEFAULT_ELASTIC_STIFFNESS_N_PER_M);
-    expect(el.tensionOnly).toBe(true);
   });
 });
 
-describe('setElasticRestLength / elasticRestEffM (midpoint drag handle)', () => {
+describe('setElasticSlackLength / elasticSlackLengthM (midpoint drag handle)', () => {
   const makeElastic = () =>
     addElastic(createEmptyProject('p', 'p'), newNode(0, 0), newNode(0, 0.5));
 
-  it('shortening the effective rest below natural stores the shortfall as pretension', () => {
+  it('shortening the slack pre-stretches the band (force at the drawn span)', () => {
     const { doc, elementId } = makeElastic();
     const k = DEFAULT_ELASTIC_STIFFNESS_N_PER_M;
-    const next = setElasticRestLength(doc, elementId, 0.4); // 0.1 m of stretch
-    const el = mechOf(next).elements.find((e) => e.id === elementId)!;
-    if (el.type !== 'elastic') throw new Error('not an elastic');
-    expect(el.restLengthM).toBeCloseTo(0.5, 9); // natural length unchanged
-    expect(el.pretensionN).toBeCloseTo(k * 0.1, 6);
-    // effective rest reads back the dragged value
-    expect(elasticRestEffM(el)).toBeCloseTo(0.4, 9);
-  });
-
-  it('installed tension is the same whether via rest length or pretension', () => {
-    // at the drawn span 0.5, natural rest 0.5 → 0 tension; drag rest to 0.3
-    const { doc, elementId } = makeElastic();
-    const k = DEFAULT_ELASTIC_STIFFNESS_N_PER_M;
-    const el = mechOf(setElasticRestLength(doc, elementId, 0.3)).elements.find(
+    const el = mechOf(setElasticSlackLength(doc, elementId, 0.4)).elements.find(
       (e) => e.id === elementId,
     )!;
     if (el.type !== 'elastic') throw new Error('not an elastic');
-    const span = 0.5;
-    const tension = k * (span - el.restLengthM) + (el.pretensionN ?? 0);
-    expect(tension).toBeCloseTo(k * (span - 0.3), 6); // = stiffness·(span − restEff)
+    expect(el.slackLengthM).toBeCloseTo(0.4, 9);
+    expect(elasticSlackLengthM(el)).toBeCloseTo(0.4, 9);
+    // tension at the drawn span 0.5 = k·(0.5 − 0.4)
+    expect(k * (0.5 - el.slackLengthM)).toBeCloseTo(k * 0.1, 6);
   });
 
-  it('a rest ≥ natural is slack — no pretension', () => {
-    const { doc, elementId } = makeElastic();
-    const el = mechOf(setElasticRestLength(doc, elementId, 0.9)).elements.find(
+  it('clamps the slack to (0, maxLengthM]', () => {
+    const { doc, elementId } = makeElastic(); // max = 1.0
+    const el = mechOf(setElasticSlackLength(doc, elementId, 5)).elements.find(
       (e) => e.id === elementId,
     )!;
     if (el.type !== 'elastic') throw new Error('not an elastic');
-    expect(el.pretensionN).toBeUndefined();
-    expect(elasticRestEffM(el)).toBeCloseTo(0.5, 9); // clamped to natural
+    expect(el.slackLengthM).toBeCloseTo(1.0, 9); // clamped to the cap
   });
 
   it('ignores non-elastic ids (the elastic is untouched)', () => {
     const { doc, elementId } = makeElastic();
-    const after = setElasticRestLength(doc, 'nope', 0.1);
+    const after = setElasticSlackLength(doc, 'nope', 0.1);
     const el = mechOf(after).elements.find((e) => e.id === elementId)!;
     if (el.type !== 'elastic') throw new Error('not an elastic');
-    expect(el.pretensionN).toBeUndefined();
+    expect(el.slackLengthM).toBeCloseTo(0.5, 9);
   });
 });
 

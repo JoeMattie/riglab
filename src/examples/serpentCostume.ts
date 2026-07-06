@@ -276,9 +276,8 @@ function bodyParts(prefix: string): MechParts {
     subsystemTag: 'body',
     nodeA: n(a),
     nodeB: n(b),
-    restLengthM: round4(0.85 * dist(P[a]!, P[b]!)),
+    slackLengthM: round4(0.85 * dist(P[a]!, P[b]!)),
     stiffnessNPerM: 180,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_8,
   });
   const strap = (
@@ -415,9 +414,8 @@ function headParts(prefix: string): MechParts {
       subsystemTag: 'jaw',
       nodeA: n('crest'),
       nodeB: n('jawHeel'),
-      restLengthM: 0.06,
+      slackLengthM: 0.06,
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
     // brake-cable bite drive; jaw-side casing end on the pan axis (hoopF)

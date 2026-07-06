@@ -165,10 +165,8 @@ export function fixtureProject(): Project {
           maturity: 'sketch',
           nodeA: 'n7',
           nodeB: 'n4',
-          restLengthM: 0.9,
+          slackLengthM: 0.9,
           stiffnessNPerM: 300,
-          tensionOnly: true,
-          pretensionN: 5,
           cordageMaterialId: 'bungee6',
         },
         {
@@ -426,10 +424,8 @@ export function fixtureProjectV6(): Record<string, unknown> {
             maturity: 'sketch',
             nodeA: 'n7',
             nodeB: 'n4',
-            restLengthM: 0.9,
+            slackLengthM: 0.9,
             stiffnessNPerM: 300,
-            tensionOnly: true,
-            pretensionN: 5,
             cordageMaterialId: 'bungee6',
           },
           {

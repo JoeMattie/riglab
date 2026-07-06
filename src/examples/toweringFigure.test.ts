@@ -184,7 +184,7 @@ describe('C1 towering figure — structure', () => {
       }
       if (el.type === 'elastic') {
         // all elastics are drawn neutral (rest = drawn distance)
-        expect(el.restLengthM, el.id).toBeCloseTo(dist3(posOf(el.nodeA), posOf(el.nodeB)), 3);
+        expect(el.slackLengthM, el.id).toBeCloseTo(dist3(posOf(el.nodeA), posOf(el.nodeB)), 3);
       }
     }
   });

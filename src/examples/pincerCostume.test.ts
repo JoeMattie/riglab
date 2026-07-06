@@ -102,8 +102,7 @@ describe('C3 pincer costume — structure', () => {
     ]) {
       const el = element(id);
       if (el.type !== 'elastic') throw new Error(`${id} must be an elastic`);
-      expect(el.restLengthM, id).toBeCloseTo(0.9 * dist3(nodePos(el.nodeA), nodePos(el.nodeB)), 3);
-      expect(el.tensionOnly, id).toBe(true);
+      expect(el.slackLengthM, id).toBeCloseTo(0.9 * dist3(nodePos(el.nodeA), nodePos(el.nodeB)), 3);
     }
     for (const id of ['suspStrapFrontL', 'suspStrapBackL', 'suspStrapFrontR', 'suspStrapBackR']) {
       const el = element(id);
@@ -187,7 +186,7 @@ describe('C3 pincer costume — structure', () => {
       for (const suffix of ['Front', 'Cross', 'Mast']) {
         const el = element(`nestElastic${suffix}${s}`);
         if (el.type !== 'elastic') throw new Error('nest must be elastic');
-        expect(el.restLengthM, el.id).toBeCloseTo(dist3(nodePos(el.nodeA), nodePos(el.nodeB)), 4);
+        expect(el.slackLengthM, el.id).toBeCloseTo(dist3(nodePos(el.nodeA), nodePos(el.nodeB)), 4);
       }
     }
     // every hinge axis is a unit vector

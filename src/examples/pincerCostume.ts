@@ -138,9 +138,8 @@ export function buildShellParts(): MechParts {
     // bungee carry: pretensioned to 90% of the drawn hang (body-frame
     // pattern; kept gentle so the standing tension through the hoop stays
     // small and the rest settle reaches the converged gate)
-    restLengthM: r4(0.9 * dist(SHELL[nodeA], SHELL[nodeB])),
+    slackLengthM: r4(0.9 * dist(SHELL[nodeA], SHELL[nodeB])),
     stiffnessNPerM: 150,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_8,
   });
   const strap = (
@@ -373,9 +372,8 @@ export function buildClawParts(side: 'left' | 'right'): MechParts {
       subsystemTag: 'claw',
       nodeA: n('crest'),
       nodeB: n('movHeel'),
-      restLengthM: r4(dist(crest, movHeel) - 0.02),
+      slackLengthM: r4(dist(crest, movHeel) - 0.02),
       stiffnessNPerM: 150,
-      tensionOnly: true,
       cordageMaterialId: BUNGEE_6,
     },
     // brake-cable grip drive: squeezing the trigger lengthens the trigger-side
@@ -471,11 +469,10 @@ export function buildEyeStalkParts(side: 'left' | 'right'): MechParts {
     subsystemTag: 'eyes',
     nodeA: n('eyeTip'),
     nodeB: other,
-    restLengthM: dist(tip, otherPos), // neutral at the drawn pose
+    slackLengthM: dist(tip, otherPos), // neutral at the drawn pose
     // stiff enough that the 0.05 kg tip sags millimetres, not centimetres —
     // the bobble recenters crisply instead of wandering the nest's flat valley
     stiffnessNPerM: 200,
-    tensionOnly: true,
     cordageMaterialId: BUNGEE_6,
   });
 

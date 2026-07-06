@@ -124,9 +124,11 @@ describe('C2 winged costume — structure', () => {
     for (const id of ['carryBungeeLF', 'carryBungeeLB', 'carryBungeeRF', 'carryBungeeRB']) {
       const el = element(id);
       if (el.type !== 'elastic') throw new Error(`${id} must be elastic`);
-      expect(el.restLengthM, id).toBeCloseTo(0.85 * dist3(nodePos(el.nodeA), nodePos(el.nodeB)), 3);
+      expect(el.slackLengthM, id).toBeCloseTo(
+        0.85 * dist3(nodePos(el.nodeA), nodePos(el.nodeB)),
+        3,
+      );
       expect(el.cordageMaterialId).toBe('cord-bungee8');
-      expect(el.tensionOnly).toBe(true);
     }
     for (const id of ['hipStrapFL', 'hipStrapFR', 'hipStrapBL', 'hipStrapBR']) {
       const el = element(id);
