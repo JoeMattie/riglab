@@ -2123,6 +2123,14 @@ remains the single gate — the Git integration builds on Cloudflare's side
 and would deploy even when our test suite fails. PR preview deployments
 deliberately not added (scope).
 
+Addendum (2026-07-06): the same Pages project is also served at
+https://riglab.joemattie.com — a custom domain registered on the project
+plus a proxied CNAME `riglab → riglab.pages.dev` in the joemattie.com zone
+(both created via the Cloudflare API, no repo changes). Chose a subdomain
+over a joemattie.com path so the app deploys stay decoupled from the blog's
+Worker and Vite's default `base: '/'` needs no change. Both URLs serve the
+identical production deployment; nothing in CI changes.
+
 ### DECISION: forces-playback perf — warm-started, substep-budgeted equilibrium readout (2026-07-05)
 Playback with the forces overlay on was ~0.5 fps. Measurement (not the
 original hypothesis) pinned the cause: the full-creature equilibrium solve
