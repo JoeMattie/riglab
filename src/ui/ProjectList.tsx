@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { PANEL_SHADOW, T } from './editor/theme';
@@ -13,7 +13,25 @@ export function ProjectList() {
   const importProject = useAppStore((s) => s.importProject);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [examplesOpen, setExamplesOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const examplesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!examplesOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!examplesRef.current?.contains(e.target as Node)) setExamplesOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExamplesOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [examplesOpen]);
 
   const onCreate = () => {
     const name = newName.trim();
@@ -126,6 +144,71 @@ export function ProjectList() {
             >
               Import…
             </button>
+            {/* flex wrapper so the button stretches to the row height like its siblings */}
+            <div ref={examplesRef} style={{ position: 'relative', display: 'flex' }}>
+              <button
+                type="button"
+                data-testid="examples-menu-button"
+                aria-haspopup="menu"
+                aria-expanded={examplesOpen}
+                onClick={() => setExamplesOpen((o) => !o)}
+                style={ghostBtn}
+              >
+                New from example{' '}
+                <span aria-hidden="true" style={{ fontSize: 10 }}>
+                  ▾
+                </span>
+              </button>
+              {examplesOpen && (
+                <div
+                  data-testid="examples-menu"
+                  role="menu"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    width: 380,
+                    maxHeight: '60vh',
+                    overflowY: 'auto',
+                    margin: 0,
+                    padding: 5,
+                    background: T.panel,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 12,
+                    boxShadow: PANEL_SHADOW,
+                    zIndex: 30,
+                  }}
+                >
+                  {EXAMPLES.map((ex) => (
+                    <button
+                      key={ex.id}
+                      type="button"
+                      role="menuitem"
+                      data-testid={`example-${ex.id}`}
+                      onClick={() => {
+                        setExamplesOpen(false);
+                        void createFromExample(ex.id);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '9px 11px',
+                        border: 'none',
+                        borderRadius: 8,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <strong style={{ fontSize: 13.5, color: T.text }}>{ex.name}</strong>
+                      <div style={{ fontSize: 12, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
+                        {ex.description}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <input
               ref={fileRef}
               type="file"
@@ -145,51 +228,11 @@ export function ProjectList() {
           )}
         </div>
 
-        <section data-testid="examples-menu" style={{ marginBottom: 28 }}>
-          <h2 style={caption}>Start from an example</h2>
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: 8,
-            }}
-          >
-            {EXAMPLES.map((ex) => (
-              <li key={ex.id}>
-                <button
-                  type="button"
-                  data-testid={`example-${ex.id}`}
-                  onClick={() => void createFromExample(ex.id)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '11px 13px',
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 11,
-                    background: T.panel,
-                    cursor: 'pointer',
-                    height: '100%',
-                  }}
-                >
-                  <strong style={{ fontSize: 13.5, color: T.text }}>{ex.name}</strong>
-                  <div style={{ fontSize: 12, color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
-                    {ex.description}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         <section>
           <h2 style={caption}>Your projects</h2>
           {projects.length === 0 && (
             <p style={{ color: T.muted, fontSize: 13.5 }}>
-              No projects yet — create one above or open an example.
+              No projects yet — create one above or pick “New from example”.
             </p>
           )}
           <ul data-testid="project-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>

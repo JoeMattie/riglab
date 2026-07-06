@@ -2253,3 +2253,17 @@ scripted built-app check: in quad view the popover is a direct body child,
 fixed-position, window-clamped, and extends past its hosting panel's edge;
 rows still apply and close through the portal.
 
+### DECISION: landing-page examples move behind a dropdown menu (2026-07-06)
+Joe asked for the bundled examples on the landing page to sit behind a menu
+instead of the always-visible fifteen-card grid, which had grown to dominate
+the page. The grid section is gone; a "New from example" button now sits in
+the action row next to Create/Import (sized to match its siblings) and opens
+a scrollable dropdown listing all fifteen examples with their descriptions.
+It closes on selection, Escape, or an outside pointerdown. Testids are
+preserved (`examples-menu`, `example-<id>`) with a new `examples-menu-button`
+trigger; no e2e spec clicked the grid (they load examples via the `__riglab`
+hook), so only ProjectList changed. The editor's empty-state example list
+(EmptyState.tsx) is untouched. Covered by a new ProjectList.test.tsx
+(open/close/selection against the real store over fake-indexeddb, which
+needed an in-memory localStorage stub — vitest's jsdom has none, same issue
+prefs.ts's safeStorage works around) and a scripted built-app check.
