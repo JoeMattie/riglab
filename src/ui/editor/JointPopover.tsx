@@ -533,7 +533,7 @@ function JointMenu({
     };
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
-  }, [setOpenPopover]);
+  }, [setOpenPopover, ref]);
 
   const kind = kindNow;
   const current: JointChoice = kind === 'end' ? 'pivot' : kind;

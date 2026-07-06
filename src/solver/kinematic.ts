@@ -10,7 +10,14 @@
 // drags sorted by node id, no randomness (§12).
 import type { Mechanism, Vec3 } from '../schema';
 import { drivenTargets } from './equilibrium';
-import { adjacentNodeId, angle3, type HingePlan, hingePlan } from './hinge';
+import {
+  adjacentNodeId,
+  angle3,
+  coneLimitVirtual,
+  HINGE_AXIS_SLOP_RAD,
+  type HingePlan,
+  hingePlan,
+} from './hinge';
 import type { SolveInputs, SolveResult } from './types';
 
 const ITERATIONS = 300;
@@ -319,13 +326,16 @@ class DragC {
   }
 }
 
-/** Axis-direction lock for a hinge with an explicitly-set axis: keeps the
- * virtual axis particle at pivot + drawnAxis·h in WORLD space (co-moving with
- * the pivot), so the members rotate only about the drawn axis direction
- * instead of the axis coning out of plane. Honors a "locked axis" during
- * simulation (Joe's request) without grounding the pivot. Weight-0 (pinned)
- * virtuals are already placed there by hingePlan; this covers the free case. */
-class AxisPinC implements KConstraint {
+/** Axis-direction lock for a hinge with an explicitly-set axis: cone-limits
+ * the virtual axis particle so it stays within HINGE_AXIS_SLOP_RAD of the
+ * drawn axis (measured at the pivot), keeping the members near the drawn axis
+ * plane instead of coning out. Inside the cone it does nothing — the "slop"
+ * Joe asked for — so small drags don't fight it and the solve converges; only
+ * the excess past the cone is projected back. Replaces the old hard placement
+ * that overshot and never converged. Honors a "locked axis" during simulation
+ * without grounding the pivot. Weight-0 (pinned) virtuals are already fixed to
+ * the axis by hingePlan; this covers the free case. */
+class AxisSlopC implements KConstraint {
   readonly elementId: string;
   readonly mobilityEqualities = 0;
   constructor(
@@ -333,23 +343,25 @@ class AxisPinC implements KConstraint {
     private readonly virtual: P,
     private readonly pivot: P,
     private readonly axis: Vec3,
-    private readonly h: number,
   ) {
     this.elementId = elementId;
   }
 
   project(): void {
     if (this.virtual.w === 0) return;
-    this.virtual.x = this.pivot.x + this.axis.x * this.h;
-    this.virtual.y = this.pivot.y + this.axis.y * this.h;
-    this.virtual.z = this.pivot.z + this.axis.z * this.h;
+    const p = coneLimitVirtual(this.pivot, this.virtual, this.axis, HINGE_AXIS_SLOP_RAD);
+    if (!p) return;
+    this.virtual.x = p.x;
+    this.virtual.y = p.y;
+    this.virtual.z = p.z;
   }
 
   violation(): number {
-    const dx = this.virtual.x - (this.pivot.x + this.axis.x * this.h);
-    const dy = this.virtual.y - (this.pivot.y + this.axis.y * this.h);
-    const dz = this.virtual.z - (this.pivot.z + this.axis.z * this.h);
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const p = coneLimitVirtual(this.pivot, this.virtual, this.axis, HINGE_AXIS_SLOP_RAD);
+    if (!p) return 0;
+    return Math.sqrt(
+      (this.virtual.x - p.x) ** 2 + (this.virtual.y - p.y) ** 2 + (this.virtual.z - p.z) ** 2,
+    );
   }
 
   parts(): P[] {
@@ -547,9 +559,7 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
           // creature rigs rely on. Pinned (grounded) virtuals are already on
           // the frame-fixed axis via hingePlan.
           if (!plan.pinned && el.axisLocked) {
-            constraints.push(
-              new AxisPinC(el.id, virtual, get(plan.pivotNodeId), plan.axis, plan.h),
-            );
+            constraints.push(new AxisSlopC(el.id, virtual, get(plan.pivotNodeId), plan.axis));
           }
           // angle limits are hinge-only (measured about the axis)
           if (el.angleLimit) {

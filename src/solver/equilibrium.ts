@@ -21,7 +21,9 @@ import type { InputChannel, Mechanism, MechanismElement, Vec3 } from '../schema'
 import {
   adjacentNodeId,
   angle3,
+  coneLimitVirtual,
   drawnAngle3,
+  HINGE_AXIS_SLOP_RAD,
   type HingePlan,
   hingePlan,
   rotateAboutAxis,
@@ -835,10 +837,12 @@ class FloorC implements EqConstraint {
   addForces(): void {}
 }
 
-/** Equilibrium twin of kinematic's AxisPinC: keeps a locked-axis hinge's free
- * virtual on the drawn world axis so the hinge plane is honored under load
- * (Joe's request). A hard placement — zero mobility, no reported force. */
-class AxisPinC implements EqConstraint {
+/** Equilibrium twin of kinematic's AxisSlopC: cone-limits a locked-axis
+ * hinge's free virtual to within HINGE_AXIS_SLOP_RAD of the drawn axis so the
+ * hinge plane is honored under load (Joe's request) with a little give.
+ * Inside the cone it does nothing; only the excess is projected back. Zero
+ * mobility, no reported force. */
+class AxisSlopC implements EqConstraint {
   readonly elementId: string;
   lambda = 0;
   readonly mobility = 0;
@@ -847,7 +851,6 @@ class AxisPinC implements EqConstraint {
     private readonly virtual: Particle,
     private readonly pivot: Particle,
     private readonly axis: Vec3,
-    private readonly h: number,
   ) {
     this.elementId = elementId;
   }
@@ -856,16 +859,19 @@ class AxisPinC implements EqConstraint {
 
   project(): void {
     if (this.virtual.held) return;
-    this.virtual.x = this.pivot.x + this.axis.x * this.h;
-    this.virtual.y = this.pivot.y + this.axis.y * this.h;
-    this.virtual.z = this.pivot.z + this.axis.z * this.h;
+    const p = coneLimitVirtual(this.pivot, this.virtual, this.axis, HINGE_AXIS_SLOP_RAD);
+    if (!p) return;
+    this.virtual.x = p.x;
+    this.virtual.y = p.y;
+    this.virtual.z = p.z;
   }
 
   violation(): number {
-    const dx = this.virtual.x - (this.pivot.x + this.axis.x * this.h);
-    const dy = this.virtual.y - (this.pivot.y + this.axis.y * this.h);
-    const dz = this.virtual.z - (this.pivot.z + this.axis.z * this.h);
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const p = coneLimitVirtual(this.pivot, this.virtual, this.axis, HINGE_AXIS_SLOP_RAD);
+    if (!p) return 0;
+    return Math.sqrt(
+      (this.virtual.x - p.x) ** 2 + (this.virtual.y - p.y) ** 2 + (this.virtual.z - p.z) ** 2,
+    );
   }
 
   addForces(): void {}
@@ -1052,9 +1058,7 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
           // honor an explicitly locked hinge axis under load too (opt-in;
           // pinned/grounded virtuals are already on the frame-fixed axis)
           if (!plan.pinned && el.axisLocked) {
-            constraints.push(
-              new AxisPinC(el.id, virtual, get(plan.pivotNodeId), plan.axis, plan.h),
-            );
+            constraints.push(new AxisSlopC(el.id, virtual, get(plan.pivotNodeId), plan.axis));
           }
         }
         // angle features are hinge-only (measured about the axis)

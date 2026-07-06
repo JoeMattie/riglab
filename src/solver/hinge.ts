@@ -176,6 +176,44 @@ export function hingePlan(
   };
 }
 
+/** Slop half-angle for an axis-locked hinge (Joe's "allowed slop"): the
+ * virtual axis particle may lean this far off the drawn axis before the lock
+ * corrects it. A little give so a drag settles into the cone instead of
+ * fighting an infinitely-stiff pin — the old hard placement overshot (a 5 cm
+ * drag flung to 20 cm) and never converged. ~4°. */
+export const HINGE_AXIS_SLOP_RAD = (4 * Math.PI) / 180;
+
+/** Cone-limit a hinge's virtual axis particle. Given the pivot position, the
+ * current virtual position, the drawn unit axis and offset, return where the
+ * virtual should move so it sits within `slop` radians of the drawn axis
+ * (angle measured at the pivot), preserving its current distance from the
+ * pivot so the axis DISTANCE tie stays this constraint's job to fight, not
+ * ours. Returns null when the virtual is already inside the cone — that null
+ * IS the give: small leans get no correction and nothing to fight, so the
+ * solve converges; only the excess beyond the cone is projected back. */
+export function coneLimitVirtual(pivot: Pt3, virtual: Pt3, axis: Vec3, slop: number): Vec3 | null {
+  const dx = virtual.x - pivot.x;
+  const dy = virtual.y - pivot.y;
+  const dz = virtual.z - pivot.z;
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (len < 1e-9) return null;
+  const along = dx * axis.x + dy * axis.y + dz * axis.z;
+  const px = dx - along * axis.x;
+  const py = dy - along * axis.y;
+  const pz = dz - along * axis.z;
+  const perp = Math.sqrt(px * px + py * py + pz * pz);
+  const angle = Math.atan2(perp, along);
+  if (angle <= slop) return null;
+  // rotate d toward the axis onto the cone boundary, keeping |d| = len
+  const cs = Math.cos(slop) * len;
+  const sn = perp > 1e-12 ? (Math.sin(slop) * len) / perp : 0;
+  return {
+    x: pivot.x + axis.x * cs + px * sn,
+    y: pivot.y + axis.y * cs + py * sn,
+    z: pivot.z + axis.z * cs + pz * sn,
+  };
+}
+
 // ── signed hinge angle + gradients ────────────────────────────────────────
 export interface Angle3 {
   theta: number;

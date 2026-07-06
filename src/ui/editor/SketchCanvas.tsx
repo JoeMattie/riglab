@@ -222,8 +222,6 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const setActivePanel = useEditorStore((s) => s.setActivePanel);
   const setDragNode3 = useEditorStore((s) => s.setDragNode);
   const dragNodeId = useEditorStore((s) => s.dragNodeId);
-  const panelsVisible = useEditorStore((s) => s.panelsVisible);
-  const quadMaximized = useEditorStore((s) => s.quadMaximized);
 
   const mech: Mechanism | null = doc?.mechanism ?? null;
   const isoOctant = useEditorStore((s) => s.isoOctant);

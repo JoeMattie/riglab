@@ -2598,3 +2598,27 @@ tensionOnly is dropped (a rubber band is always tension-only). Inspector
 shows k / slack length / max stretch. Elastic is still equilibrium-only
 (inert in kinematic drag). Examples regenerated. The FEEL improvement of
 gradual force application is a separate follow-up.
+
+### DECISION: axis-locked hinge is compliant (slop cone), not a hard pin (2026-07-06)
+Joe reported "really weird behavior moving pipes/points, especially with axis
+locking on." Root cause: `AxisPinC` hard-placed a locked hinge's virtual axis
+particle exactly on the drawn axis every Gauss-Seidel iteration. Infinitely
+stiff = it fought the drag targets and never settled — a 5 cm out-of-plane
+drag overshot to ~20 cm and the residual jumped 1.7e-5 → 1.5e-2
+(non-converged). This is the first slice of the "playable solver" plan
+(docs/planfiles/PLANFILE-solver-play-feel.md) and delivers Joe's own
+suggestion of "allowed slop for axis-locked hinges."
+
+Replaced the hard placement with a cone-limited constraint (`AxisSlopC`, both
+solvers) built on `coneLimitVirtual` in hinge.ts: the virtual may lean up to
+`HINGE_AXIS_SLOP_RAD` (~4°) off the drawn axis with NO correction — that give
+is what lets a drag settle inside the cone instead of fighting a rigid pin —
+and only the excess past the cone is projected back onto the boundary
+(preserving the virtual's current distance from the pivot so the axis distance
+tie stays that constraint's job). Deterministic, one-sided, reports zero
+mobility (a slop limit, not a persistent equality). Acceptance
+(axisLock.acceptance.test.ts): a locked hinge pulled hard out of plane now
+CONVERGES and both bars stay within slop+ε of the drawn plane; it resists the
+pull ≥3× more than an unlocked hinge; and a hinge drawn starting outside the
+cone still solves finite + converges. Per CLAUDE.md this stays a solve()
+acceptance test, not an e2e spec.
