@@ -107,7 +107,11 @@ function positionOnLink(m: Mechanism, elementId: string, t: number): Vec3 {
 
 /** Split a straight link at parameter t into two segments WELDED at the new
  * node — physically it is still one rigid pipe; the weld keeps it from
- * folding. Returns the new node so callers can attach to it. */
+ * folding. Sliders riding the split rail re-home onto the half their
+ * carriage occupies (travel window remapped into that half's parameter) —
+ * the original element id disappears, and a dangling `alongElementId` would
+ * silently drop the rail constraint (Joe's breaking-slider report). Returns
+ * the new node so callers can attach to it. */
 export function splitLink(
   m: Mechanism,
   elementId: string,
@@ -129,10 +133,36 @@ export function splitLink(
     memberIds: [segA.id, segB.id],
     welds: [[segA.id, segB.id]],
   };
+  const a = nodePosition(m, el.nodeA);
+  const b = nodePosition(m, el.nodeB);
+  const rehome = (e: MechanismElement): MechanismElement => {
+    if (e.type !== 'slider' || e.alongElementId !== elementId) return e;
+    // carriage parameter along the original rail (projection, clamped)
+    const n = nodePosition(m, e.nodeId);
+    const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const len2 = d.x * d.x + d.y * d.y + d.z * d.z;
+    const tn =
+      len2 > 1e-12
+        ? Math.min(
+            1,
+            Math.max(0, ((n.x - a.x) * d.x + (n.y - a.y) * d.y + (n.z - a.z) * d.z) / len2),
+          )
+        : 0;
+    const onA = tn <= t;
+    const [lo, hi] = onA ? [0, t] : [t, 1];
+    const span = Math.max(hi - lo, 1e-9);
+    const remap = (v: number) => Math.min(1, Math.max(0, (v - lo) / span));
+    return {
+      ...e,
+      alongElementId: onA ? segA.id : segB.id,
+      travelMin: remap(e.travelMin),
+      travelMax: remap(e.travelMax),
+    };
+  };
   const mechanism: Mechanism = {
     ...m,
     nodes: [...m.nodes, { id: nodeId, kind: 'free', position: pos }],
-    elements: [...m.elements.filter((e) => e.id !== elementId), segA, segB, weld],
+    elements: [...m.elements.filter((e) => e.id !== elementId).map(rehome), segA, segB, weld],
   };
   return { mechanism, nodeId };
 }
@@ -1237,8 +1267,12 @@ export function canAttachNodes(m: Mechanism, fromNodeId: string, intoNodeId: str
 
 /** Can a drag-drop join land `nodeId` on the body of `elementId`? Only
  * straight links can split; a pipe incident to the dragged node would
- * self-attach. */
+ * self-attach; a node already carrying a joint (a slider carriage riding a
+ * rail, an existing pivot) must never split the pipe it moves along. */
 export function canAttachNodeToLink(m: Mechanism, nodeId: string, elementId: string): boolean {
+  if (m.elements.some((e) => (e.type === 'pivot' || e.type === 'slider') && e.nodeId === nodeId)) {
+    return false;
+  }
   const el = m.elements.find((e) => e.id === elementId);
   return el?.type === 'link' && !elementRefsNode(el, nodeId);
 }
@@ -1339,6 +1373,10 @@ export function attachNodeToLink(
 ): Project {
   if (!canAttachNodeToLink(doc.mechanism, nodeId, elementId)) return doc;
   const { mechanism, nodeId: splitNodeId } = splitLink(doc.mechanism, elementId, t, joint);
+  // if the merge would refuse, bail BEFORE keeping the split — otherwise a
+  // refused join would leave stray welded segments behind (the bug Joe hit
+  // moving a slider along a pipe, before canAttachNodeToLink also guarded)
+  if (!canAttachNodes(mechanism, nodeId, splitNodeId)) return doc;
   return attachNodes({ ...doc, mechanism }, nodeId, splitNodeId, joint);
 }
 

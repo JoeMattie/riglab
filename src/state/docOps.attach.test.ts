@@ -143,4 +143,25 @@ describe('attachNodeToLink', () => {
     expect(canAttachNodeToLink(m0(doc), 'n3', 'L1')).toBe(true);
     expect(canAttachNodeToLink(m0(doc), 'n3', 'nope')).toBe(false);
   });
+
+  it('a slider carriage moving along a pipe never splits it (Joe\'s report)', () => {
+    // n3 carries a slider riding L2; dragging it across L1's body must not
+    // split L1 into welded segments — sliders travel, they do not join
+    const slid = project([
+      L1,
+      L2,
+      {
+        id: 'S1',
+        type: 'slider',
+        maturity: 'sketch',
+        nodeId: 'n3',
+        alongElementId: 'L2',
+        travelMin: 0,
+        travelMax: 1,
+      },
+    ]);
+    expect(canAttachNodeToLink(m0(slid), 'n3', 'L1')).toBe(false);
+    const after = attachNodeToLink(slid, 'n3', 'L1', 0.5);
+    expect(after).toBe(slid); // untouched — no split, no weld, no stray node
+  });
 });

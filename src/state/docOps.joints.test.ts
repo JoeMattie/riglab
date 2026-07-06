@@ -234,6 +234,41 @@ describe('reverseLink', () => {
 });
 
 describe('splitLinkAtMidpoint', () => {
+  it('re-homes a slider riding the split rail onto the half its carriage occupies', () => {
+    // rail n1(0,0)→n2(4,0); carriage n4 at (3,0) = t 0.75, full travel
+    const rail: LinkElement = { ...L1, id: 'R', nodeA: 'n1', nodeB: 'n2' };
+    const doc0 = project(
+      [
+        rail,
+        {
+          id: 'S1',
+          type: 'slider',
+          maturity: 'sketch',
+          nodeId: 'n4',
+          alongElementId: 'R',
+          travelMin: 0,
+          travelMax: 1,
+        },
+      ],
+      [node('n1', 0, 0), node('n2', 4, 0), node('n4', 3, 0)],
+    );
+    const doc = splitLinkAtMidpoint(doc0, 'R'); // split at t = 0.5
+    const m = m0(doc);
+    const slider = m.elements.find((e) => e.type === 'slider');
+    expect(slider?.type).toBe('slider');
+    if (slider?.type !== 'slider') return;
+    // the original rail id is gone; the slider must point at the SECOND half
+    // (its carriage sits at t 0.75 > 0.5) with travel remapped into it
+    const half = m.elements.find((e) => e.id === slider.alongElementId);
+    expect(half?.type).toBe('link');
+    if (half?.type !== 'link') return;
+    const pos = (id: string) => m.nodes.find((n) => n.id === id)!.position;
+    expect(pos(half.nodeA).x).toBeCloseTo(2, 9); // split node
+    expect(pos(half.nodeB).x).toBeCloseTo(4, 9);
+    expect(slider.travelMin).toBe(0);
+    expect(slider.travelMax).toBe(1);
+  });
+
   it('splits a link into two welded halves at the midpoint', () => {
     const doc = splitLinkAtMidpoint(project(), 'L1');
     const m = m0(doc);
