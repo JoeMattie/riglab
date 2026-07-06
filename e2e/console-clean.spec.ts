@@ -64,14 +64,14 @@ test('every bundled example renders and survives a UI sweep with a clean console
     await page.mouse.up();
     await expectClean(`${id}: marquee select`);
 
-    // the design face docks the tabbed inspector/checklist/materials/BOM —
+    // the design WINDOW hosts the tabbed inspector/checklist/materials/BOM —
     // render each tab against this example (with the marquee selection live)
-    await page.getByTestId('face-toggle').getByRole('button', { name: 'Design' }).click();
+    await page.getByTestId('face-design').click();
     for (const tab of ['inspector', 'checklist', 'materials', 'bom']) {
       await page.getByTestId(`right-tab-${tab}`).click();
     }
-    await expectClean(`${id}: design-face tabs`);
-    await page.getByTestId('face-toggle').getByRole('button', { name: 'Sketch' }).click();
+    await expectClean(`${id}: design-window tabs`);
+    await page.getByTestId('design-window-close').click();
     await page.keyboard.press('Escape');
   }
 
