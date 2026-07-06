@@ -962,20 +962,66 @@ export function setLengthLocked(doc: Project, elementId: string, locked: boolean
   );
 }
 
+/** Unit direction from `nodeId` toward a member's adjacent point, or null
+ * when the member doesn't touch the node / is degenerate there. */
+function memberDirAtNode(m: Mechanism, el: MechanismElement, nodeId: string): Vec3 | null {
+  const pos = (id: string) => m.nodes.find((n) => n.id === id)?.position;
+  let other: Vec3 | undefined;
+  if (el.type === 'link' || el.type === 'telescope') {
+    other = el.nodeA === nodeId ? pos(el.nodeB) : el.nodeB === nodeId ? pos(el.nodeA) : undefined;
+  } else if (el.type === 'bentLink') {
+    const i = el.nodeIds.indexOf(nodeId);
+    if (i >= 0) other = pos(el.nodeIds[i + 1] ?? el.nodeIds[i - 1]!);
+  }
+  const at = pos(nodeId);
+  if (!other || !at) return null;
+  const d = { x: other.x - at.x, y: other.y - at.y, z: other.z - at.z };
+  const len = Math.hypot(d.x, d.y, d.z);
+  return len > 1e-9 ? { x: d.x / len, y: d.y / len, z: d.z / len } : null;
+}
+
+/** The pair of members whose directions at the node are most anti-parallel —
+ * the straight-through continuation (e.g. the two halves of a split pipe).
+ * Null when fewer than two members carry a usable direction. */
+function mostCollinearPair(
+  m: Mechanism,
+  nodeId: string,
+  memberIds: readonly string[],
+): [string, string] | null {
+  const dirs = memberIds.flatMap((id) => {
+    const el = m.elements.find((e) => e.id === id);
+    const dir = el ? memberDirAtNode(m, el, nodeId) : null;
+    return dir ? [{ id, dir }] : [];
+  });
+  let best: { pair: [string, string]; dot: number } | null = null;
+  for (let i = 0; i < dirs.length; i++) {
+    for (let j = i + 1; j < dirs.length; j++) {
+      const a = dirs[i]!;
+      const b = dirs[j]!;
+      const dot = a.dir.x * b.dir.x + a.dir.y * b.dir.y + a.dir.z * b.dir.z;
+      if (!best || dot < best.dot) best = { pair: [a.id, b.id], dot };
+    }
+  }
+  return best?.pair ?? null;
+}
+
 /** Re-realize the joint at a node (joint popover):
  * - 'pivot' — members rotate about the joint: any pivot element at the node
  *   loses its welds; with no element yet, an explicit pivot is materialized
  *   (in 3D a bare shared node is spherical, so hinge-by-default needs the
  *   element). A `joint` argument re-aims an existing hinge / switches to
  *   spherical.
+ * - 'weldPivot' — the mid-pipe junction: the straight-through (most
+ *   collinear) member pair stays welded as one physical pipe; every other
+ *   member pivots about the pin. Needs ≥3 members.
  * - 'weld' — all members rigid: a pivot element is created (or updated) with
  *   every member pair welded.
  * - 'anchor' — the node is grounded (double-click parity).
- * No-op when a joint kind needs ≥2 members and the node has fewer. */
+ * No-op when a joint kind needs ≥2 (or ≥3) members and the node has fewer. */
 export function setNodeJoint(
   doc: Project,
   nodeId: string,
-  kind: 'pivot' | 'weld' | 'anchor',
+  kind: 'pivot' | 'weldPivot' | 'weld' | 'anchor',
   joint?: PivotJoint,
 ): Project {
   return withMechanism(doc, (m) => {
@@ -1015,6 +1061,31 @@ export function setNodeJoint(
           } satisfies PivotElement,
         ];
       }
+    } else if (kind === 'weldPivot') {
+      // mid-pipe junction: the straight-through pair (the split halves)
+      // stays welded as one physical pipe; every other member pivots
+      if (members.length < 3) return m;
+      const pair = mostCollinearPair(m, nodeId, members);
+      if (!pair) return m;
+      const welds: [string, string][] = [pair];
+      elements = existing
+        ? elements.map((e) =>
+            e.id === existing.id
+              ? { ...existing, memberIds: members, welds, joint: joint ?? existing.joint }
+              : e,
+          )
+        : [
+            ...elements,
+            {
+              id: uid(),
+              type: 'pivot',
+              maturity: 'sketch',
+              nodeId,
+              joint: joint ?? DEFAULT_PIVOT_JOINT,
+              memberIds: members,
+              welds,
+            } satisfies PivotElement,
+          ];
     } else {
       if (members.length < 2) return m;
       const first = members[0]!;
@@ -1123,6 +1194,152 @@ export function detachNode(doc: Project, nodeId: string): Project {
       });
     return { ...m, elements, nodes: [...m.nodes, ...newNodes] };
   });
+}
+
+/** true when `el` references `nodeId` (any element type). */
+function elementRefsNode(el: MechanismElement, nodeId: string): boolean {
+  switch (el.type) {
+    case 'link':
+    case 'telescope':
+    case 'elastic':
+      return el.nodeA === nodeId || el.nodeB === nodeId;
+    case 'bentLink':
+      return el.nodeIds.includes(nodeId);
+    case 'rope':
+      return el.path.includes(nodeId);
+    case 'bowden':
+      return [el.a1, el.a2, el.b1, el.b2].includes(nodeId);
+    case 'pivot':
+    case 'slider':
+      return el.nodeId === nodeId;
+    default:
+      return false;
+  }
+}
+
+/** Can a drag-drop join merge `fromNodeId` into `intoNodeId`? Degenerate
+ * merges are refused: identical nodes, a joint element (pivot/slider)
+ * already living on the dragged node (merging joints is undefined), a
+ * slider carriage at the target, or the two nodes sharing an element (the
+ * merge would collapse it into a self-loop). */
+export function canAttachNodes(m: Mechanism, fromNodeId: string, intoNodeId: string): boolean {
+  if (fromNodeId === intoNodeId) return false;
+  if (!m.nodes.some((n) => n.id === fromNodeId) || !m.nodes.some((n) => n.id === intoNodeId)) {
+    return false;
+  }
+  for (const e of m.elements) {
+    if ((e.type === 'pivot' || e.type === 'slider') && e.nodeId === fromNodeId) return false;
+    if (e.type === 'slider' && e.nodeId === intoNodeId) return false;
+    if (elementRefsNode(e, fromNodeId) && elementRefsNode(e, intoNodeId)) return false;
+  }
+  return true;
+}
+
+/** Can a drag-drop join land `nodeId` on the body of `elementId`? Only
+ * straight links can split; a pipe incident to the dragged node would
+ * self-attach. */
+export function canAttachNodeToLink(m: Mechanism, nodeId: string, elementId: string): boolean {
+  const el = m.elements.find((e) => e.id === elementId);
+  return el?.type === 'link' && !elementRefsNode(el, nodeId);
+}
+
+/** Join a dragged end onto another end (snap-to-join): merge `fromNodeId`
+ * into `intoNodeId` — every reference (elements, bindings, hung masses)
+ * rewrites to the target node, the merged node disappears, and the junction
+ * is pinned by a pivot: an existing pivot at the target adopts the arriving
+ * members; otherwise a fresh hinge about `joint` is materialized. No-op when
+ * `canAttachNodes` refuses. */
+export function attachNodes(
+  doc: Project,
+  fromNodeId: string,
+  intoNodeId: string,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
+): Project {
+  const m0 = doc.mechanism;
+  if (!canAttachNodes(m0, fromNodeId, intoNodeId)) return doc;
+  const r = (id: string): string => (id === fromNodeId ? intoNodeId : id);
+  let m: Mechanism = {
+    ...m0,
+    nodes: m0.nodes.filter((n) => n.id !== fromNodeId),
+    elements: m0.elements.map((e): MechanismElement => {
+      switch (e.type) {
+        case 'link':
+        case 'telescope':
+        case 'elastic':
+          return e.nodeA === fromNodeId || e.nodeB === fromNodeId
+            ? { ...e, nodeA: r(e.nodeA), nodeB: r(e.nodeB) }
+            : e;
+        case 'bentLink':
+          return e.nodeIds.includes(fromNodeId) ? { ...e, nodeIds: e.nodeIds.map(r) } : e;
+        case 'rope':
+          return e.path.includes(fromNodeId) ? { ...e, path: e.path.map(r) } : e;
+        case 'bowden':
+          return elementRefsNode(e, fromNodeId)
+            ? { ...e, a1: r(e.a1), a2: r(e.a2), b1: r(e.b1), b2: r(e.b2) }
+            : e;
+        default:
+          return e;
+      }
+    }),
+    skeletonBindings: m0.skeletonBindings.map((b) => ({ ...b, nodeId: r(b.nodeId) })),
+    anchorBindings: m0.anchorBindings.map((b) => ({ ...b, nodeId: r(b.nodeId) })),
+    pointMasses: m0.pointMasses.map((p) => ({ ...p, nodeId: r(p.nodeId) })),
+  };
+  // pin the junction: an existing pivot adopts the full member set, or a
+  // fresh hinge pivot materializes once the node actually joins ≥2 members
+  const members = elementsAtNode(m, intoNodeId);
+  const existing = m.elements.find(
+    (e): e is PivotElement => e.type === 'pivot' && e.nodeId === intoNodeId,
+  );
+  if (existing) {
+    m = {
+      ...m,
+      elements: m.elements.map((e) =>
+        e.id === existing.id ? { ...existing, memberIds: members } : e,
+      ),
+    };
+  } else if (members.length >= 2) {
+    m = {
+      ...m,
+      elements: [
+        ...m.elements,
+        {
+          id: uid(),
+          type: 'pivot',
+          maturity: 'sketch',
+          nodeId: intoNodeId,
+          joint,
+          memberIds: members,
+          welds: [],
+        } satisfies PivotElement,
+      ],
+    };
+  }
+  const rewriteAttach = <A extends { kind: string }>(attach: A): A =>
+    attach.kind === 'node' && (attach as A & { nodeId: string }).nodeId === fromNodeId
+      ? { ...attach, nodeId: intoNodeId }
+      : attach;
+  return {
+    ...doc,
+    mechanism: m,
+    pointMasses: doc.pointMasses.map((pm) => ({ ...pm, attach: rewriteAttach(pm.attach) })),
+    foamPlates: doc.foamPlates.map((fp) => ({ ...fp, attach: rewriteAttach(fp.attach) })),
+  };
+}
+
+/** Join a dragged end onto a straight link's BODY: split the link at `t`
+ * (the split pair stays welded — physically one pipe) and merge the end
+ * into the split node, pinned by a pivot about `joint`. */
+export function attachNodeToLink(
+  doc: Project,
+  nodeId: string,
+  elementId: string,
+  t: number,
+  joint: PivotJoint = DEFAULT_PIVOT_JOINT,
+): Project {
+  if (!canAttachNodeToLink(doc.mechanism, nodeId, elementId)) return doc;
+  const { mechanism, nodeId: splitNodeId } = splitLink(doc.mechanism, elementId, t, joint);
+  return attachNodes({ ...doc, mechanism }, nodeId, splitNodeId, joint);
 }
 
 /** Swap a link/telescope's A and B ends (selection-card "Reverse"). Length

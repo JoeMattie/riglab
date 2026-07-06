@@ -77,6 +77,54 @@ describe('setNodeJoint', () => {
     expect(pivotOf(doc)!.welds).toEqual([]);
   });
 
+  it('weldPivot welds only the straight-through pair; arrivals pivot', () => {
+    // n1(0,0) — n2(3,4) — n3(6,4): L1 continues into L2 at ~straight; a
+    // third pipe L3 arrives at n2 from n4 well off that line
+    const L3: LinkElement = {
+      id: 'L3',
+      type: 'link',
+      maturity: 'sketch',
+      nodeA: 'n2',
+      nodeB: 'n4',
+      pointMasses: [],
+    };
+    const doc = setNodeJoint(
+      project(
+        [L1, L2, L3],
+        [node('n1', 0, 4), node('n2', 3, 4), node('n3', 6, 4), node('n4', 3, 0)],
+      ),
+      'n2',
+      'weldPivot',
+    );
+    const pivot = pivotOf(doc)!;
+    expect(new Set(pivot.memberIds)).toEqual(new Set(['L1', 'L2', 'L3']));
+    // exactly ONE weld, and it joins the collinear halves — L3 stays free
+    expect(pivot.welds).toHaveLength(1);
+    expect(new Set(pivot.welds[0])).toEqual(new Set(['L1', 'L2']));
+  });
+
+  it('weldPivot converts an existing full weld back to the mixed junction', () => {
+    const L3: LinkElement = {
+      id: 'L3',
+      type: 'link',
+      maturity: 'sketch',
+      nodeA: 'n2',
+      nodeB: 'n4',
+      pointMasses: [],
+    };
+    const nodes = [node('n1', 0, 4), node('n2', 3, 4), node('n3', 6, 4), node('n4', 3, 0)];
+    let doc = setNodeJoint(project([L1, L2, L3], nodes), 'n2', 'weld');
+    expect(pivotOf(doc)!.welds).toHaveLength(2); // fully welded
+    doc = setNodeJoint(doc, 'n2', 'weldPivot');
+    expect(pivotOf(doc)!.welds).toHaveLength(1);
+    expect(new Set(pivotOf(doc)!.welds[0])).toEqual(new Set(['L1', 'L2']));
+  });
+
+  it('weldPivot is a no-op with fewer than three members', () => {
+    const doc = setNodeJoint(project(), 'n2', 'weldPivot');
+    expect(pivotOf(doc)).toBeUndefined();
+  });
+
   it('pivot materializes an explicit hinge with the caller-supplied axis', () => {
     // in 3D a bare shared node is spherical, so hinge-by-default needs the
     // element; the UI passes the active panel's normal
