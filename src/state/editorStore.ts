@@ -35,7 +35,7 @@ export type Face = 'sketch' | 'design';
 export type QuadPanelId = 'top' | 'front' | 'side' | 'persp';
 
 /** The three editable orthographic panels (perspective has no work plane). */
-export type OrthoPanelId = 'top' | 'front' | 'side';
+export type OrthoPanelId = 'top' | 'front' | 'side' | 'iso';
 
 /** Work-plane depth along each ortho panel's normal, metres. Default 0;
  * edited via the panel-header chip, and adopted from clicked/snapped
@@ -215,8 +215,13 @@ export interface EditorState {
   /** per-panel active work-plane depth along the panel normal (m) */
   panelDepths: PanelDepths;
   /** the panel that last received pointer input — floating per-selection UI
-   * (joint popover, selection card) renders only in this panel */
-  activePanel: QuadPanelId;
+   * (joint popover, selection card) renders only in this panel. 'iso' is the
+   * single-panel isometric workspace (PLANFILE-iso-view.md). */
+  activePanel: QuadPanelId | 'iso';
+  /** quad grid vs the single-panel isometric editor (PLANFILE-iso-view.md);
+   * a session lens like constraintsOn */
+  workspaceMode: 'quad' | 'iso';
+  setWorkspaceMode(mode: 'quad' | 'iso'): void;
   /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
   controlsOpen: boolean;
   /** selection clipboard (PLANFILE-quad-panel-controls C) — a full snapshot
@@ -269,7 +274,7 @@ export interface EditorState {
   /** top-bar visibility toggle; refuses to hide the last visible panel */
   togglePanelVisible(panel: QuadPanelId): void;
   setPanelDepth(panel: OrthoPanelId, depthM: number): void;
-  setActivePanel(panel: QuadPanelId): void;
+  setActivePanel(panel: QuadPanelId | 'iso'): void;
   setControlsOpen(open: boolean): void;
 }
 
@@ -309,8 +314,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   quadMaximized: null,
   quadSplit: storedLayout?.split ?? { x: 0.5, y: 0.5 },
   panelsVisible: storedLayout?.visible ?? { top: true, persp: true, front: true, side: true },
-  panelDepths: { top: 0, front: 0, side: 0 },
+  panelDepths: { top: 0, front: 0, side: 0, iso: 0 },
   activePanel: 'side',
+  workspaceMode: 'quad',
   controlsOpen: false,
   clipboard: null,
   setClipboard: (clipboard) => set({ clipboard }),
@@ -326,7 +332,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       lengthEdit: null,
       autoProposal: null,
       clipboard: null,
-      panelDepths: { top: 0, front: 0, side: 0 },
+      panelDepths: { top: 0, front: 0, side: 0, iso: 0 },
     }),
   setTool: (tool) => set({ tool, pendingConnect: null, openPopover: null, lengthEdit: null }),
   setFace: (face) => set({ face }),
@@ -429,5 +435,17 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setPanelDepth: (panel, depthM) =>
     set((s) => ({ panelDepths: { ...s.panelDepths, [panel]: depthM } })),
   setActivePanel: (activePanel) => set({ activePanel }),
+  setWorkspaceMode: (workspaceMode) =>
+    set((s) => ({
+      workspaceMode,
+      // entering iso makes it the active (popover-hosting) panel; leaving
+      // hands focus back to a visible quad panel
+      activePanel:
+        workspaceMode === 'iso'
+          ? 'iso'
+          : s.activePanel === 'iso'
+            ? (PANEL_ORDER.find((p) => s.panelsVisible[p]) ?? 'side')
+            : s.activePanel,
+    })),
   setControlsOpen: (controlsOpen) => set({ controlsOpen }),
 }));

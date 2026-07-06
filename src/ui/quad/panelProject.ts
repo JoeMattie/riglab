@@ -9,10 +9,25 @@ import type { OrthoPanelId } from '../../state/editorStore';
 
 export type { OrthoPanelId };
 
+/** Classic isometric basis (PLANFILE-iso-view.md): viewer at +(1,1,1),
+ * world-up dominating screen-up. Orthonormal and right-handed, so the shared
+ * project/lift math round-trips exactly like the principal frames. Defined
+ * here (not placement.ts) — it is a workspace view, not a document
+ * ViewOrientation. */
+const S2 = Math.SQRT2;
+const S3 = Math.sqrt(3);
+const S6 = Math.sqrt(6);
+const ISO_FRAME: OrientationFrame = {
+  xAxis: { x: 1 / S2, y: 0, z: -1 / S2 },
+  yAxis: { x: -1 / S6, y: 2 / S6, z: -1 / S6 },
+  zAxis: { x: 1 / S3, y: 1 / S3, z: 1 / S3 },
+};
+
 export const PANEL_FRAME: Record<OrthoPanelId, OrientationFrame> = {
   top: orientationFrame('top'),
   front: orientationFrame('front'),
   side: orientationFrame('side-left'),
+  iso: ISO_FRAME,
 };
 
 const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;

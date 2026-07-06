@@ -11,7 +11,7 @@ import { PANEL_FRAME } from '../quad/panelProject';
 /** Paste lands ~10 cm down-right IN THE ACTIVE PANEL'S PLANE, so the copy is
  * visibly offset where the user is working (the perspective panel falls back
  * to the side frame). */
-export function pasteOffset(activePanel: QuadPanelId): Vec3 {
+export function pasteOffset(activePanel: QuadPanelId | 'iso'): Vec3 {
   const f = PANEL_FRAME[activePanel === 'persp' ? 'side' : activePanel];
   return {
     x: 0.1 * (f.xAxis.x - f.yAxis.x),

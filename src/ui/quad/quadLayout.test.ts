@@ -129,6 +129,10 @@ describe('quadLayout: input order', () => {
 });
 
 describe('selectionCardHost (PLANFILE-multiselect-drag-constraints follow-up)', () => {
+  it('returns null for the single-panel iso workspace (it hosts its own card)', () => {
+    expect(selectionCardHost('iso', ALL, null)).toBeNull();
+  });
+
   const ALL = { top: true, persp: true, front: true, side: true };
 
   it('picks the nearest OTHER ortho panel — never the one being worked in', () => {

@@ -64,6 +64,43 @@ describe('panelToWorld / panelDepthOf', () => {
   });
 });
 
+describe('the isometric frame (PLANFILE-iso-view.md)', () => {
+  const f = PANEL_FRAME.iso;
+  const dot = (a: Vec3, b: Vec3) => a.x * b.x + a.y * b.y + a.z * b.z;
+
+  it('is orthonormal and right-handed', () => {
+    for (const ax of [f.xAxis, f.yAxis, f.zAxis]) {
+      expect(Math.hypot(ax.x, ax.y, ax.z)).toBeCloseTo(1, 12);
+    }
+    expect(dot(f.xAxis, f.yAxis)).toBeCloseTo(0, 12);
+    expect(dot(f.yAxis, f.zAxis)).toBeCloseTo(0, 12);
+    expect(dot(f.zAxis, f.xAxis)).toBeCloseTo(0, 12);
+    // right-handed: x × y = z
+    const cross = {
+      x: f.xAxis.y * f.yAxis.z - f.xAxis.z * f.yAxis.y,
+      y: f.xAxis.z * f.yAxis.x - f.xAxis.x * f.yAxis.z,
+      z: f.xAxis.x * f.yAxis.y - f.xAxis.y * f.yAxis.x,
+    };
+    expect(cross.x).toBeCloseTo(f.zAxis.x, 12);
+    expect(cross.y).toBeCloseTo(f.zAxis.y, 12);
+    expect(cross.z).toBeCloseTo(f.zAxis.z, 12);
+  });
+
+  it('round-trips project → lift at the point own depth', () => {
+    const w: Vec3 = { x: 0.4, y: 1.2, z: -0.3 };
+    const lifted = panelToWorld(projectToPanel(w, f), f, panelDepthOf(w, f));
+    expect(lifted.x).toBeCloseTo(w.x, 12);
+    expect(lifted.y).toBeCloseTo(w.y, 12);
+    expect(lifted.z).toBeCloseTo(w.z, 12);
+  });
+
+  it('world up projects straight up on screen (no roll)', () => {
+    const p = projectToPanel({ x: 0, y: 1, z: 0 }, f);
+    expect(p.x).toBeCloseTo(0, 12);
+    expect(p.y).toBeGreaterThan(0);
+  });
+});
+
 describe('projectPositions', () => {
   it('projects every entry of a positions record', () => {
     const positions: Record<string, Vec3> = {

@@ -196,9 +196,9 @@ export function EditorShell() {
     // settled equilibrium sag) — Vec3 document space
     hook.getRenderPositions = () => currentRenderPositions();
     // per-panel view transforms published by the sketch canvases
-    hook.getView = (panel?: 'top' | 'front' | 'side') =>
+    hook.getView = (panel?: 'top' | 'front' | 'side' | 'iso') =>
       publishedViews[
-        panel ?? (useEditorStore.getState().activePanel as 'top' | 'front' | 'side')
+        panel ?? (useEditorStore.getState().activePanel as 'top' | 'front' | 'side' | 'iso')
       ] ?? publishedViews.side;
     // scripted-verification seam for the compound 3D world: node/element
     // counts, render mode, pipe model stats, total mass from src/analysis

@@ -181,9 +181,57 @@ export function QuadView() {
   const setActivePanel = useEditorStore((s) => s.setActivePanel);
   const quadSplit = useEditorStore((s) => s.quadSplit);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
+  const workspaceMode = useEditorStore((s) => s.workspaceMode);
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (!current) return null;
+
+  // single-panel isometric workspace (PLANFILE-iso-view.md): the same
+  // SketchCanvas editing stack through the iso frame, full-bleed
+  if (workspaceMode === 'iso') {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: T.bg,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        data-testid="quad-panel-iso"
+        onPointerDown={() => setActivePanel('iso')}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 10px',
+            borderBottom: `1px solid ${T.hairline}`,
+            flex: 'none',
+          }}
+        >
+          <span
+            data-testid="quad-title-iso"
+            style={{
+              padding: '3px 0',
+              font: `500 10.5px ${T.sans}`,
+              letterSpacing: '.07em',
+              textTransform: 'uppercase',
+              color: T.text,
+              userSelect: 'none',
+              flex: 1,
+            }}
+          >
+            Isometric
+          </span>
+          <DepthChip panelId="iso" />
+        </div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
+          <SketchCanvas panelId="iso" />
+        </div>
+      </div>
+    );
+  }
 
   const visible: QuadPanelId[] = quadMaximized
     ? [quadMaximized]

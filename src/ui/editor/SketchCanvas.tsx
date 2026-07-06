@@ -1626,14 +1626,41 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
           ))}
           {/* ground plane at world y = 0 (slice C): the solver's floor —
               free nodes cannot be dragged or settle below it. Not in `top`
-              (that view maps the ground plane itself). */}
-          {panelId !== 'top' && (
-            <Line
-              points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
-              stroke={C.silhouette}
-              strokeWidth={1.5}
-              dash={[10, 6]}
-            />
+              (that view maps the ground plane itself). Upright panels draw
+              it as a horizontal line; ISO projects the ground's ±x/±z axes
+              instead — a flat line would be wrong under an axonometric
+              projection (PLANFILE-iso-view.md). */}
+          {panelId === 'iso' ? (
+            (
+              [
+                [
+                  { x: -100, y: 0, z: 0 },
+                  { x: 100, y: 0, z: 0 },
+                ],
+                [
+                  { x: 0, y: 0, z: -100 },
+                  { x: 0, y: 0, z: 100 },
+                ],
+              ] as const
+            ).map((axis, i) => (
+              <Line
+                // biome-ignore lint/suspicious/noArrayIndexKey: two fixed ground axes, never reordered
+                key={`ga${i}`}
+                points={flat(axis.map((w) => projectToPanel(w, frame)))}
+                stroke={C.silhouette}
+                strokeWidth={1.5}
+                dash={[10, 6]}
+              />
+            ))
+          ) : (
+            panelId !== 'top' && (
+              <Line
+                points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
+                stroke={C.silhouette}
+                strokeWidth={1.5}
+                dash={[10, 6]}
+              />
+            )
           )}
           {silhouette?.outlines.map((poly, i) => (
             <Line
@@ -2157,7 +2184,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
           covers the geometry being worked on (selectionCardHost); it hides
           during any drag, in any panel (dragNodeId covers cross-panel drags,
           the local states cover this panel's endpoint drags) */}
-      {selectionCardHost(activePanel, panelsVisible, quadMaximized) === panelId &&
+      {(panelId === 'iso'
+        ? activePanel === 'iso'
+        : selectionCardHost(activePanel, panelsVisible, quadMaximized) === panelId) &&
         tool === 'select' &&
         !endpointDrag &&
         !dragNode &&

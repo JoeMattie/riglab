@@ -2426,3 +2426,36 @@ mode is gone. MaterialsPanel pipe rows render a name+size header row that
 expands to the editable fields; a freshly added pipe opens for naming.
 Covered by component tests (toggle, window close, collapsed-by-default,
 add-expands) and a scripted built-app check (centered, draggable, collapse).
+
+### DECISION: splitLink re-homes sliders; carriages never split rails (2026-07-06)
+Joe reported sliders breaking off their rail during playback. Two holes, one
+root: splitLink replaces the rail element with two fresh ids, and a slider's
+`alongElementId` pointing at the old id silently dropped the rail constraint
+in the solver (constraint simply not built). (a) splitLink now re-homes any
+slider riding the split rail onto the half its carriage occupies, with the
+travel window remapped into that half's parameter. (b) `canAttachNodeToLink`
+refuses a dragged node that already carries a joint (a slider carriage
+moving along a pipe must slide, not split-and-weld), and attachNodeToLink
+bails BEFORE keeping the split when the merge would refuse — previously a
+refused join could leave stray welded segments behind. Documents damaged
+before this fix (sliders whose alongElementId dangles) don't self-heal:
+delete and re-create the slider, or undo past the split. Covered in
+docOps.joints and docOps.attach tests.
+
+### DECISION: first-class isometric editor view (2026-07-06)
+Joe asked for a fully first-class isometric non-perspective editor view as a
+toggleable single-panel layout — planned in PLANFILE-iso-view.md. 'iso' is a
+fourth OrthoPanelId with a classic axonometric frame (viewer +(1,1,1), basis
+in panelProject.ts); the entire SketchCanvas stack (projection, snapping,
+drawing, drags, joint menus, plane locks, debug seams) comes along because
+it is frame-parameterized. `workspaceMode: 'quad' | 'iso'` (session lens)
+swaps the quad grid for one full-workspace iso panel via an "Iso" button in
+the Panels chip; entering makes iso the active panel, and the selection card
+hosts in the iso panel itself (selectionCardHost returns null for iso — no
+other viewport exists). The world-ground reads as the projected ±x/±z axes
+instead of the upright panels' horizontal line. v1 accepts that drawing in
+iso lifts strokes into the tilted iso work plane (⊥ (1,1,1)) — geometrically
+consistent, called out in the planfile. Covered by frame/round-trip unit
+tests, toggle component tests, and a scripted built-app check (draw in iso →
+document geometry lies exactly in the iso plane, drag/zoom work, quad
+restores).

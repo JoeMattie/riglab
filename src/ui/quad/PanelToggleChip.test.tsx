@@ -35,6 +35,17 @@ describe('PanelToggleChip', () => {
     expect(persp).toHaveProperty('ariaPressed', 'true');
   });
 
+  it('the Iso button swaps the workspace to the single-panel isometric view', () => {
+    render(<PanelToggleChip />);
+    const iso = screen.getByTestId('workspace-iso-toggle');
+    fireEvent.click(iso);
+    expect(useEditorStore.getState().workspaceMode).toBe('iso');
+    expect(useEditorStore.getState().activePanel).toBe('iso');
+    fireEvent.click(screen.getByTestId('workspace-iso-toggle'));
+    expect(useEditorStore.getState().workspaceMode).toBe('quad');
+    expect(useEditorStore.getState().activePanel).not.toBe('iso');
+  });
+
   it('the last visible panel refuses to toggle off and stays pressed', () => {
     useEditorStore.setState({
       panelsVisible: { top: false, persp: false, front: false, side: true },

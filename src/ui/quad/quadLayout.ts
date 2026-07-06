@@ -40,11 +40,15 @@ export const PANEL_ORDER: readonly QuadPanelId[] = ['top', 'persp', 'front', 'si
  * visible panel) it stays in the working panel; null only when no ortho
  * panel is on screen at all (perspective maximized). */
 export function selectionCardHost(
-  active: QuadPanelId,
+  active: QuadPanelId | 'iso',
   visible: Record<QuadPanelId, boolean>,
   maximized: QuadPanelId | null,
 ): OrthoPanelId | null {
-  const ORTHO: readonly OrthoPanelId[] = ['top', 'front', 'side'];
+  // the single-panel iso workspace hosts its own card (there IS no other
+  // viewport) — SketchCanvas short-circuits before asking; anything else
+  // asking while iso is active gets no host (PLANFILE-iso-view.md)
+  if (active === 'iso') return null;
+  const ORTHO = ['top', 'front', 'side'] as const;
   const onScreen = (p: QuadPanelId): boolean => (maximized ? p === maximized : visible[p]);
   const others = ORTHO.filter((p) => p !== active && onScreen(p));
   if (others.length === 0) return ORTHO.find((p) => p === active && onScreen(p)) ?? null;
