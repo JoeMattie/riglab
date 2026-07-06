@@ -11,8 +11,15 @@ bend a little.
 - The rig is nearly ungrounded: 2 of 13 nodes bound to the wearer, the other
   11 free → **24 DOF**. A leg that "just bends" wants ~1–2 DOF. High DOF is
   the main reason a drag reconfigures unpredictably.
-- Mixed hinge axes: 8 hinges are side-plane (+z, correct), 4 are top-plane
-  (+y) → the leg splays/twists instead of bending.
+- Mixed hinge axes: 8 hinges +z, 4 hinges +y. **Correction (slice 4,
+  measured from geometry):** the earlier "8 correct / 4 wrong, flip +y→+z"
+  read was BACKWARDS. The foot is drawn flat in the x–z plane (most nodes sit
+  at y≈0, spread in x and z); a leg rises in +y to the shoulder. So the foot's
+  hinges should be +y (flex flat) and the risers' should be +z. In the file
+  the two are mixed: `detectOffPlaneHinges` flags 5 hinges whose axis lies
+  INSIDE their members' plane (currently +z, members flat in x–z → want +y) —
+  exactly the foot links that flip out of plane when posed. The guard snaps
+  each hinge's axis to its own members' plane normal, whichever way that is.
 - **Axis-lock is buggy** (introduced this session): `AxisPinC` hard-pins the
   virtual axis particle every iteration. A 5 cm drag overshoots to 20 cm and
   residual jumps 1.7e-5 → 1.5e-2 (non-converged). Infinitely stiff = wrong.
@@ -66,11 +73,22 @@ sphere). Logged in DECISIONS.md (2026-07-06). Equilibrium-relaxation friction
 deferred (this is the interactive-drag case Joe hits); gesture *feel* is his
 to judge live.
 
-### Slice 4 — raptor repair + off-plane-hinge guard
-Fix raptor-test: ground the hip, flip the 4 +y hinges to +z. Add a
-`repairOffPlaneHinges` docOp + a UI nudge (checklist / one-click) that flags
-hinges whose axis doesn't match the panel most of their members lie in, and
-offers to snap them to the dominant plane.
+### Slice 4 — raptor repair + off-plane-hinge guard 🚧 IN PROGRESS
+Added `detectOffPlaneHinges` (src/design/hingePlaneRepair.ts) +
+`repairOffPlaneHinges` docOp: a hinge axis should be perpendicular to the
+plane its members span; the guard flags hinges whose drawn axis differs from
+that normal by >10° and snaps it to the nearest cardinal of the normal.
+Covered by hingePlaneRepair.test.ts + docOps.hingeRepair.test.ts (detects,
+suggests, idempotent, skips collinear). Raptor: writing a repaired copy to
+`~/Downloads/raptor-test-repaired.riglab.json` flips the 5 flat-foot hinges
++z→+y (see corrected diagnosis above — the opposite direction from the
+original plan). Both original and repaired solve/converge at rest (DOF 24
+either way — axis direction doesn't change DOF; the behavioural difference
+shows under drag). NOT grounding the hip — that restructures Joe's bindings
+and is his modeling call, not an automated repair.
+
+Remaining: a UI affordance (conditional "Fix N off-plane hinge(s)" button) so
+the guard is reachable — a proposal Joe reviews, never a silent auto-apply.
 
 ## Non-goals
 - Not a physics-engine swap (assessed: multi-day, loses diagnostics /

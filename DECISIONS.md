@@ -2646,3 +2646,26 @@ and friction is lag-not-cap (still arrives, on the unit sphere). Default 0
 keeps every existing solver acceptance pose unchanged. Equilibrium friction
 (damping the force relaxation) is deferred — this is the interactive-drag
 case Joe hits. Gesture *feel* is his to judge live.
+
+### DECISION: off-plane hinge guard + corrected raptor diagnosis (2026-07-06)
+Slice 4 of PLANFILE-solver-play-feel.md. A hinge axis should be perpendicular
+to the plane its members swing in; when it isn't, the joint splays/twists out
+of plane instead of bending (part of Joe's "weird behavior"). Added
+`detectOffPlaneHinges` (src/design/hingePlaneRepair.ts): for each hinge, fit
+the plane of the pivot + its members' adjacent nodes (triangle-fan normal),
+and if the drawn axis differs from that normal by >10° (OFF_PLANE_TOL_RAD),
+flag it and suggest the nearest cardinal to the normal. `repairOffPlaneHinges`
+docOp applies the suggestions (no-op + idempotent when clean).
+
+**Deviation from plan, called out:** the planfile said "flip the 4 +y hinges
+to +z." Measuring the raptor geometry proved that BACKWARDS. The foot is drawn
+flat in the x–z plane (most nodes at y≈0, spread in x and z), a leg rises in
++y; so the foot hinges should be +y and the risers +z. The file mixes them:
+the guard flags 5 hinges currently on +z whose members lie flat in x–z (axis
+lying inside its own swing plane — exactly the foot links that flip out of
+plane when posed) and snaps them to +y. A repaired copy is written to
+~/Downloads/raptor-test-repaired.riglab.json (Joe's original left untouched).
+Both solve/converge at rest (DOF 24 either way — direction doesn't change DOF;
+the difference is behavioural under drag). NOT auto-grounding the hip: that
+restructures Joe's wearer bindings and is his modeling decision. The guard is
+surfaced as a reviewed one-click proposal in the UI, never a silent repair.

@@ -10,6 +10,7 @@
 // identical feel to the old 2D pivots. The assembly layer (instances /
 // bindings / place) is deleted; groups + mirror-duplicate replace it.
 import type { ProposedChange } from '../design/autoResolve';
+import { detectOffPlaneHinges } from '../design/hingePlaneRepair';
 import { derivedMaturity } from '../design/resolution';
 import { dot, normalize, scale, sub, length as vecLength } from '../geometry/math3';
 import type {
@@ -1210,6 +1211,23 @@ export function setPivotAxisLocked(doc: Project, nodeId: string, locked: boolean
       ? { ...el, axisLocked: locked || undefined }
       : el,
   );
+}
+
+/** Snap every off-plane hinge's axis to the nearest cardinal of the plane its
+ * members span (PLANFILE-solver-play-feel.md, slice 4 — the guard for a hinge
+ * drawn with an axis pointing out of its own swing plane, which splays/twists
+ * instead of bending). Returns the count repaired so the caller can surface
+ * it; a no-op (returns the same doc) when nothing is off plane. */
+export function repairOffPlaneHinges(doc: Project): { doc: Project; repaired: number } {
+  const flagged = detectOffPlaneHinges(doc.mechanism);
+  if (flagged.length === 0) return { doc, repaired: 0 };
+  const axisById = new Map(flagged.map((f) => [f.pivotElementId, f.suggestedAxis]));
+  const next = mapElements(doc, (el) => {
+    if (el.type !== 'pivot' || el.joint.kind !== 'hinge') return el;
+    const axis = axisById.get(el.id);
+    return axis ? { ...el, joint: { ...el.joint, axis } } : el;
+  });
+  return { doc: next, repaired: flagged.length };
 }
 
 /** Set or clear a hinge pivot's angle limit (joint-menu min/max, Joe's
