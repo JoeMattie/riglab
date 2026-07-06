@@ -90,6 +90,14 @@ const TEAR_OFF_PX = SNAP_TOL_PX * 2;
  * draggable min/max angle handles have room (Joe's request). */
 const ANGLE_EDIT_RADIUS_PX = 92;
 
+/** Drag "friction" for constraint-on node dragging (Joe's request): the
+ * dragged node eases toward the pointer instead of teleporting, so a fast
+ * pull across a branch boundary no longer flips a distant joint (e.g. a foot
+ * snapping around at the ankle) — the chain drags there continuously. Each
+ * frame closes (1 − this) of the gap, so the node still tracks the pointer.
+ * Kinematic only; see SolveInputs.dragFriction. */
+const DRAG_FRICTION = 0.5;
+
 /** Screen-space triangle-wave points hinting a coil, between two endpoints. */
 function zigzag(a: Vec2, b: Vec2, segments = 9, ampPx = 5): number[] {
   const dx = b.x - a.x;
@@ -1090,6 +1098,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             channelValues,
             dragTargets: { ...bindingTargets(liveMech, liveDoc.wearer, pose), ...targets },
             groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+            dragFriction: DRAG_FRICTION,
             // shift held: every dragged node locks to this panel's plane at
             // its own depth (the translated target IS in that plane)
             planeLocks: e.evt.shiftKey
@@ -1230,6 +1239,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             channelValues,
             dragTargets: targets,
             groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+            dragFriction: DRAG_FRICTION,
             // shift held: the dragged node locks to this panel's plane at
             // its own depth (the drag target IS in that plane)
             planeLocks: e.evt.shiftKey

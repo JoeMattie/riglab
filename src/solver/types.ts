@@ -12,6 +12,16 @@ export interface SolveInputs {
   channelValues: Record<string, number>;
   /** transient drag targets keyed by node id (kinematic drag, §5.1) */
   dragTargets?: Record<string, Vec3>;
+  /** Drag "friction" (kinematic only), 0..~0.95, default 0 = crisp/current.
+   * Each drag target is eased from the node's CURRENT position toward the
+   * requested target by a factor (1 − dragFriction), so per solve the dragged
+   * node closes only part of the gap to the pointer. Because the caller
+   * ratchets the solved pose back into the document each drag frame, this is a
+   * per-frame lag (velocity damping): the node still reaches the pointer over
+   * frames, but a fast pull no longer teleports across a branch boundary and
+   * flips a distant joint — it drags there continuously instead. A UI gesture
+   * knob; excluded from residual/DOF. Ignored in equilibrium mode. */
+  dragFriction?: number;
   /** Transient drag-time plane locks keyed by node id (shift-drag in an
    * ortho panel): the node is projected onto its plane every iteration —
    * with and after the geometry — so the drag cannot pull it out of the

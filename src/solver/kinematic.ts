@@ -619,12 +619,23 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   // pointer below ground drags ALONG the ground instead of collapsing the
   // linkage collinear onto it (a degenerate manifold the symmetry nudge
   // cannot escape — the floor clamp kills the downward half of every nudge)
+  // drag friction: ease each target from the node's current position toward
+  // the pointer so a fast pull can't teleport across a branch boundary (the
+  // caller ratchets the pose each frame, so this reads as per-frame lag).
+  const dragEase = 1 - Math.min(Math.max(inputs.dragFriction ?? 0, 0), 0.95);
   const drags: DragC[] = Object.entries(inputs.dragTargets ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .filter(([id]) => particles.has(id) && userIds.has(id))
-    .map(
-      ([id, target]) => new DragC(get(id), { x: target.x, y: Math.max(0, target.y), z: target.z }),
-    );
+    .map(([id, target]) => {
+      const clamped = { x: target.x, y: Math.max(0, target.y), z: target.z };
+      if (dragEase >= 1) return new DragC(get(id), clamped);
+      const from = pos.get(id) ?? clamped;
+      return new DragC(get(id), {
+        x: from.x + (clamped.x - from.x) * dragEase,
+        y: Math.max(0, from.y + (clamped.y - from.y) * dragEase),
+        z: from.z + (clamped.z - from.z) * dragEase,
+      });
+    });
 
   // shift-drag plane locks: normalized here so callers can pass any nonzero
   // normal; joined to their particle's island below, after the real

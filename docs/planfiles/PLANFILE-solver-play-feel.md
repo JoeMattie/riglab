@@ -50,12 +50,21 @@ rigid lengths either stay within tolerance or opt a stiffer mode. Equilibrium
 first (where forces load the pipes); kinematic keeps near-rigid so dragging
 still feels crisp.
 
-### Slice 3 — joint friction / drag damping
-Kinematic drag is stateless/quasi-static, so "friction" = **under-relaxed
-drag targets + settle damping**: the dragged node eases toward the pointer
-(a stiffness < 1) and neighbours resist sudden reconfiguration, so a drag
-settles instead of springing. A per-solve `dragStiffness`/`damping` input,
-defaulting to the current crisp behavior, dialed softer in the UI.
+### Slice 3 — joint friction / drag damping ✅ DONE
+Kinematic drag is stateless/quasi-static, so "friction" = **eased drag
+targets**: `SolveInputs.dragFriction` (0..0.95, default 0 = crisp) eases each
+target from the node's current position toward the pointer by (1 − friction).
+The editor ratchets the pose each drag frame, so this is per-frame velocity
+damping — the node still reaches the pointer over frames but a single frame
+stays near the current branch, so a fast pull no longer teleports across a
+branch boundary and flips a distant joint. App passes DRAG_FRICTION = 0.5 on
+the two constraint-on node-drag solves (SketchCanvas); endpoint length edits
+stay crisp. Acceptance (dragFriction.acceptance.test.ts): crisp flips a bar
+across its anchor, friction keeps it on the near branch, and friction is
+lag-not-cap (walks all the way around over 60 frames, staying on the unit
+sphere). Logged in DECISIONS.md (2026-07-06). Equilibrium-relaxation friction
+deferred (this is the interactive-drag case Joe hits); gesture *feel* is his
+to judge live.
 
 ### Slice 4 — raptor repair + off-plane-hinge guard
 Fix raptor-test: ground the hip, flip the 4 +y hinges to +z. Add a

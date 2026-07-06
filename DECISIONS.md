@@ -2622,3 +2622,27 @@ CONVERGES and both bars stay within slop+ε of the drawn plane; it resists the
 pull ≥3× more than an unlocked hinge; and a hinge drawn starting outside the
 cone still solves finite + converges. Per CLAUDE.md this stays a solve()
 acceptance test, not an e2e spec.
+
+### DECISION: drag friction — eased drag targets to stop branch flips (2026-07-06)
+Joe: dragging pipes/points is fiddly; a foot "flips around at the ankle"
+instead of the chain raising. Slice 3 of PLANFILE-solver-play-feel.md, and
+Joe's own "friction on the joints" suggestion. Kinematic drag hard-set the
+dragged node to the pointer every iteration, so a fast pull whose target lay
+across a branch boundary let Gauss-Seidel settle on the FAR (flipped)
+solution.
+
+Added `SolveInputs.dragFriction` (0..0.95, default 0 = current crisp
+behavior, kinematic only): each drag target is eased from the node's current
+position toward the pointer by (1 − dragFriction). Since the editor ratchets
+the solved pose into the document every drag frame, this is per-frame velocity
+damping — the node still reaches the pointer over frames (proven by an
+acceptance test that walks a bar all the way around over 60 frames), but a
+single frame stays near the current branch so it can't teleport/flip. The app
+passes a moderate DRAG_FRICTION = 0.5 on the two constraint-on node-drag
+solves in SketchCanvas (translate-drag and single-node drag); endpoint
+length-editing stays crisp. Acceptance (dragFriction.acceptance.test.ts):
+crisp flips a bar across its anchor, friction keeps it on the near branch,
+and friction is lag-not-cap (still arrives, on the unit sphere). Default 0
+keeps every existing solver acceptance pose unchanged. Equilibrium friction
+(damping the force relaxation) is deferred — this is the interactive-drag
+case Joe hits. Gesture *feel* is his to judge live.
