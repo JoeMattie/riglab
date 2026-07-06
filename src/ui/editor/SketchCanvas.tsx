@@ -7,6 +7,7 @@
 import type Konva from 'konva';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { groupDragNodeIds, translatedTargets } from '../../design/groupDrag';
 import { elementIdsInRect, normalizedRect } from '../../design/marquee';
 import type { Mechanism, PivotElement, PivotJoint, SliderElement, Vec2, Vec3 } from '../../schema';
 import { solve } from '../../solver';
@@ -45,6 +46,7 @@ import {
   projectPositions,
   projectToPanel,
 } from '../quad/panelProject';
+import { selectionCardHost } from '../quad/quadLayout';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
 import { carriesForceLabel, forceLabelAnchor, formatForce, pickRenderPositions } from './forces';
@@ -131,6 +133,24 @@ interface EndpointDrag {
   readout: EndpointDragReadout;
 }
 
+/** Group body drag (PLANFILE-multiselect-drag-constraints): grabbing a pipe
+ * span (onPipe snap) moves every node of the dragged elements by the pointer
+ * delta in this panel's plane. Constraints on, the targets go through the
+ * kinematic solver; off, they are written directly and lengths follow. */
+interface BodyDrag {
+  elementIds: string[];
+  /** document positions of the dragged node set at gesture start */
+  orig: Record<string, Vec3>;
+  /** panel-2D pointer at mousedown */
+  start2: Vec2;
+  /** crossed the click threshold — selection committed, the paired Konva
+   * click suppressed */
+  moved: boolean;
+  /** selection to commit once the drag actually moves (grabbing an
+   * unselected pipe selects it; modifier adds instead of replacing) */
+  pendingSelect: { elementId: string; mode: 'replace' | 'add' } | null;
+}
+
 /** Length-snap increment in metres for the endpoint drag / scrub. */
 export const lengthStepM = (units: 'imperial' | 'metric'): number =>
   units === 'imperial' ? 0.5 * M_PER_IN : 0.01;
@@ -162,6 +182,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const setDiagnostics = useEditorStore((s) => s.setDiagnostics);
   const violated = useEditorStore((s) => s.violated);
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
+  const constraintsOn = useEditorStore((s) => s.constraintsOn);
   const equilibrium = useEditorStore((s) => s.equilibrium);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
   const focusElementId = useEditorStore((s) => s.focusElementId);
@@ -171,6 +192,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const activePanel = useEditorStore((s) => s.activePanel);
   const setActivePanel = useEditorStore((s) => s.setActivePanel);
   const setDragNode3 = useEditorStore((s) => s.setDragNode);
+  const dragNodeId = useEditorStore((s) => s.dragNodeId);
+  const panelsVisible = useEditorStore((s) => s.panelsVisible);
+  const quadMaximized = useEditorStore((s) => s.quadMaximized);
 
   const mech: Mechanism | null = doc?.mechanism ?? null;
   const frame = PANEL_FRAME[panelId];
@@ -191,6 +215,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
    * connection is released and the drag continues live */
   const dragTetherRef = useRef<{ torn: boolean } | null>(null);
   const [endpointDrag, setEndpointDrag] = useState<EndpointDrag | null>(null);
+  const [bodyDrag, setBodyDrag] = useState<BodyDrag | null>(null);
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [bindFrom, setBindFrom] = useState<string | null>(null);
   // force-tool drafting (§8.1: ropes/elastics/bowden/torsion drawn with their
@@ -250,18 +275,36 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     setTorsionA(null);
   }, []);
 
-  // a stationary click on a node: select the joint element living there (if
-  // any) and open the joint popover at the node (design handoff §6)
-  const openJointPopover = useCallback(
+  // a stationary left-click on a node: select the joint element living there
+  // (pivots/sliders have no stroke of their own to click on the canvas);
+  // modifier click toggles membership. The joint/realization popover is on
+  // right-click (onStageContextMenu).
+  const selectJointAtNode = useCallback(
     (nodeId: string, evt: MouseEvent) => {
       if (!mech) return;
       const joint = mech.elements.find(
         (el) => (el.type === 'pivot' || el.type === 'slider') && el.nodeId === nodeId,
       );
       if (joint) clickSelect(joint.id, evt);
+    },
+    [mech, clickSelect],
+  );
+
+  // right-click on a node: open the joint popover there; the joint element
+  // joins the selection unless it's already part of it (a right-click must
+  // not collapse a multi-selection that includes it)
+  const openJointPopover = useCallback(
+    (nodeId: string) => {
+      if (!mech) return;
+      const joint = mech.elements.find(
+        (el) => (el.type === 'pivot' || el.type === 'slider') && el.nodeId === nodeId,
+      );
+      if (joint && !useEditorStore.getState().selectedElementIds.includes(joint.id)) {
+        select(joint.id);
+      }
       setOpenPopover({ kind: 'joint', nodeId });
     },
-    [mech, clickSelect, setOpenPopover],
+    [mech, select, setOpenPopover],
   );
 
   useEffect(() => {
@@ -361,7 +404,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     docPositions,
     posePositions,
     settledPositions: equilibriumOn ? equilibrium.positions : null,
-    dragging: dragNode !== null,
+    dragging: dragNode !== null || bodyDrag !== null,
   });
 
   /** the document pose projected into this panel's plane — everything the
@@ -583,6 +626,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     const editor = useEditorStore.getState();
     if (editor.openPopover) editor.setOpenPopover(null);
     if (editor.lengthEdit) editor.setLengthEdit(null);
+    // right button never starts a drag/marquee/draft — it opens the joint
+    // popover via onStageContextMenu
+    if (e.evt.button === 2) return;
     const snap = snapAt(screen);
 
     if (tool === 'select') {
@@ -595,15 +641,22 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       if (snap.kind === 'node') {
         adoptDepth(snap);
         const depthM = depthOfSnap(snap, workDepthM);
-        // an endpoint of a selected, unlocked pipe drags as a LENGTH edit
-        // (direct geometry move); any other node drags as a pose
-        const owner = mech.elements.find(
-          (el) =>
-            (el.type === 'link' || el.type === 'telescope') &&
-            selectedElementIds.includes(el.id) &&
-            !el.lengthLocked &&
-            (el.nodeA === snap.nodeId || el.nodeB === snap.nodeId),
-        );
+        // constraints ON: only an endpoint of a selected, unlocked pipe drags
+        // as a LENGTH edit (direct geometry move); any other node drags as a
+        // solver pose. Constraints OFF: any pipe endpoint is a direct
+        // geometry edit — length locks are part of constraint checking
+        // (PLANFILE-multiselect-drag-constraints)
+        const spanOwner = (requireSelected: boolean, requireUnlocked: boolean) =>
+          mech.elements.find(
+            (el) =>
+              (el.type === 'link' || el.type === 'telescope') &&
+              (el.nodeA === snap.nodeId || el.nodeB === snap.nodeId) &&
+              (!requireSelected || selectedElementIds.includes(el.id)) &&
+              (!requireUnlocked || !el.lengthLocked),
+          );
+        const owner = constraintsOn
+          ? spanOwner(true, true)
+          : (spanOwner(true, false) ?? spanOwner(false, false));
         if (owner && (owner.type === 'link' || owner.type === 'telescope')) {
           const a = projected[owner.nodeA];
           const b = projected[owner.nodeB];
@@ -646,6 +699,35 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         setDragNode({ nodeId: snap.nodeId, depthM });
         setDragNode3(snap.nodeId);
         useEditorStore.getState().clearTrace();
+      } else if (snap.kind === 'onPipe') {
+        // grabbing a pipe BODY moves it (with the rest of the selection when
+        // it is part of one, or when the modifier adds it) instead of
+        // drawing a marquee
+        const withModifier = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
+        const inSelection = selectedElementIds.includes(snap.elementId);
+        const elementIds = inSelection
+          ? [...selectedElementIds]
+          : withModifier
+            ? [...selectedElementIds, snap.elementId]
+            : [snap.elementId];
+        const nodeIds = groupDragNodeIds(mech, elementIds);
+        if (nodeIds.length === 0) return;
+        const wanted = new Set(nodeIds);
+        const orig: Record<string, Vec3> = {};
+        for (const n of mech.nodes) if (wanted.has(n.id)) orig[n.id] = n.position;
+        adoptDepth(snap);
+        beginGesture();
+        setHoverSnap(null);
+        setDragNode3(nodeIds[0]!);
+        setBodyDrag({
+          elementIds,
+          orig,
+          start2: toWorld(view, screen),
+          moved: false,
+          pendingSelect: inSelection
+            ? null
+            : { elementId: snap.elementId, mode: withModifier ? 'add' : 'replace' },
+        });
       } else {
         setMarquee({ start: screen, cursor: screen });
       }
@@ -730,6 +812,64 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       return;
     }
 
+    if (tool === 'select' && bodyDrag) {
+      const start = mouseDownScreenRef.current;
+      const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
+      if (!bodyDrag.moved && movedPx < 4) return;
+      let drag = bodyDrag;
+      if (!drag.moved) {
+        // the drag is real: commit the selection to the grabbed pipe (when it
+        // wasn't already selected) and suppress the Konva click that fires
+        // for this same down/up pair
+        if (drag.pendingSelect) {
+          const editor = useEditorStore.getState();
+          if (drag.pendingSelect.mode === 'add')
+            editor.setSelection([...editor.selectedElementIds, drag.pendingSelect.elementId]);
+          else editor.select(drag.pendingSelect.elementId);
+        }
+        marqueeCommittedRef.current = true;
+        drag = { ...drag, moved: true };
+        setBodyDrag(drag);
+      }
+      // pointer delta in the panel plane, lifted to a world-space delta
+      // (depth 0: the frame axes are orthonormal, so out-of-plane depth is
+      // preserved per node)
+      const w2 = toWorld(view, screen);
+      const delta = panelToWorld({ x: w2.x - drag.start2.x, y: w2.y - drag.start2.y }, frame, 0);
+      const targets = translatedTargets(drag.orig, delta);
+      if (!constraintsOn) {
+        updateCurrent((cur) => moveNodes(cur, targets));
+        return;
+      }
+      const liveDoc = useAppStore.getState().current;
+      const liveMech = liveDoc?.mechanism;
+      if (!liveDoc || !liveMech) return;
+      const channelValues = Object.fromEntries(liveMech.inputs.map((c) => [c.name, c.value]));
+      try {
+        const result = solve(
+          liveMech,
+          {
+            channelValues,
+            dragTargets: { ...bindingTargets(liveMech, liveDoc.wearer, pose), ...targets },
+            groundTargets: anchorTargets(liveMech, liveDoc.wearer, pose),
+          },
+          'kinematic',
+        );
+        setDiagnostics(
+          { dof: result.diagnostics.dof, classification: result.diagnostics.classification },
+          result.diagnostics.violated,
+        );
+        // same drag-ratchet invariant as the node drag: never write a
+        // non-converged pose back into the document
+        if (result.diagnostics.converged) {
+          updateCurrent((cur) => moveNodes(cur, result.positions));
+        }
+      } catch {
+        // a solver throw must not break the drag gesture
+      }
+      return;
+    }
+
     if (tool === 'select' && endpointDrag) {
       // direct geometry edit: move ONE node; node/skeleton/anchor snaps win,
       // then length ticks (½ in / 1 cm), else the raw pointer lifted at the
@@ -808,6 +948,13 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       const target: Vec3 = bindSnap
         ? vec3OfSnap(bindSnap, dragNode.depthM)
         : to3D(world2, dragNode.depthM);
+      // constraints off: the node moves directly — incident pipe lengths
+      // follow the drawn geometry (no solve, no length lock)
+      if (!constraintsOn) {
+        updateCurrent((cur) => moveNodes(cur, { [dragNode.nodeId]: target }));
+        if (tracing) appendTrace(target);
+        return;
+      }
       const targets = {
         ...bindingTargets(liveMech, liveDoc.wearer, pose),
         [dragNode.nodeId]: target,
@@ -890,14 +1037,23 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       return;
     }
 
+    if (tool === 'select' && bodyDrag) {
+      setBodyDrag(null);
+      setDragNode3(null);
+      endGesture();
+      // a stationary release stays a click — the paired Konva click on the
+      // pipe handles selection as before
+      return;
+    }
+
     if (tool === 'select' && endpointDrag) {
       const start = mouseDownScreenRef.current;
       const movedPx = start ? Math.hypot(screen.x - start.x, screen.y - start.y) : Infinity;
       const nodeId = endpointDrag.nodeId;
       setEndpointDrag(null);
       endGesture();
-      // a stationary click on an endpoint handle opens the joint popover
-      if (movedPx < 4) openJointPopover(nodeId, e.evt);
+      // a stationary click on an endpoint handle selects the joint there
+      if (movedPx < 4) selectJointAtNode(nodeId, e.evt);
       return;
     }
 
@@ -912,10 +1068,10 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       endGesture();
       setHoverSnap(null);
       // a stationary click on a node selects the joint element living there
-      // (pivots/sliders have no stroke of their own to click on the canvas)
-      // and opens the joint popover for one-click type changes
+      // (pivots/sliders have no stroke of their own to click on the canvas);
+      // the joint popover is on right-click
       if (movedPx < 4) {
-        openJointPopover(nodeId, e.evt);
+        selectJointAtNode(nodeId, e.evt);
         return;
       }
       // a connected node released inside the deadzone never moved — the
@@ -986,6 +1142,17 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     const start = mouseDownScreenRef.current;
     if (!screen || !start || Math.hypot(screen.x - start.x, screen.y - start.y) >= 4) return;
     clearSelection();
+  };
+
+  // right-click on a node opens the joint/realization popover (left click
+  // only selects); the browser context menu is suppressed either way
+  const onStageContextMenu = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    e.evt.preventDefault();
+    if (tool !== 'select' || !mech) return;
+    const screen = stagePointer(e);
+    if (!screen) return;
+    const snap = snapAt(screen);
+    if (snap.kind === 'node') openJointPopover(snap.nodeId);
   };
 
   const onDblClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -1073,8 +1240,15 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   }, []);
 
   // keyboard: delete selection (active panel only — one deleter for a global
-  // selection), escape cancels this panel's draft/bind
+  // selection), arrows nudge the selection's nodes in this panel's plane,
+  // escape cancels this panel's draft/bind
   useEffect(() => {
+    const NUDGE: Record<string, Vec2> = {
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      ArrowUp: { x: 0, y: 1 },
+      ArrowDown: { x: 0, y: -1 },
+    };
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
         setDraft(null);
@@ -1084,17 +1258,48 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         setEndpointDrag(null);
         setMarquee(null);
       }
-      if (
-        (ev.key === 'Delete' || ev.key === 'Backspace') &&
-        selectedElementIds.length > 0 &&
-        mech &&
-        activePanel === panelId
-      ) {
-        const target = ev.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (selectedElementIds.length === 0 || !mech || !doc || activePanel !== panelId) return;
+      const target = ev.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (ev.key === 'Delete' || ev.key === 'Backspace') {
         // one updateCurrent = one undo entry for the whole selection
         updateCurrent((cur) => selectedElementIds.reduce((d, id) => deleteElement(d, id), cur));
         clearSelection();
+        return;
+      }
+      const dir = NUDGE[ev.key];
+      if (!dir) return;
+      ev.preventDefault();
+      // arrow nudge (PLANFILE-multiselect-drag-constraints): one length-snap
+      // step (½ in / 1 cm) per press, one undo entry per press. Same regime
+      // as the drags — constraints off writes directly, on goes through the
+      // solver and keeps only a converged pose.
+      const step = lengthStepM(doc.unitsPreference ?? 'imperial');
+      const delta = panelToWorld({ x: dir.x * step, y: dir.y * step }, frame, 0);
+      const nodeIds = groupDragNodeIds(mech, selectedElementIds);
+      if (nodeIds.length === 0) return;
+      const wanted = new Set(nodeIds);
+      const orig: Record<string, Vec3> = {};
+      for (const n of mech.nodes) if (wanted.has(n.id)) orig[n.id] = n.position;
+      const targets = translatedTargets(orig, delta);
+      if (!constraintsOn) {
+        updateCurrent((cur) => moveNodes(cur, targets));
+        return;
+      }
+      const channelValues = Object.fromEntries(mech.inputs.map((c) => [c.name, c.value]));
+      try {
+        const result = solve(
+          mech,
+          {
+            channelValues,
+            dragTargets: { ...bindingTargets(mech, doc.wearer, pose), ...targets },
+            groundTargets: anchorTargets(mech, doc.wearer, pose),
+          },
+          'kinematic',
+        );
+        if (result.diagnostics.converged) updateCurrent((cur) => moveNodes(cur, result.positions));
+      } catch {
+        // a solver throw must not break the nudge (the selection stays put)
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1102,8 +1307,12 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   }, [
     selectedElementIds,
     mech,
+    doc,
     activePanel,
     panelId,
+    frame,
+    pose,
+    constraintsOn,
     updateCurrent,
     clearSelection,
     setPendingConnect,
@@ -1186,6 +1395,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   }
   const selectedEndpointNodes = [...endpointByNode.values()];
 
+  // every node the selection touches gets a soft persistent halo, so
+  // selected joints and points read as selected the way the orange pipe
+  // stroke does (PLANFILE-multiselect-drag-constraints)
+  const selectedNodeIds = groupDragNodeIds(mech, selectedElementIds);
+
   const hoverElement = (id: string) => tool === 'select' && setHoveredElementId(id);
   const unhoverElement = (id: string) => setHoveredElementId((cur) => (cur === id ? null : cur));
 
@@ -1225,6 +1439,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         onMouseUp={onMouseUp}
         onClick={onStageClick}
         onDblClick={onDblClick}
+        onContextMenu={onStageContextMenu}
         onWheel={onWheel}
       >
         <Layer listening={false}>
@@ -1557,6 +1772,21 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             />
           )}
 
+          {/* soft persistent halo behind every node of the selection */}
+          {selectedNodeIds.map((id) => {
+            const p = S(nodePos(id));
+            return (
+              <Circle
+                key={`sel-${id}`}
+                x={p.x}
+                y={p.y}
+                radius={13}
+                fill="rgba(221,136,0,0.2)"
+                listening={false}
+              />
+            );
+          })}
+
           {mech.nodes.map((n) => {
             const p = S(nodePos(n.id));
             // glyph priority: anchor > bound > slider > weld/pivot > end dot
@@ -1717,14 +1947,29 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         endpointDrag={
           endpointDrag ? { elementId: endpointDrag.elementId, ...endpointDrag.readout } : null
         }
-        dragging={endpointDrag !== null || dragNode !== null}
+        dragging={endpointDrag !== null || dragNode !== null || bodyDrag !== null}
       />
       {isActive && (
-        <JointPopover mech={mech} view={view} positions={projected} size={size} frame={frame} />
+        <JointPopover
+          mech={mech}
+          view={view}
+          positions={projected}
+          container={containerRef.current}
+          frame={frame}
+        />
       )}
-      {isActive && tool === 'select' && !endpointDrag && !dragNode && (
-        <SelectionCard doc={doc} mech={mech} view={view} positions={projected} size={size} />
-      )}
+      {/* the selection card opens in the nearest OTHER viewport so it never
+          covers the geometry being worked on (selectionCardHost); it hides
+          during any drag, in any panel (dragNodeId covers cross-panel drags,
+          the local states cover this panel's endpoint drags) */}
+      {selectionCardHost(activePanel, panelsVisible, quadMaximized) === panelId &&
+        tool === 'select' &&
+        !endpointDrag &&
+        !dragNode &&
+        !bodyDrag &&
+        dragNodeId === null && (
+          <SelectionCard doc={doc} mech={mech} view={view} positions={projected} size={size} />
+        )}
     </div>
   );
 }

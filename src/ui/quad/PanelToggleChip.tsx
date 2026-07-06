@@ -1,9 +1,9 @@
-// Top-bar panel visibility toggles (PLANFILE-quad-panel-controls B): a
-// compact floating chip, top-center between the project chip and the actions
+// Top-bar panel visibility toggles (PLANFILE-quad-panel-controls B): docked
+// in the top bar's center slot between the project chip and the actions
 // chip, with one toggle per quad panel. Hiding a panel reflows the remaining
 // ones (quadLayout.ts); the store refuses to hide the last visible panel.
 import { type QuadPanelId, useEditorStore } from '../../state/editorStore';
-import { panelStyle, T, toggleChipStyle } from '../editor/theme';
+import { T, toggleChipStyle } from '../editor/theme';
 import { PANEL_ORDER } from './quadLayout';
 
 /** Compact labels — "Perspective" is the 3D preview. */
@@ -23,16 +23,9 @@ export function PanelToggleChip() {
     <div
       data-testid="panel-toggles"
       style={{
-        ...panelStyle,
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 16,
         display: 'flex',
         alignItems: 'center',
         gap: 4,
-        padding: '6px 8px',
-        zIndex: 40,
       }}
     >
       <span

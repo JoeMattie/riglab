@@ -1,16 +1,15 @@
 // Project chip (design handoff §3, v7): back · project name · saved
 // indicator. The v6 mechanism switcher is gone — one compound mechanism per
-// project (PLANFILE-3d-conversion.md).
+// project (PLANFILE-3d-conversion.md). Docked in the top bar (left slot),
+// not floating.
 import { useAppStore } from '../../state/appStore';
-import { GripHandle, usePillDrag } from './pillDrag';
-import { dividerStyle, EDGE, panelStyle, T } from './theme';
+import { dividerStyle, T } from './theme';
 
 export function ProjectChip() {
   const doc = useAppStore((s) => s.current);
   const saveState = useAppStore((s) => s.saveState);
   const closeProject = useAppStore((s) => s.closeProject);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
-  const drag = usePillDrag();
 
   if (!doc) return null;
 
@@ -18,78 +17,66 @@ export function ProjectChip() {
 
   return (
     <div
+      data-testid="project-chip"
       style={{
-        position: 'absolute',
-        left: EDGE,
-        top: EDGE,
-        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
-        zIndex: 40,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
       }}
     >
-      <div
+      <button
+        type="button"
+        data-testid="back-to-projects"
+        title="back to projects"
+        onClick={() => void closeProject()}
         style={{
-          ...panelStyle,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '8px 12px',
+          border: 'none',
+          background: 'none',
+          cursor: 'pointer',
+          fontSize: 15,
+          color: T.muted,
+          padding: '0 2px',
         }}
       >
-        <GripHandle testid="project-chip-handle" drag={drag} vertical />
-        <button
-          type="button"
-          data-testid="back-to-projects"
-          title="back to projects"
-          onClick={() => void closeProject()}
+        ←
+      </button>
+      <span style={dividerStyle} />
+      <input
+        data-testid="project-name-input"
+        value={doc.name}
+        onChange={(e) => updateCurrent((d) => ({ ...d, name: e.target.value }))}
+        style={{
+          border: 'none',
+          outline: 'none',
+          background: 'transparent',
+          font: `600 13.5px ${T.sans}`,
+          color: T.text,
+          width: Math.max(60, Math.min(220, doc.name.length * 8 + 16)),
+          padding: 0,
+        }}
+      />
+      <span
+        data-testid="save-state"
+        title={saved ? 'saved' : 'saving…'}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          color: saved ? T.success : T.faint,
+          fontSize: 12,
+        }}
+      >
+        <span
           style={{
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            fontSize: 15,
-            color: T.muted,
-            padding: '0 2px',
-          }}
-        >
-          ←
-        </button>
-        <span style={dividerStyle} />
-        <input
-          data-testid="project-name-input"
-          value={doc.name}
-          onChange={(e) => updateCurrent((d) => ({ ...d, name: e.target.value }))}
-          style={{
-            border: 'none',
-            outline: 'none',
-            background: 'transparent',
-            font: `600 13.5px ${T.sans}`,
-            color: T.text,
-            width: Math.max(60, Math.min(220, doc.name.length * 8 + 16)),
-            padding: 0,
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: saved ? T.success : T.faint,
+            display: 'inline-block',
           }}
         />
-        <span
-          data-testid="save-state"
-          title={saved ? 'saved' : 'saving…'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            color: saved ? T.success : T.faint,
-            fontSize: 12,
-          }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: saved ? T.success : T.faint,
-              display: 'inline-block',
-            }}
-          />
-          {saved ? 'saved' : 'saving…'}
-        </span>
-      </div>
+        {saved ? 'saved' : 'saving…'}
+      </span>
     </div>
   );
 }

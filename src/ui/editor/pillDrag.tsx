@@ -1,8 +1,8 @@
-// Drag-to-move for the floating chrome (extends wireframe 1c's "drag to
-// move" tool pill to every pill/chip): a shared transient-offset hook plus
-// the grip-dots handle. The offset is session-transient by design — pills
-// snap back to their docks on reload, exactly like the tool pill and the
-// selection card before this.
+// Drag-to-move for the floating chrome (tool pill, transport pill, DOF
+// pill — the top-bar chips are docked and don't drag): a shared
+// transient-offset hook plus the grip-dots handle. The offset is
+// session-transient by design — pills snap back to their docks on reload,
+// exactly like the tool pill and the selection card before this.
 import { useRef, useState } from 'react';
 import { T } from './theme';
 

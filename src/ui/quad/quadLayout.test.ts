@@ -3,7 +3,14 @@
 // split fractions landing in the grid templates, and the splitter sets.
 import { describe, expect, it } from 'vitest';
 import type { QuadPanelId } from '../../state/editorStore';
-import { clampSplit, MAX_SPLIT, MIN_SPLIT, PANEL_ORDER, quadLayout } from './quadLayout';
+import {
+  clampSplit,
+  MAX_SPLIT,
+  MIN_SPLIT,
+  PANEL_ORDER,
+  quadLayout,
+  selectionCardHost,
+} from './quadLayout';
 
 const HALF = { x: 0.5, y: 0.5 };
 const cellOf = (r: ReturnType<typeof quadLayout>, panel: QuadPanelId) =>
@@ -118,5 +125,31 @@ describe('quadLayout: input order', () => {
   it('normalizes visible panels to canonical order', () => {
     const r = quadLayout(['side', 'front', 'persp', 'top'], HALF);
     expect(r.cells.map((c) => c.panel)).toEqual(['top', 'persp', 'front', 'side']);
+  });
+});
+
+describe('selectionCardHost (PLANFILE-multiselect-drag-constraints follow-up)', () => {
+  const ALL = { top: true, persp: true, front: true, side: true };
+
+  it('picks the nearest OTHER ortho panel — never the one being worked in', () => {
+    expect(selectionCardHost('side', ALL, null)).toBe('front'); // row-mate
+    expect(selectionCardHost('top', ALL, null)).toBe('front'); // column-mate
+    expect(selectionCardHost('front', ALL, null)).toBe('top'); // adjacent, reading order
+  });
+
+  it('active perspective panel docks the card in the nearest ortho panel', () => {
+    expect(selectionCardHost('persp', ALL, null)).toBe('top');
+  });
+
+  it('skips hidden panels; falls back to the active panel when it is alone', () => {
+    expect(selectionCardHost('side', { ...ALL, front: false }, null)).toBe('top');
+    expect(
+      selectionCardHost('side', { top: false, persp: true, front: false, side: true }, null),
+    ).toBe('side');
+  });
+
+  it('a maximized panel hosts its own card; maximized perspective hosts none', () => {
+    expect(selectionCardHost('side', ALL, 'side')).toBe('side');
+    expect(selectionCardHost('persp', ALL, 'persp')).toBeNull();
   });
 });

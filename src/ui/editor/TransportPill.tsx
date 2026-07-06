@@ -146,9 +146,13 @@ export function TransportPill() {
   const setTracing = useEditorStore((s) => s.setTracing);
   const equilibriumOn = useEditorStore((s) => s.equilibriumOn);
   const setEquilibriumOn = useEditorStore((s) => s.setEquilibriumOn);
+  const constraintsOn = useEditorStore((s) => s.constraintsOn);
+  const setConstraintsOn = useEditorStore((s) => s.setConstraintsOn);
   const equilibrium = useEditorStore((s) => s.equilibrium);
   const openPopover = useEditorStore((s) => s.openPopover);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
+  const controlsOpen = useEditorStore((s) => s.controlsOpen);
+  const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
   const rafRef = useRef(0);
   const scrubberRef = useRef<HTMLSpanElement>(null);
   const drag = usePillDrag();
@@ -382,6 +386,14 @@ export function TransportPill() {
           }}
         >
           <GripHandle testid="transport-pill-handle" drag={drag} vertical />
+          <ToggleChip
+            testId="controls-toggle"
+            label="controls"
+            title="controls dock — build widgets and map them onto input channels"
+            on={controlsOpen}
+            onClick={() => setControlsOpen(!controlsOpen)}
+          />
+          <span style={{ ...dividerStyle, height: 20 }} />
           <button
             type="button"
             data-testid="clip-select"
@@ -490,6 +502,13 @@ export function TransportPill() {
             onChange={(v) => setPlayback({ amplitude: v })}
           />
           <span style={{ ...dividerStyle, height: 20 }} />
+          <ToggleChip
+            testId="constraints-toggle"
+            label="constraints"
+            title="hold pipe lengths and length locks while dragging"
+            on={constraintsOn}
+            onClick={() => setConstraintsOn(!constraintsOn)}
+          />
           <ToggleChip
             testId="equilibrium-toggle"
             label="forces"

@@ -54,6 +54,18 @@ describe('selection', () => {
   });
 });
 
+describe('constraints toggle (PLANFILE-multiselect-drag-constraints)', () => {
+  it('defaults OFF (drags edit geometry freely) and flips via its setter', () => {
+    expect(state().constraintsOn).toBe(false);
+    state().setConstraintsOn(true);
+    expect(state().constraintsOn).toBe(true);
+    // a lens, not document state: project switch keeps it
+    state().resetTransient();
+    expect(state().constraintsOn).toBe(true);
+    state().setConstraintsOn(false);
+  });
+});
+
 describe('popovers (interface overhaul: one at a time)', () => {
   it('opening a popover clears the inline length edit and pending connect', () => {
     state().setLengthEdit({ elementId: 'e1', draft: '10' });

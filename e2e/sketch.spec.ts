@@ -1,8 +1,11 @@
 // Phase 1 smoke, 3D-conversion edition: create a project, land in the
 // maximized Side panel via the empty-state, draw a four-bar with three
 // chained pipes and two double-click anchors (which materialize ground
-// hinges), verify DOF 1 · mechanism, drag the crank tip, and confirm the
-// 3D geometry held and stayed in the panel plane.
+// hinges), verify DOF 1 · mechanism, then exercise both drag regimes
+// (PLANFILE-multiselect-drag-constraints): constraints OFF (default) frees
+// the geometry — node drags change pipe lengths and a pipe-body drag
+// translates the whole selection rigidly; constraints ON holds lengths
+// through the solver and keeps the sketch in its panel plane.
 import { expect, type Page, test } from '@playwright/test';
 
 interface Vec3 {
@@ -15,13 +18,14 @@ interface RigLabHook {
   getDoc(): {
     mechanism: {
       nodes: Array<{ id: string; kind: string; position: Vec3 }>;
-      elements: Array<{ type: string }>;
+      elements: Array<{ id: string; type: string }>;
     };
   };
   getEditor(): {
     dof: { dof: number; classification: string } | null;
     activePanel: string;
   };
+  setSelection(ids: string[]): void;
 }
 
 declare global {
@@ -34,7 +38,7 @@ async function mech(page: Page) {
   return page.evaluate(() => window.__riglab.getDoc().mechanism);
 }
 
-test('sketch a four-bar in the Side panel, anchor it, drag it — DOF 1 and lengths hold', async ({
+test('sketch a four-bar, anchor it, drag it free and constrained — lengths follow the toggle', async ({
   page,
 }) => {
   await page.goto('/');
@@ -90,7 +94,68 @@ test('sketch a four-bar in the Side panel, anchor it, drag it — DOF 1 and leng
   const before = linkIdx(m).map((i) => lengthOf(m, i));
   const tipBefore = m.nodes[1]!.position;
 
-  // drag the crank tip through an arc
+  // constraints default OFF: dragging the crank tip is a FREE geometry edit —
+  // the pipe length follows the pointer instead of holding
+  await expect(page.getByTestId('constraints-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.mouse.move(...at(250, 340));
+  await page.mouse.down();
+  await page.mouse.move(...at(290, 310), { steps: 4 });
+  await page.mouse.move(...at(320, 300), { steps: 4 });
+  await page.mouse.up();
+  m = await mech(page);
+  const freeLengths = linkIdx(m).map((i) => lengthOf(m, i));
+  expect(Math.abs(freeLengths[0]! - before[0]!)).toBeGreaterThan(0.05);
+  await page.getByTestId('undo').click(); // restore the four-bar
+
+  // multi-select + body drag (constraints still off): with all three pipes
+  // selected, dragging one pipe's BODY translates the whole selection
+  // rigidly — every node shifts by the same delta, lengths unchanged
+  await page.evaluate(() => {
+    const d = window.__riglab.getDoc();
+    window.__riglab.setSelection(
+      d.mechanism.elements.flatMap((e) => (e.type === 'link' ? [e.id] : [])),
+    );
+  });
+  m = await mech(page);
+  const nodesBefore = new Map(m.nodes.map((n) => [n.id, n.position]));
+  await page.mouse.move(...at(325, 330)); // on the coupler's span
+  await page.mouse.down();
+  await page.mouse.move(...at(355, 350), { steps: 4 });
+  await page.mouse.move(...at(385, 370), { steps: 4 });
+  await page.mouse.up();
+  m = await mech(page);
+  const groupLengths = linkIdx(m).map((i) => lengthOf(m, i));
+  for (let i = 0; i < 3; i++) {
+    expect(Math.abs(groupLengths[i]! - before[i]!)).toBeLessThan(1e-6);
+  }
+  const first = m.nodes[0]!;
+  const b0 = nodesBefore.get(first.id)!;
+  const delta = { x: first.position.x - b0.x, y: first.position.y - b0.y };
+  expect(Math.hypot(delta.x, delta.y)).toBeGreaterThan(0.05);
+  for (const n of m.nodes) {
+    const b = nodesBefore.get(n.id)!;
+    expect(Math.abs(n.position.x - b.x - delta.x)).toBeLessThan(1e-6);
+    expect(Math.abs(n.position.y - b.y - delta.y)).toBeLessThan(1e-6);
+    expect(Math.abs(n.position.z - b.z)).toBeLessThan(1e-6);
+  }
+  // arrow-key nudge: with the selection still live, one press moves every
+  // selected node by exactly one length-snap step (imperial: ½ in)
+  const preNudge = new Map((await mech(page)).nodes.map((n) => [n.id, n.position]));
+  await page.keyboard.press('ArrowRight');
+  m = await mech(page);
+  for (const n of m.nodes) {
+    const b = preNudge.get(n.id)!;
+    expect(Math.abs(dist(n.position, b) - 0.5 * 0.0254)).toBeLessThan(1e-6);
+  }
+  await page.getByTestId('undo').click(); // un-nudge
+  await page.getByTestId('undo').click(); // un-group-drag — four-bar restored
+
+  // constraints ON: drag the crank tip through an arc — lengths hold.
+  // Clear the selection first: an endpoint of a SELECTED unlocked pipe
+  // drags as a length edit, and this drag must exercise the pose solve.
+  await page.evaluate(() => window.__riglab.setSelection([]));
+  await page.getByTestId('constraints-toggle').click();
+  await expect(page.getByTestId('constraints-toggle')).toHaveAttribute('aria-pressed', 'true');
   await page.mouse.move(...at(250, 340));
   await page.mouse.down();
   await page.mouse.move(...at(280, 355), { steps: 4 });

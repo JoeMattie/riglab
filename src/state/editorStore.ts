@@ -174,6 +174,12 @@ export interface EditorState {
   /** equilibrium force overlays are gated behind this explicit toggle — the
    * sketch face hides forces by default (§8.1) */
   equilibriumOn: boolean;
+  /** drag-time constraint enforcement (PLANFILE-multiselect-drag-constraints):
+   * on = node drags run the kinematic solve (pipe lengths rigid, locks
+   * honored); off (default) = drags move nodes directly and pipe lengths
+   * follow. A lens like equilibriumOn — not document state, not reset per
+   * project. */
+  constraintsOn: boolean;
   equilibrium: EquilibriumReadout;
   /** pending auto-resolve preview; null = none */
   autoProposal: AutoProposalState | null;
@@ -240,6 +246,7 @@ export interface EditorState {
   setFocusElement(elementId: string | null): void;
   setDiagnostics(dof: EditorState['dof'], violated: string[]): void;
   setEquilibriumOn(on: boolean): void;
+  setConstraintsOn(on: boolean): void;
   setEquilibrium(readout: EquilibriumReadout): void;
   setAutoProposal(p: AutoProposalState | null): void;
   setAssemblyRender(render: 'wire' | 'pipe'): void;
@@ -283,6 +290,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   violated: [],
   dof: null,
   equilibriumOn: false,
+  constraintsOn: false,
   equilibrium: IDLE_EQUILIBRIUM,
   autoProposal: null,
   assemblyRender: 'wire',
@@ -363,6 +371,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       equilibriumOn,
       equilibrium: equilibriumOn ? { ...IDLE_EQUILIBRIUM, status: 'settling' } : IDLE_EQUILIBRIUM,
     }),
+  setConstraintsOn: (constraintsOn) => set({ constraintsOn }),
   setEquilibrium: (equilibrium) => set({ equilibrium }),
   setAutoProposal: (autoProposal) => set({ autoProposal }),
   setAssemblyRender: (assemblyRender) => set({ assemblyRender }),

@@ -2168,3 +2168,88 @@ calibration" cases); (2) headless-Chromium playback measures ~200 ms/frame
 regardless of forces because SwiftShader software-renders the perspective
 panel — GPU browsers play at 60 fps, so scripted rAF perf checks must run
 headed.
+
+### DECISION: top chrome is docked, not floating; controls toggle moves into the transport pill (2026-07-06)
+Joe asked for the project chip, the panel-visibility toggles, and the actions
+chip (the Sketch/Design selector's home) to live permanently docked above the
+view panels instead of floating over them, with their drag handles removed —
+partially superseding "all floating chrome is drag-to-move" (2026-07-05) for
+those three pieces. EditorShell is now a flex column: an in-flow top bar
+(1fr/auto/1fr grid so the panel toggles stay window-centered) above a
+relative workspace that hosts the quad grid and the remaining floating
+chrome, which is unchanged and keeps its grips (tool pill, transport pill,
+DOF pill, plus the perspective panel's render toggle and analysis sidebar).
+The standalone floating "Controls" button is gone; the controls-dock toggle
+is now a chip in the transport pill immediately left of the clip selector
+(same `controls-toggle` testid, so the e2e smoke is unchanged). The design
+face's right dock top moved 64 → EDGE since nothing floats above it anymore.
+Covered in overhaul.test.tsx (no grips on docked chips; controls chip
+toggles the dock) plus a scripted built-app check (bar docked at y=0, quad
+below it, chip order in the pill, dock open/close).
+
+### DECISION: joint popover moves to right-click; left-click only selects (2026-07-06)
+Joe asked for the joint/realization popover to stop opening on plain click: a
+stationary left-click on a node now only selects the joint element living
+there (modifier click — shift, or cmd/ctrl — still toggles membership for
+multi-select, unchanged), and the popover opens on right-click instead, via a
+`contextmenu` handler on the sketch stage (browser menu suppressed on the
+canvas). This supersedes the design-handoff §6 click-opens-popover behavior
+on both the node-drag and endpoint-handle stationary-click paths. Right
+mouse-down never starts a drag/marquee/draft; a right-click on a node whose
+joint is already inside the current selection keeps that selection intact
+(it doesn't collapse a multi-selection) while still opening the popover.
+Note for macOS: ctrl+click is delivered by the browser as a right-click, so
+it opens the popover there — cmd+click is the multi-select modifier on mac,
+ctrl+click on Windows/Linux.
+
+### DECISION: constraints become an explicit drag-time toggle, default OFF (2026-07-06)
+Joe asked for free re-sketching: multi-selected pipes movable by dragging a
+pipe body, and solver length-holding only when a new "constraints" transport
+chip (`constraints-toggle`, default unchecked) is on
+(PLANFILE-multiselect-drag-constraints). This flips the app's default drag
+behavior: node drags now write positions directly (`moveNodes`) and pipe
+lengths follow, because link length is derived from node positions; the
+endpoint length-edit affordance applies to any link/telescope endpoint
+regardless of selection or `lengthLocked` (length lock is part of constraint
+checking, so it only binds while the toggle is on). With constraints on, the
+pre-change behavior is intact — kinematic solve per drag frame, only
+converged poses written (drag-ratchet invariant), locks honored. The new
+body drag starts from the `onPipe` snap (which supersedes marquee-on-pipe),
+moves the whole selection when the grabbed pipe is in it, and feeds the
+translated node targets either straight to `moveNodes` (off) or to the
+solver as `dragTargets` (on). Same regime for the new arrow-key nudge (one
+½ in / 1 cm step per press, one undo entry per press, active panel's plane).
+Related UX rulings from the same session: the editable length pills (and the
+unlock button on locked chips) show only for a single-element selection;
+the floating selection card opens in the NEAREST other on-screen ortho
+viewport instead of the one being worked in (`selectionCardHost` in
+quadLayout — grid Manhattan distance, reading order on ties, falls back to
+the working panel only when it is the sole ortho panel on screen, hides
+during cross-panel drags), superseding the "renders only in the active
+panel" rule for the card (the joint popover stays in the active panel);
+every node the selection touches gets a persistent soft orange halo; the
+constraints flag is a lens like `equilibriumOn` (not document state, not
+reset per project) and is exposed via `__riglab.getEditor().constraintsOn` /
+`setConstraintsOn`. The e2e sketch spec now enables the toggle before its
+lengths-hold drag and additionally smokes free drag, group body drag, and
+the nudge.
+
+### DECISION: canvas popup menus portal to document.body (2026-07-06)
+Joe asked for popup menus to float over the entire page instead of clipping
+inside the viewport that spawned them. The three canvas-anchored menus — the
+joint menu, the design-face realization menu, and the snap-connect menu (all
+in JointPopover.tsx) — were `position:absolute` children of the hosting
+panel's container, which is `overflow:hidden`, so they clipped at the quad
+panel's edge. They now render through `createPortal(document.body)` with
+`position:fixed` in page coordinates (panel-local anchor + the container's
+bounding rect, passed as a new `container` prop replacing `size`), clamped
+to the window with per-menu height estimates instead of to the panel, at
+zIndex 60 (above the floating pills' 40). Click-away semantics are
+unchanged: canvas mousedown still dismisses, and clicks inside the menu
+never reach the canvas (same as before, when the menu overlaid it). The
+pill-anchored menus (transport clip/inputs, DOF conflicts card) already
+float at page level over the panels and were left alone. Verified by a
+scripted built-app check: in quad view the popover is a direct body child,
+fixed-position, window-clamped, and extends past its hosting panel's edge;
+rows still apply and close through the portal.
+

@@ -12,13 +12,13 @@ describe('wheelGesture', () => {
     if (out.kind === 'zoom') expect(out.factor).toBeLessThan(1); // scroll down → zoom out
   });
 
-  it('treats a plain (non-ctrl) wheel as a pan, content following the fingers', () => {
+  it('treats a plain (non-ctrl) wheel as a pan, viewport following the fingers', () => {
     const g = wheelGesture({ deltaX: 6, deltaY: -4, deltaMode: 0, ctrlKey: false });
     expect(g.kind).toBe('pan');
     if (g.kind === 'pan') {
-      // pan is opposite the scroll delta (pixel mode is 1:1)
-      expect(g.dxPx).toBe(-6);
-      expect(g.dyPx).toBe(4);
+      // pan matches the scroll delta on both axes (pixel mode is 1:1)
+      expect(g.dxPx).toBe(6);
+      expect(g.dyPx).toBe(-4);
     }
   });
 

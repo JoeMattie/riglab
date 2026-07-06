@@ -78,10 +78,16 @@ export function DimensionChips({
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const units = doc.unitsPreference;
 
+  // the editable length pill is a single-pipe control: a multi-selection
+  // hides it (and the unlock button on locked chips) so a group selection
+  // isn't buried under chips — locked pipes keep their passive locked chip,
+  // hover tags stay display-only
+  const soloId = selectedElementIds.length === 1 ? selectedElementIds[0] : null;
+
   const pipes: ChipPipe[] = [];
   for (const el of mech.elements) {
     if (el.type !== 'link' && el.type !== 'telescope') continue;
-    const selected = selectedElementIds.includes(el.id);
+    const selected = el.id === soloId;
     const locked = el.lengthLocked === true;
     const hovered = hoveredElementId === el.id;
     if (!selected && !locked && !hovered && endpointDrag?.elementId !== el.id) continue;

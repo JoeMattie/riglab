@@ -1,7 +1,7 @@
 // Actions chip (design handoff §4, v7): undo/redo · copy/paste ·
 // Sketch/Design segmented control · units · Export. The 2D/3D/Quad mode
 // toggle is gone — the quad workspace IS the app (PLANFILE-3d-conversion.md
-// decision 3).
+// decision 3). Docked in the top bar (right slot), not floating.
 import { ClipboardPasteIcon, CopyIcon } from 'lucide-react';
 import { exportProjectJson, suggestedFileName } from '../../persistence/exportImport';
 import { setUnitsPref } from '../../persistence/prefs';
@@ -11,8 +11,7 @@ import { type Face, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import { copySelection, pasteClipboard } from './clipboardActions';
 import { ThemeIcon } from './icons';
-import { GripHandle, usePillDrag } from './pillDrag';
-import { dividerStyle, EDGE, panelStyle, T } from './theme';
+import { dividerStyle, T } from './theme';
 
 export function ActionsChip() {
   const doc = useAppStore((s) => s.current);
@@ -25,7 +24,6 @@ export function ActionsChip() {
   const hasClipboard = useEditorStore((s) => s.clipboard !== null);
   const night = useThemeStore((s) => s.night);
   const toggleNight = useThemeStore((s) => s.toggleNight);
-  const drag = usePillDrag();
 
   if (!doc) return null;
 
@@ -81,19 +79,11 @@ export function ActionsChip() {
     <div
       data-testid="actions-chip"
       style={{
-        ...panelStyle,
-        position: 'absolute',
-        right: EDGE,
-        top: EDGE,
-        transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)`,
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        padding: '8px 12px',
-        zIndex: 40,
       }}
     >
-      <GripHandle testid="actions-chip-handle" drag={drag} vertical />
       <button type="button" data-testid="undo" title="undo ⌘Z" onClick={undo} style={iconButton}>
         ↶
       </button>

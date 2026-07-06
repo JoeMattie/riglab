@@ -124,20 +124,12 @@ describe('ToolPill', () => {
   });
 });
 
-describe('floating chrome drag-to-move (every pill has a grip handle)', () => {
+describe('floating chrome drag-to-move (only the floating pills — the top-bar chips are docked)', () => {
   const dragBy = (handle: HTMLElement, dx: number, dy: number) => {
     fireEvent.pointerDown(handle, { clientX: 200, clientY: 200, pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: 200 + dx, clientY: 200 + dy, pointerId: 1 });
     fireEvent.pointerUp(handle, { pointerId: 1 });
   };
-
-  it('actions chip moves by its grip', () => {
-    render(<ActionsChip />);
-    const chip = screen.getByTestId('actions-chip');
-    expect(chip.style.transform).toBe('translate(0px, 0px)');
-    dragBy(screen.getByTestId('actions-chip-handle'), -60, 25);
-    expect(chip.style.transform).toBe('translate(-60px, 25px)');
-  });
 
   it('DOF pill moves by its grip (conflicts card anchored to it rides along)', () => {
     render(<DofPill />);
@@ -155,12 +147,15 @@ describe('floating chrome drag-to-move (every pill has a grip handle)', () => {
     expect(wrapper.style.transform).toBe('translate(80px, -12px)');
   });
 
-  it('project chip moves by its grip', () => {
-    render(<ProjectChip />);
-    const handle = screen.getByTestId('project-chip-handle');
-    const container = handle.closest('div')!.parentElement!;
-    dragBy(handle, 15, 40);
-    expect(container.style.transform).toBe('translate(15px, 40px)');
+  it('docked top-bar chips have no grip handles', () => {
+    render(
+      <>
+        <ProjectChip />
+        <ActionsChip />
+      </>,
+    );
+    expect(screen.queryByTestId('project-chip-handle')).toBeNull();
+    expect(screen.queryByTestId('actions-chip-handle')).toBeNull();
   });
 });
 
@@ -191,6 +186,13 @@ describe('DimensionChips', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     const n2 = mech0().nodes.find((n) => n.id === 'n2')!;
     expect(Math.hypot(n2.position.x, n2.position.y)).toBeCloseTo(10, 9);
+  });
+
+  it('a multi-selection hides the length pills — they are a single-pipe control', () => {
+    useEditorStore.setState({ selectedElementIds: ['L1', 'L2'] });
+    renderChips();
+    expect(screen.queryByTestId('length-chip')).toBeNull();
+    expect(screen.queryByTestId('length-chip-value')).toBeNull();
   });
 
   it('the lock button pins the length; locked pipes render the solid chip', () => {
@@ -227,7 +229,7 @@ describe('JointPopover', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
-        size={{ w: 800, h: 600 }}
+        container={null}
         frame={FRAME}
       />,
     );
@@ -402,7 +404,7 @@ describe('JointPopover hinge controls (v7)', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
-        size={{ w: 800, h: 600 }}
+        container={null}
         frame={FRAME}
       />,
     );
@@ -489,6 +491,18 @@ describe('TransportPill', () => {
     fireEvent.click(screen.getByTestId('equilibrium-toggle'));
   });
 
+  it('constraints chip is unchecked by default and drives drag-time enforcement', () => {
+    useEditorStore.setState({ constraintsOn: false });
+    render(<TransportPill />);
+    const chip = screen.getByTestId('constraints-toggle');
+    expect(chip.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(chip);
+    expect(useEditorStore.getState().constraintsOn).toBe(true);
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(chip);
+    expect(useEditorStore.getState().constraintsOn).toBe(false);
+  });
+
   it('the inputs popover adds and locks channels', () => {
     render(<TransportPill />);
     fireEvent.click(screen.getByTestId('inputs-toggle'));
@@ -496,6 +510,15 @@ describe('TransportPill', () => {
     expect(mech0().inputs).toHaveLength(1);
     fireEvent.click(screen.getByTestId('input-lock'));
     expect(mech0().inputs[0]!.locked).toBe(true);
+  });
+
+  it('the controls chip (left of the clip selector) toggles the controls dock', () => {
+    useEditorStore.setState({ controlsOpen: false });
+    render(<TransportPill />);
+    fireEvent.click(screen.getByTestId('controls-toggle'));
+    expect(useEditorStore.getState().controlsOpen).toBe(true);
+    fireEvent.click(screen.getByTestId('controls-toggle'));
+    expect(useEditorStore.getState().controlsOpen).toBe(false);
   });
 });
 

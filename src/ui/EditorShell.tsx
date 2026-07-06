@@ -1,12 +1,13 @@
-// The editor shell (interface overhaul + v7 quad-only conversion): the quad
-// workspace IS the app — a full-bleed 2×2 Top/Perspective/Front/Side grid
-// with floating chrome above it: project chip (top-left), actions chip
-// (top-right), tool pill (left), transport pill (bottom-center), DOF pill
-// (bottom-right). Element properties live on the panels (dimension chips,
-// joint popover, selection card, all rendered inside each SketchCanvas); the
-// design face additionally docks the tabbed inspector/checklist/materials/
-// BOM panel as a floating column. One global solve loop feeds diagnostics,
-// playback pose and equilibrium for every panel.
+// The editor shell (interface overhaul + v7 quad-only conversion): a docked
+// top bar (project chip · panel toggles · actions chip) above the quad
+// workspace — a 2×2 Top/Perspective/Front/Side grid with the remaining
+// chrome floating over it: tool pill (left), transport pill (bottom-center,
+// which also hosts the controls-dock toggle), DOF pill (bottom-right).
+// Element properties live on the panels (dimension chips, joint popover,
+// selection card, all rendered inside each SketchCanvas); the design face
+// additionally docks the tabbed inspector/checklist/materials/BOM panel as a
+// floating column. One global solve loop feeds diagnostics, playback pose
+// and equilibrium for every panel.
 import { useEffect } from 'react';
 import { massInventory } from '../analysis';
 import { EXAMPLES } from '../examples';
@@ -53,7 +54,6 @@ export function EditorShell() {
   const redo = useAppStore((s) => s.redo);
   const face = useEditorStore((s) => s.face);
   const controlsOpen = useEditorStore((s) => s.controlsOpen);
-  const setControlsOpen = useEditorStore((s) => s.setControlsOpen);
   const onboardingDismissed = useEditorStore((s) => s.onboardingDismissed);
 
   // one global solve loop: diagnostics + playback pose + equilibrium overlay
@@ -171,9 +171,13 @@ export function EditorShell() {
         quadSplit: s.quadSplit,
         panelsVisible: s.panelsVisible,
         panelDepths: s.panelDepths,
+        constraintsOn: s.constraintsOn,
         night: useThemeStore.getState().night,
       };
     };
+    // scripted-verification seam: flip drag-time constraint enforcement
+    // without pointer-picking the transport chip
+    hook.setConstraintsOn = (on: boolean) => useEditorStore.getState().setConstraintsOn(on);
     // seam for exercising the equilibrium force-overlay plumbing (§5.2)
     hook.setEquilibrium = (readout: unknown) =>
       useEditorStore.getState().setEquilibrium(readout as never);
@@ -229,74 +233,79 @@ export function EditorShell() {
         position: 'fixed',
         inset: 0,
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         background: T.bg,
         fontFamily: T.sans,
         fontSize: 13.5,
         color: T.text,
       }}
     >
-      {/* full-bleed quad workspace; all chrome floats above it. The clip
-          transport stays mounted so playback drives every panel. */}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-        <QuadView />
+      {/* docked top bar: project chip · panel toggles · actions chip. A
+          1fr/auto/1fr grid keeps the panel toggles window-centered however
+          wide the side groups are. */}
+      <div
+        data-testid="top-bar"
+        style={{
+          flex: 'none',
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
+          alignItems: 'center',
+          gap: 16,
+          padding: '8px 16px',
+          background: T.panel,
+          borderBottom: `1px solid ${T.border}`,
+        }}
+      >
+        <div style={{ justifySelf: 'start' }}>
+          <ProjectChip />
+        </div>
+        <PanelToggleChip />
+        <div style={{ justifySelf: 'end' }}>
+          <ActionsChip />
+        </div>
       </div>
 
-      {/* onboarding: a brand-new project has nothing drawn yet; "Start
-          drawing" dismisses the overlay so the canvas gets the pointer */}
-      {!hasElements && !onboardingDismissed && <EmptyState />}
+      {/* the quad workspace fills the rest; the remaining chrome floats
+          above it. The clip transport stays mounted so playback drives
+          every panel. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <QuadView />
 
-      <ProjectChip />
-      <PanelToggleChip />
-      <ActionsChip />
-      <ToolPill />
-      <TransportPill />
-      <DofPill />
+        {/* onboarding: a brand-new project has nothing drawn yet; "Start
+            drawing" dismisses the overlay so the canvas gets the pointer */}
+        {!hasElements && !onboardingDismissed && <EmptyState />}
 
-      {/* controls dock (§4.4): a toggled bottom panel (controls map onto
-          input channels); it clears the left tool pill */}
-      {controlsOpen ? (
-        <ControlsDock left={196} />
-      ) : (
-        <button
-          type="button"
-          data-testid="controls-toggle"
-          onClick={() => setControlsOpen(true)}
-          style={{
-            ...panelStyle,
-            position: 'absolute',
-            left: 196,
-            bottom: 76,
-            padding: '7px 12px',
-            font: `500 12.5px ${T.sans}`,
-            color: T.text,
-            cursor: 'pointer',
-            zIndex: 45,
-          }}
-        >
-          Controls
-        </button>
-      )}
+        <ToolPill />
+        <TransportPill />
+        <DofPill />
 
-      {/* design face: the tabbed inspector/checklist/materials/BOM dock
-          floats as a right-hand column (its feature scope is unchanged by
-          the overhaul — see DECISIONS.md) */}
-      {face === 'design' && (
-        <div
-          style={{
-            ...panelStyle,
-            position: 'absolute',
-            top: 64,
-            right: EDGE,
-            bottom: 76,
-            width: 384,
-            overflow: 'hidden',
-            display: 'flex',
-            zIndex: 30,
-          }}
-        >
-          <RightDock />
-        </div>
-      )}
+        {/* controls dock (§4.4): a toggled bottom panel (controls map onto
+            input channels), opened from the transport pill; it clears the
+            left tool pill */}
+        {controlsOpen && <ControlsDock left={196} />}
+
+        {/* design face: the tabbed inspector/checklist/materials/BOM dock
+            floats as a right-hand column (its feature scope is unchanged by
+            the overhaul — see DECISIONS.md) */}
+        {face === 'design' && (
+          <div
+            style={{
+              ...panelStyle,
+              position: 'absolute',
+              top: EDGE,
+              right: EDGE,
+              bottom: 76,
+              width: 384,
+              overflow: 'hidden',
+              display: 'flex',
+              zIndex: 30,
+            }}
+          >
+            <RightDock />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

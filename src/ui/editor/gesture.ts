@@ -63,7 +63,7 @@ export type WheelGesture =
  *     wheel event with `ctrlKey` set, and an explicit Ctrl/⌘+wheel on a mouse is
  *     the same intent. Cursor-anchored via `zoomAt`.
  *   - otherwise ⇒ **pan** — a two-finger trackpad scroll (or a plain mouse
- *     wheel), panning so the content follows the fingers.
+ *     wheel), panning so the viewport follows the fingers (scrollbar-style).
  * `deltaMode` only selects sensitivity, never the pan-vs-zoom decision.
  */
 export function wheelGesture(e: WheelSample): WheelGesture {
@@ -79,11 +79,12 @@ export function wheelGesture(e: WheelSample): WheelGesture {
     return { kind: 'zoom', factor };
   }
 
-  // plain wheel / two-finger scroll → pan, content following the fingers (pan
-  // opposite the scroll delta). Pixel deltas are 1:1 screen px; a line notch is
-  // one line height.
+  // plain wheel / two-finger scroll → pan in the scroll-delta direction on both
+  // axes (viewport follows the fingers, content moves opposite — scrollbar-style
+  // rather than content-follows-fingers). Pixel deltas are 1:1 screen px; a line
+  // notch is one line height.
   const panPxPerUnit = pixel ? 1 : LINE_HEIGHT_PX;
-  return { kind: 'pan', dxPx: -e.deltaX * panPxPerUnit, dyPx: -e.deltaY * panPxPerUnit };
+  return { kind: 'pan', dxPx: e.deltaX * panPxPerUnit, dyPx: e.deltaY * panPxPerUnit };
 }
 
 /** Two active touch/pointer positions (screen px). */

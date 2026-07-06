@@ -5,6 +5,7 @@
 // v7 (PLANFILE-3d-conversion.md): a pivot additionally carries its 3D joint —
 // hinge (with an editable axis + ⊥-panel presets) or spherical.
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { OrientationFrame } from '../../geometry/placement';
 import type { JointRealization, Mechanism, PivotElement, PivotJoint, Vec2 } from '../../schema';
 import { useAppStore } from '../../state/appStore';
@@ -28,18 +29,23 @@ const CONNECT_LABELS: Record<string, string> = {
   detach: 'Detach',
 };
 
-interface Size {
-  w: number;
-  h: number;
-}
-
 const WIDTH = 178;
 
-function clampedPos(anchor: Vec2, size: Size): { left: number; top: number } {
+/** Menus portal to document.body and position fixed in PAGE coordinates, so
+ * they float over the whole window instead of clipping at the hosting
+ * panel's overflow:hidden edge; clamp against the window with a per-menu
+ * height estimate. */
+function clampedPos(anchor: Vec2, w: number, h: number): { left: number; top: number } {
   return {
-    left: Math.max(8, Math.min(anchor.x, size.w - WIDTH - 8)),
-    top: Math.max(8, Math.min(anchor.y, size.h - 200)),
+    left: Math.max(8, Math.min(anchor.x, window.innerWidth - w - 8)),
+    top: Math.max(8, Math.min(anchor.y, window.innerHeight - h - 8)),
   };
+}
+
+/** Page-coordinate offset of the hosting panel (null container → 0,0). */
+function pageOrigin(container: HTMLElement | null): Vec2 {
+  const r = container?.getBoundingClientRect();
+  return { x: r?.left ?? 0, y: r?.top ?? 0 };
 }
 
 /** Roving arrow-key focus across the option buttons (storyboard 1f·1). */
@@ -56,14 +62,15 @@ export function JointPopover({
   mech,
   view,
   positions,
-  size,
+  container,
   frame,
 }: {
   mech: Mechanism;
   view: ViewTransform;
   /** node positions projected into the hosting panel's plane */
   positions: Record<string, Vec2>;
-  size: Size;
+  /** hosting panel's DOM element — its page offset anchors the portaled menu */
+  container: HTMLElement | null;
   /** the hosting panel's frame — its normal is the default hinge axis */
   frame: OrientationFrame;
 }) {
@@ -71,14 +78,15 @@ export function JointPopover({
   const openPopover = useEditorStore((s) => s.openPopover);
   const face = useEditorStore((s) => s.face);
 
-  if (pending) return <ConnectMenu size={size} />;
+  if (pending) return <ConnectMenu container={container} />;
   if (openPopover?.kind !== 'joint') return null;
   const node = mech.nodes.find((n) => n.id === openPopover.nodeId);
   if (!node) return null;
   const p2 = positions[node.id];
   if (!p2) return null;
   const p = toScreen(view, p2);
-  const anchor = { x: p.x - 33, y: p.y + 20 };
+  const origin = pageOrigin(container);
+  const anchor = { x: origin.x + p.x - 33, y: origin.y + p.y + 20 };
   // design face: every pivot-like joint (pivot, weld, or slider) gets the
   // realization picker — the engineering question at that point — even when
   // it is an implicit free pin with no explicit element yet. Anchors and free
@@ -86,17 +94,10 @@ export function JointPopover({
   const kind = jointKindAtNode(mech, node.id);
   if (face === 'design' && (kind === 'pivot' || kind === 'weld' || kind === 'slider')) {
     return (
-      <RealizationMenu
-        mech={mech}
-        nodeId={node.id}
-        kind={kind}
-        anchor={anchor}
-        size={size}
-        frame={frame}
-      />
+      <RealizationMenu mech={mech} nodeId={node.id} kind={kind} anchor={anchor} frame={frame} />
     );
   }
-  return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} size={size} frame={frame} />;
+  return <JointMenu mech={mech} nodeId={node.id} anchor={anchor} frame={frame} />;
 }
 
 /** Which physical realizations can actually produce each joint kind's
@@ -126,14 +127,13 @@ function RealizationMenu({
   nodeId,
   kind,
   anchor,
-  size,
   frame,
 }: {
   mech: Mechanism;
   nodeId: string;
   kind: 'pivot' | 'weld' | 'slider';
+  /** page coordinates */
   anchor: Vec2;
-  size: Size;
   frame: OrientationFrame;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
@@ -161,8 +161,8 @@ function RealizationMenu({
     );
   };
 
-  const pos = clampedPos(anchor, size);
-  return (
+  const pos = clampedPos(anchor, 196, 330);
+  return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
     <div
       ref={ref}
@@ -171,7 +171,7 @@ function RealizationMenu({
         if (e.key === 'Escape') setOpenPopover(null);
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'absolute', ...pos, width: 196, zIndex: 30 }}
+      style={{ ...menuStyle, position: 'fixed', ...pos, width: 196, zIndex: 60 }}
     >
       <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
         Realization · {kind} {nodeId.slice(0, 4)}
@@ -208,12 +208,13 @@ function RealizationMenu({
         unset (sketch)
         {current === undefined && <span style={{ marginLeft: 'auto' }}>✓</span>}
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 /** Snap-connect variant: choices come from the pending draw; Pivot default. */
-function ConnectMenu({ size }: { size: Size }) {
+function ConnectMenu({ container }: { container: HTMLElement | null }) {
   const pending = useEditorStore((s) => s.pendingConnect)!;
   const ref = useRef<HTMLDivElement>(null);
 
@@ -221,8 +222,13 @@ function ConnectMenu({ size }: { size: Size }) {
     ref.current?.querySelector('button')?.focus();
   }, []);
 
-  const pos = clampedPos({ x: pending.screen.x + 10, y: pending.screen.y - 10 }, size);
-  return (
+  const origin = pageOrigin(container);
+  const pos = clampedPos(
+    { x: origin.x + pending.screen.x + 10, y: origin.y + pending.screen.y - 10 },
+    WIDTH,
+    160,
+  );
+  return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
     <div
       ref={ref}
@@ -232,7 +238,7 @@ function ConnectMenu({ size }: { size: Size }) {
         if (e.key === 'Escape') pending.cancel();
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'absolute', ...pos, width: WIDTH, zIndex: 30 }}
+      style={{ ...menuStyle, position: 'fixed', ...pos, width: WIDTH, zIndex: 60 }}
     >
       <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>Connect end</div>
       {pending.options.map((o, i) => (
@@ -250,7 +256,8 @@ function ConnectMenu({ size }: { size: Size }) {
           {i === 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: T.focus }}>⏎</span>}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -410,13 +417,12 @@ function JointMenu({
   mech,
   nodeId,
   anchor,
-  size,
   frame,
 }: {
   mech: Mechanism;
   nodeId: string;
+  /** page coordinates */
   anchor: Vec2;
-  size: Size;
   frame: OrientationFrame;
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
@@ -470,8 +476,8 @@ function JointMenu({
     detach: 'Detach',
   };
 
-  const pos = clampedPos(anchor, size);
-  return (
+  const pos = clampedPos(anchor, WIDTH + 26, 310);
+  return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
     <div
       ref={ref}
@@ -480,7 +486,7 @@ function JointMenu({
         if (e.key === 'Escape') setOpenPopover(null);
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'absolute', ...pos, width: WIDTH + 26, zIndex: 30 }}
+      style={{ ...menuStyle, position: 'fixed', ...pos, width: WIDTH + 26, zIndex: 60 }}
     >
       <div style={{ ...captionStyle, padding: '4px 8px 6px' }}>
         Joint · node {nodeId.slice(0, 4)}
@@ -511,7 +517,8 @@ function JointMenu({
           <PivotJointControls pivot={pivot} />
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

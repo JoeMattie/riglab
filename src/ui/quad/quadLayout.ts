@@ -3,7 +3,7 @@
 // → CSS-grid templates, per-panel grid areas, and the splitter set. The
 // classic quad-CAD model: ONE vertical and ONE horizontal splitter shared by
 // all four panels, so quadrant edges always stay aligned.
-import type { QuadPanelId } from '../../state/editorStore';
+import type { OrthoPanelId, QuadPanelId } from '../../state/editorStore';
 
 /** Fraction of the workspace given to the left column (x) / top row (y). */
 export interface QuadSplit {
@@ -31,6 +31,28 @@ const SLOT: Record<QuadPanelId, { row: 0 | 1; col: 0 | 1 }> = {
 
 /** Canonical panel order — reading order of the quadrants. */
 export const PANEL_ORDER: readonly QuadPanelId[] = ['top', 'persp', 'front', 'side'];
+
+/** Which ortho panel hosts the floating selection card
+ * (PLANFILE-multiselect-drag-constraints follow-up): the card must not
+ * cover the viewport being worked in, so it opens in the NEAREST other
+ * on-screen ortho panel (grid Manhattan distance; reading order breaks
+ * ties). When no other ortho panel is on screen (maximized panel, lone
+ * visible panel) it stays in the working panel; null only when no ortho
+ * panel is on screen at all (perspective maximized). */
+export function selectionCardHost(
+  active: QuadPanelId,
+  visible: Record<QuadPanelId, boolean>,
+  maximized: QuadPanelId | null,
+): OrthoPanelId | null {
+  const ORTHO: readonly OrthoPanelId[] = ['top', 'front', 'side'];
+  const onScreen = (p: QuadPanelId): boolean => (maximized ? p === maximized : visible[p]);
+  const others = ORTHO.filter((p) => p !== active && onScreen(p));
+  if (others.length === 0) return ORTHO.find((p) => p === active && onScreen(p)) ?? null;
+  const a = SLOT[active];
+  const d = (p: QuadPanelId): number =>
+    Math.abs(SLOT[p].row - a.row) + Math.abs(SLOT[p].col - a.col);
+  return others.reduce((best, p) => (d(p) < d(best) ? p : best));
+}
 
 export interface PanelCell {
   panel: QuadPanelId;
