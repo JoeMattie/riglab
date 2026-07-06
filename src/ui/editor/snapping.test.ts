@@ -145,6 +145,40 @@ describe('findSnap sources (top-bar snap toggles)', () => {
     expect(findSnap(nearSpan, ctx({ ends: true, pipes: false, grid: true })).kind).toBe('grid');
   });
 
+  it('gridBasis: the fallback rounds to the projected ground lattice (iso)', () => {
+    // a 45°-ish lattice: u along (1,1), v along (-1,1), step 0.1
+    const u = { x: 0.1, y: 0.1 };
+    const v = { x: -0.1, y: 0.1 };
+    const snapped = findSnap(
+      { x: 0.19, y: 0.02 },
+      { ...ctx({ ends: false, pipes: false, grid: true }), gridBasis: { u, v } },
+    );
+    // nearest lattice point: a=1, b=-1 → (0.2, 0)
+    expect(snapped.kind).toBe('grid');
+    expect(snapped.pos.x).toBeCloseTo(0.2, 12);
+    expect(snapped.pos.y).toBeCloseTo(0, 12);
+  });
+
+  it('an end occupying the target grid point beats the bare grid', () => {
+    // node exactly on a grid point; the cursor is OUTSIDE the node snap
+    // tolerance but rounds to that same grid point — the node must win, or
+    // the next stroke lands coincident but unjoined
+    const gm = mech([L1], [node('n1', 0.1, 0), node('n2', 1, 0)]);
+    const gpos = { n1: { x: 0.1, y: 0 }, n2: { x: 1, y: 0 } };
+    const snap = findSnap(
+      { x: 0.06, y: 0.04 }, // 0.057 from n1 — beyond tolM 0.05
+      {
+        mechanism: gm,
+        positions: gpos,
+        silhouette: null,
+        tolM: 0.05,
+        gridM: 0.1,
+        sources: { ends: true, pipes: false, grid: true },
+      },
+    );
+    expect(snap).toMatchObject({ kind: 'node', nodeId: 'n1' });
+  });
+
   it('grid off: the fallback keeps the raw pointer position', () => {
     const raw = { x: 0.4031, y: 0.31 };
     const rounded = findSnap(raw, ctx({ ends: true, pipes: false, grid: true }));

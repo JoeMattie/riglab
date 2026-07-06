@@ -9,25 +9,61 @@ import type { OrthoPanelId } from '../../state/editorStore';
 
 export type { OrthoPanelId };
 
-/** Classic isometric basis (PLANFILE-iso-view.md): viewer at +(1,1,1),
- * world-up dominating screen-up. Orthonormal and right-handed, so the shared
- * project/lift math round-trips exactly like the principal frames. Defined
- * here (not placement.ts) — it is a workspace view, not a document
- * ViewOrientation. */
-const S2 = Math.SQRT2;
+/** One sign per world axis picks the isometric viewing octant
+ * (PLANFILE-iso-view.md): x = front/back ("reverse"), y = above/below,
+ * z = wearer-left/right. */
+export interface IsoOctant {
+  x: 1 | -1;
+  y: 1 | -1;
+  z: 1 | -1;
+}
+
+export const DEFAULT_ISO_OCTANT: IsoOctant = { x: 1, y: 1, z: 1 };
+
 const S3 = Math.sqrt(3);
 const S6 = Math.sqrt(6);
-const ISO_FRAME: OrientationFrame = {
-  xAxis: { x: 1 / S2, y: 0, z: -1 / S2 },
-  yAxis: { x: -1 / S6, y: 2 / S6, z: -1 / S6 },
-  zAxis: { x: 1 / S3, y: 1 / S3, z: 1 / S3 },
-};
+
+/** Isometric basis for a viewing octant: viewer at (sx, sy, sz)·(1,1,1),
+ * world-up dominating screen-up in EVERY octant (the up vector is world +y
+ * projected into the view plane, so scenes never render upside-down —
+ * "below" octants look up at the underside instead). Orthonormal and
+ * right-handed, so the shared project/lift math round-trips exactly like
+ * the principal frames. Defined here (not placement.ts) — a workspace view,
+ * not a document ViewOrientation. */
+function makeIsoFrame(o: IsoOctant): OrientationFrame {
+  const zAxis: Vec3 = { x: o.x / S3, y: o.y / S3, z: o.z / S3 };
+  // world +y minus its normal component, normalized: (−sx·sy, 2, −sz·sy)/√6
+  const yAxis: Vec3 = { x: (-o.x * o.y) / S6, y: 2 / S6, z: (-o.z * o.y) / S6 };
+  // right-handed completion: x = y × z
+  const xAxis: Vec3 = {
+    x: yAxis.y * zAxis.z - yAxis.z * zAxis.y,
+    y: yAxis.z * zAxis.x - yAxis.x * zAxis.z,
+    z: yAxis.x * zAxis.y - yAxis.y * zAxis.x,
+  };
+  return { xAxis, yAxis, zAxis };
+}
+
+/** All eight octant frames, precomputed so the frame OBJECT IDENTITY is
+ * stable — SketchCanvas memos key off the frame reference. */
+const ISO_FRAMES = new Map<string, OrientationFrame>(
+  ([1, -1] as const).flatMap((x) =>
+    ([1, -1] as const).flatMap((y) =>
+      ([1, -1] as const).map(
+        (z) => [`${x},${y},${z}`, makeIsoFrame({ x, y, z })] as [string, OrientationFrame],
+      ),
+    ),
+  ),
+);
+
+export function isoFrame(o: IsoOctant): OrientationFrame {
+  return ISO_FRAMES.get(`${o.x},${o.y},${o.z}`)!;
+}
 
 export const PANEL_FRAME: Record<OrthoPanelId, OrientationFrame> = {
   top: orientationFrame('top'),
   front: orientationFrame('front'),
   side: orientationFrame('side-left'),
-  iso: ISO_FRAME,
+  iso: isoFrame(DEFAULT_ISO_OCTANT),
 };
 
 const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;

@@ -44,6 +44,7 @@ import {
   samplePose,
 } from '../../wearer';
 import {
+  isoFrame,
   PANEL_FRAME,
   panelDepthOf,
   panelToWorld,
@@ -217,7 +218,10 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const quadMaximized = useEditorStore((s) => s.quadMaximized);
 
   const mech: Mechanism | null = doc?.mechanism ?? null;
-  const frame = PANEL_FRAME[panelId];
+  const isoOctant = useEditorStore((s) => s.isoOctant);
+  // the iso panel's frame follows the chosen viewing octant (all eight are
+  // precomputed, so the reference stays stable per octant for the memos)
+  const frame = panelId === 'iso' ? isoFrame(isoOctant) : PANEL_FRAME[panelId];
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 500 });
@@ -259,6 +263,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const panRef = useRef<Vec2 | null>(null);
   /** where the last mousedown landed, to tell a click from a drag/pan */
   const mouseDownScreenRef = useRef<Vec2 | null>(null);
+  /** the mousedown BEFORE that — a genuine double-click's two clicks are
+   * coincident, so the anchor toggle can reject Konva's time-based dblclick
+   * firing for two rapid clicks at DIFFERENT spots (same caveat the
+   * polyline/rope finishers guard with isCoincidentFinish) */
+  const prevMouseDownScreenRef = useRef<Vec2 | null>(null);
   /** marquee (drag-box) selection, in screen coords while dragging */
   const [marquee, setMarquee] = useState<{ start: Vec2; cursor: Vec2 } | null>(null);
   /** space held ⇒ drag pans instead of drawing the marquee */
@@ -487,6 +496,22 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     return p ? { x: p.x, y: p.y } : null;
   };
 
+  /** The snap grid IS the visible grid (Joe: "grid snapping doesn't work" —
+   * it rounded to an invisible 0.5" lattice while the DRAWN grid is 0.1 m):
+   * one adaptive step shared by the renderer, the snap context, and the
+   * iso ground lattice. */
+  const gridStepM = view.scale > 700 ? GRID_M * 4 : 0.1;
+
+  /** ISO grid snaps land on the projected GROUND lattice (world x/z at the
+   * visible step), matching the drawn isometric grid — not axis-aligned
+   * panel-2D rounding. Full step vectors in panel 2D. */
+  const gridBasis = useMemo(() => {
+    if (panelId !== 'iso') return undefined;
+    const px = projectToPanel({ x: gridStepM, y: 0, z: 0 }, frame);
+    const pz = projectToPanel({ x: 0, y: 0, z: gridStepM }, frame);
+    return { u: px, v: pz };
+  }, [panelId, frame, gridStepM]);
+
   /** Shared context for findSnap / findBentLinkHit — assumes `mech` checked. */
   const snapContext = useCallback(
     (exclude?: ReadonlySet<string>, excludeElements?: ReadonlySet<string>) => ({
@@ -494,12 +519,13 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       positions: projected,
       silhouette,
       tolM: SNAP_TOL_PX / view.scale,
-      gridM: GRID_M,
+      gridM: gridStepM,
       exclude,
       excludeElements,
       sources: { ends: snapPrefs.ends, pipes: snapPrefs.pipes, grid: snapPrefs.grid },
+      gridBasis,
     }),
-    [view.scale, mech, projected, silhouette, snapPrefs],
+    [view.scale, mech, projected, silhouette, snapPrefs, gridBasis, gridStepM],
   );
 
   const snapAt = useCallback(
@@ -649,6 +675,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const onMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
     if (!screen || !mech || !doc) return;
+    prevMouseDownScreenRef.current = mouseDownScreenRef.current;
     mouseDownScreenRef.current = screen;
     setActivePanel(panelId);
     // canvas mousedown dismisses floating popovers and inline edits
@@ -957,9 +984,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
         updateCurrent((cur) => releaseNodeConnection(cur, endpointDrag.nodeId));
       }
       // direct geometry edit: move ONE node; node/skeleton/anchor snaps win,
-      // then length ticks (½ in / 1 cm), else the raw pointer lifted at the
-      // node's own depth
-      const world2 = toWorld(view, screen);
+      // else the (grid-snapped, when Grid is on) pointer lifted at the
+      // node's own depth. Length ticks are gone (Joe's request) — the grid
+      // is the only construction aid.
       const liveDoc = useAppStore.getState().current;
       const liveMech = liveDoc?.mechanism;
       const el = liveMech?.elements.find((x) => x.id === endpointDrag.elementId);
@@ -968,35 +995,10 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       const other = liveMech.nodes.find((n) => n.id === otherId)?.position;
       if (!other) return;
       const snap = snapAt(screen, new Set([endpointDrag.nodeId]), endpointDrag.incidentElementIds);
-      let pos: Vec3;
-      let snapped: boolean;
-      if (snap.kind !== 'grid') {
-        pos = vec3OfSnap(snap, endpointDrag.depthM);
-        snapped = true;
-      } else {
-        const raw3 = to3D(world2, endpointDrag.depthM);
-        const d = {
-          x: raw3.x - other.x,
-          y: raw3.y - other.y,
-          z: raw3.z - other.z,
-        };
-        const raw = Math.hypot(d.x, d.y, d.z);
-        const step = lengthStepM(doc.unitsPreference ?? 'imperial');
-        const tick = Math.round(raw / step) * step;
-        if (
-          snapPrefs.length &&
-          raw > 1e-9 &&
-          Math.abs(tick - raw) < (SNAP_TOL_PX * 0.5) / view.scale &&
-          tick > 0
-        ) {
-          const s = tick / raw;
-          pos = { x: other.x + d.x * s, y: other.y + d.y * s, z: other.z + d.z * s };
-          snapped = true;
-        } else {
-          pos = raw3;
-          snapped = false;
-        }
-      }
+      // a 'grid' snap carries the grid-rounded point (or the raw pointer
+      // when Grid is toggled off) — lift it either way
+      const pos: Vec3 = vec3OfSnap(snap, endpointDrag.depthM);
+      const snapped = snap.kind !== 'grid' || snapPrefs.grid;
       updateCurrent((cur) => moveNodes(cur, { [endpointDrag.nodeId]: pos }));
       setEndpointDrag({
         ...endpointDrag,
@@ -1043,10 +1045,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               : null;
       setHoverSnap(bindSnap);
       // panel-plane-constrained target: the pointer moves the node in this
-      // panel's plane at the node's own out-of-plane depth
+      // panel's plane at the node's own out-of-plane depth; a plain-grid
+      // fall-through carries the grid-rounded point (raw when Grid is off)
       const target: Vec3 = bindSnap
         ? vec3OfSnap(bindSnap, dragNode.depthM)
-        : to3D(world2, dragNode.depthM);
+        : to3D(dropSnap.kind === 'grid' ? dropSnap.pos : world2, dragNode.depthM);
       // constraints off: the node moves directly — incident pipe lengths
       // follow the drawn geometry (no solve, no length lock)
       if (!constraintsOn) {
@@ -1348,6 +1351,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       return;
     }
     if (tool === 'select') {
+      // only a COINCIDENT pair of clicks is a real double-click — Konva's
+      // dblclick is time-based, so two rapid dblclicks at different nodes
+      // fire a spurious third event spanning both, double-toggling anchors
+      const prev = prevMouseDownScreenRef.current;
+      if (!prev || Math.hypot(screen.x - prev.x, screen.y - prev.y) >= 4) return;
       const snap = snapAt(screen);
       if (snap.kind === 'node') {
         const node = mech.nodes.find((n) => n.id === snap.nodeId);
@@ -1495,29 +1503,60 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const seg3 = (a?: Vec3, b?: Vec3): number =>
     a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0;
 
-  // adaptive grid: 0.1 m lines, plus 0.5" when zoomed in
+  // adaptive grid: 0.1 m lines, plus 0.5" when zoomed in. Upright panels
+  // draw the panel-plane square grid; ISO draws the projected GROUND grid —
+  // the world x/z lattice through the origin, i.e. the classic isometric
+  // diamond grid — matching where iso grid-snaps land (Joe's request).
   const gridLines: Array<{ pts: number[]; strong: boolean }> = [];
   {
-    const step = view.scale > 700 ? GRID_M * 4 : 0.1;
+    const step = gridStepM;
     const w0 = toWorld(view, { x: 0, y: size.h });
     const w1 = toWorld(view, { x: size.w, y: 0 });
-    for (let x = Math.floor(w0.x / step) * step; x <= w1.x; x += step) {
-      gridLines.push({
-        pts: flat([
-          { x, y: w0.y },
-          { x, y: w1.y },
-        ]),
-        strong: Math.abs(x) < 1e-9,
+    if (panelId === 'iso') {
+      // panel-2D directions of the world ground axes; a ground lattice point
+      // (a·step, 0, b·step) lands at step·(a·PX + b·PZ) in panel 2D
+      const PX = projectToPanel({ x: 1, y: 0, z: 0 }, frame);
+      const PZ = projectToPanel({ x: 0, y: 0, z: 1 }, frame);
+      const det = PX.x * PZ.y - PX.y * PZ.x;
+      const toLattice = (p: Vec2) => ({
+        a: (p.x * PZ.y - p.y * PZ.x) / det / step,
+        b: (PX.x * p.y - PX.y * p.x) / det / step,
       });
-    }
-    for (let y = Math.floor(w0.y / step) * step; y <= w1.y; y += step) {
-      gridLines.push({
-        pts: flat([
-          { x: w0.x, y },
-          { x: w1.x, y },
-        ]),
-        strong: Math.abs(y) < 1e-9,
+      const at = (a: number, b: number): Vec2 => ({
+        x: step * (a * PX.x + b * PZ.x),
+        y: step * (a * PX.y + b * PZ.y),
       });
+      // lattice range covering the visible rect (its corners, inverted)
+      const corners = [w0, w1, { x: w0.x, y: w1.y }, { x: w1.x, y: w0.y }].map(toLattice);
+      const aMin = Math.floor(Math.min(...corners.map((c) => c.a)));
+      const aMax = Math.ceil(Math.max(...corners.map((c) => c.a)));
+      const bMin = Math.floor(Math.min(...corners.map((c) => c.b)));
+      const bMax = Math.ceil(Math.max(...corners.map((c) => c.b)));
+      for (let a = aMin; a <= aMax; a++) {
+        gridLines.push({ pts: flat([at(a, bMin), at(a, bMax)]), strong: a === 0 });
+      }
+      for (let b = bMin; b <= bMax; b++) {
+        gridLines.push({ pts: flat([at(aMin, b), at(aMax, b)]), strong: b === 0 });
+      }
+    } else {
+      for (let x = Math.floor(w0.x / step) * step; x <= w1.x; x += step) {
+        gridLines.push({
+          pts: flat([
+            { x, y: w0.y },
+            { x, y: w1.y },
+          ]),
+          strong: Math.abs(x) < 1e-9,
+        });
+      }
+      for (let y = Math.floor(w0.y / step) * step; y <= w1.y; y += step) {
+        gridLines.push({
+          pts: flat([
+            { x: w0.x, y },
+            { x: w1.x, y },
+          ]),
+          strong: Math.abs(y) < 1e-9,
+        });
+      }
     }
   }
 
@@ -1630,38 +1669,36 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               it as a horizontal line; ISO projects the ground's ±x/±z axes
               instead — a flat line would be wrong under an axonometric
               projection (PLANFILE-iso-view.md). */}
-          {panelId === 'iso' ? (
-            (
-              [
+          {panelId === 'iso'
+            ? (
                 [
-                  { x: -100, y: 0, z: 0 },
-                  { x: 100, y: 0, z: 0 },
-                ],
-                [
-                  { x: 0, y: 0, z: -100 },
-                  { x: 0, y: 0, z: 100 },
-                ],
-              ] as const
-            ).map((axis, i) => (
-              <Line
-                // biome-ignore lint/suspicious/noArrayIndexKey: two fixed ground axes, never reordered
-                key={`ga${i}`}
-                points={flat(axis.map((w) => projectToPanel(w, frame)))}
-                stroke={C.silhouette}
-                strokeWidth={1.5}
-                dash={[10, 6]}
-              />
-            ))
-          ) : (
-            panelId !== 'top' && (
-              <Line
-                points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
-                stroke={C.silhouette}
-                strokeWidth={1.5}
-                dash={[10, 6]}
-              />
-            )
-          )}
+                  [
+                    { x: -100, y: 0, z: 0 },
+                    { x: 100, y: 0, z: 0 },
+                  ],
+                  [
+                    { x: 0, y: 0, z: -100 },
+                    { x: 0, y: 0, z: 100 },
+                  ],
+                ] as const
+              ).map((axis, i) => (
+                <Line
+                  // biome-ignore lint/suspicious/noArrayIndexKey: two fixed ground axes, never reordered
+                  key={`ga${i}`}
+                  points={flat(axis.map((w) => projectToPanel(w, frame)))}
+                  stroke={C.silhouette}
+                  strokeWidth={1.5}
+                  dash={[10, 6]}
+                />
+              ))
+            : panelId !== 'top' && (
+                <Line
+                  points={[0, S({ x: 0, y: 0 }).y, size.w, S({ x: 0, y: 0 }).y]}
+                  stroke={C.silhouette}
+                  strokeWidth={1.5}
+                  dash={[10, 6]}
+                />
+              )}
           {silhouette?.outlines.map((poly, i) => (
             <Line
               // biome-ignore lint/suspicious/noArrayIndexKey: silhouette outlines are a fixed projection, regenerated wholesale, never reordered

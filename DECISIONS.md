@@ -2459,3 +2459,32 @@ consistent, called out in the planfile. Covered by frame/round-trip unit
 tests, toggle component tests, and a scripted built-app check (draw in iso →
 document geometry lies exactly in the iso plane, drag/zoom work, quad
 restores).
+
+### DECISION: iso draws (and snaps) the projected ground lattice; viewing octant flips (2026-07-06)
+Joe asked for the iso grid to be isometric and for view flips. The iso panel
+now renders the projected world x/z GROUND grid — the classic isometric
+diamond lattice — instead of the panel-plane square grid, and grid snaps
+land on that same lattice (SnapContext.gridBasis: non-axis-aligned rounding
+in the projected basis). The viewing octant is switchable from the iso
+header: Left/Right (z), Above/Below (y), Front/Back (x) chips flip one sign
+each; all eight frames are precomputed (isoFrame in panelProject) with
+world-up always projecting upward, so no octant renders upside-down.
+
+### DECISION: length snapping removed; the snap grid IS the visible grid (2026-07-06)
+Joe: "Remove length snapping. Also grid snapping doesn't work." The ½ in /
+1 cm endpoint-drag length tick is gone (SnapPrefs loses `length`; the arrow
+NUDGE step keeps lengthStepM). Grid snapping "didn't work" because it
+rounded to the invisible 0.5" §8.1 lattice while the DRAWN grid is 0.1 m,
+and node/endpoint drags never grid-snapped at all: now one adaptive step
+(0.1 m, finer when zoomed past 700 px/m) is shared by the grid renderer,
+the snap context, and the iso ground lattice, and free node drags +
+endpoint drags snap to it when the Grid toggle is on (raw pointer when
+off). Two follow-on fixes the coarser grid exposed: (a) an end OCCUPYING
+the target grid point beats the bare grid — otherwise the cursor could
+round AWAY from a node sitting exactly on that grid point and the next
+stroke landed coincident but unjoined; (b) the select-tool double-click
+anchor toggle now requires the two clicks to be COINCIDENT, the same
+isCoincidentFinish caveat the polyline/rope finishers guard — Konva's
+dblclick is time-based, so two rapid dblclicks at different nodes fired a
+spurious third event that double-toggled an anchor (caught by the four-bar
+e2e spec).

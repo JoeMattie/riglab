@@ -43,11 +43,10 @@ export type OrthoPanelId = 'top' | 'front' | 'side' | 'iso';
 export type PanelDepths = Record<OrthoPanelId, number>;
 
 /** Top-bar snapping toggles: which snap sources attract while drawing and
- * dragging. `length` is the ½ in / 1 cm endpoint-drag tick; the rest gate
- * findSnap sources (grid points, pipe ends, pipe bodies). */
+ * dragging (grid points, pipe ends, pipe bodies). Length ticks were removed
+ * at Joe's request — the grid is the only construction aid. */
 export interface SnapPrefs {
   grid: boolean;
-  length: boolean;
   ends: boolean;
   pipes: boolean;
 }
@@ -222,6 +221,10 @@ export interface EditorState {
    * a session lens like constraintsOn */
   workspaceMode: 'quad' | 'iso';
   setWorkspaceMode(mode: 'quad' | 'iso'): void;
+  /** isometric viewing octant: one sign per world axis (x front/back,
+   * y above/below, z left/right) — flipped from the iso panel header */
+  isoOctant: { x: 1 | -1; y: 1 | -1; z: 1 | -1 };
+  flipIsoAxis(axis: 'x' | 'y' | 'z'): void;
   /** the §8.3 controls dock (builder + widgets + control clips) is toggled */
   controlsOpen: boolean;
   /** selection clipboard (PLANFILE-quad-panel-controls C) — a full snapshot
@@ -307,7 +310,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   dof: null,
   equilibriumOn: false,
   constraintsOn: false,
-  snapPrefs: { grid: true, length: true, ends: true, pipes: true },
+  snapPrefs: { grid: true, ends: true, pipes: true },
   equilibrium: IDLE_EQUILIBRIUM,
   autoProposal: null,
   assemblyRender: 'wire',
@@ -317,6 +320,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   panelDepths: { top: 0, front: 0, side: 0, iso: 0 },
   activePanel: 'side',
   workspaceMode: 'quad',
+  isoOctant: { x: 1, y: 1, z: 1 },
   controlsOpen: false,
   clipboard: null,
   setClipboard: (clipboard) => set({ clipboard }),
@@ -435,6 +439,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setPanelDepth: (panel, depthM) =>
     set((s) => ({ panelDepths: { ...s.panelDepths, [panel]: depthM } })),
   setActivePanel: (activePanel) => set({ activePanel }),
+  flipIsoAxis: (axis) =>
+    set((s) => ({ isoOctant: { ...s.isoOctant, [axis]: -s.isoOctant[axis] as 1 | -1 } })),
   setWorkspaceMode: (workspaceMode) =>
     set((s) => ({
       workspaceMode,

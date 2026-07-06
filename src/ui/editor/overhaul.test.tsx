@@ -114,7 +114,6 @@ describe('SnapChip', () => {
     render(<SnapChip />);
     expect(useEditorStore.getState().snapPrefs).toEqual({
       grid: true,
-      length: true,
       ends: true,
       pipes: true,
     });
@@ -124,7 +123,6 @@ describe('SnapChip', () => {
       grid: false,
       pipes: false,
       ends: true,
-      length: true,
     });
     expect(screen.getByTestId('snap-toggle-grid').getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(screen.getByTestId('snap-toggle-grid'));

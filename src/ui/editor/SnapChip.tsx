@@ -6,8 +6,7 @@ import { type SnapPrefs, useEditorStore } from '../../state/editorStore';
 import { T, toggleChipStyle } from './theme';
 
 const TOGGLES: Array<{ key: keyof SnapPrefs; label: string; title: string }> = [
-  { key: 'grid', label: 'Grid', title: 'snap to grid points' },
-  { key: 'length', label: 'Length', title: 'snap dragged lengths to ½ in / 1 cm ticks' },
+  { key: 'grid', label: 'Grid', title: 'snap to the visible grid' },
   { key: 'ends', label: 'Ends', title: 'snap to pipe ends (drop joins them)' },
   { key: 'pipes', label: 'Pipes', title: 'snap onto pipe bodies (drop splits & pins)' },
 ];

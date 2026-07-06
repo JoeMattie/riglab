@@ -144,7 +144,7 @@ describe('attachNodeToLink', () => {
     expect(canAttachNodeToLink(m0(doc), 'n3', 'nope')).toBe(false);
   });
 
-  it('a slider carriage moving along a pipe never splits it (Joe\'s report)', () => {
+  it("a slider carriage moving along a pipe never splits it (Joe's report)", () => {
     // n3 carries a slider riding L2; dragging it across L1's body must not
     // split L1 into welded segments — sliders travel, they do not join
     const slid = project([

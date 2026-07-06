@@ -34,6 +34,10 @@ export interface SnapContext {
    * `grid` off the fallback carries the RAW pointer position (still kind
    * 'grid' — the "no snap" carrier). Skeleton/anchor points always snap. */
   sources?: { ends: boolean; pipes: boolean; grid: boolean };
+  /** Non-axis-aligned grid lattice (the ISO panel's projected ground grid):
+   * full step vectors u/v in panel 2D — grid snaps round to a·u + b·v
+   * (integer a, b) instead of axis-aligned gridM rounding. */
+  gridBasis?: { u: Vec2; v: Vec2 };
 }
 
 const d = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
@@ -109,10 +113,37 @@ export function findSnap(world: Vec2, ctx: SnapContext): Snap {
 
   if (best) return (best as { snap: Snap }).snap;
   if (!sources.grid) return { kind: 'grid', pos: world };
-  return {
-    kind: 'grid',
-    pos: { x: Math.round(world.x / gridM) * gridM, y: Math.round(world.y / gridM) * gridM },
+  let gridded: Vec2 = {
+    x: Math.round(world.x / gridM) * gridM,
+    y: Math.round(world.y / gridM) * gridM,
   };
+  if (ctx.gridBasis) {
+    const { u, v } = ctx.gridBasis;
+    const det = u.x * v.y - u.y * v.x;
+    if (Math.abs(det) > 1e-12) {
+      const a = Math.round((world.x * v.y - world.y * v.x) / det);
+      const b = Math.round((u.x * world.y - u.y * world.x) / det);
+      gridded = { x: a * u.x + b * v.x, y: a * u.y + b * v.y };
+    }
+  }
+  // an end OCCUPYING the target grid point wins over the bare grid: with a
+  // grid cell wider than the node tolerance, the cursor can round AWAY from
+  // a node that sits exactly on that grid point — the next stroke would
+  // land coincident but unjoined
+  if (sources.ends) {
+    let nearest: { snap: Snap; dist: number } | null = null;
+    for (const n of mechanism.nodes) {
+      if (ctx.exclude?.has(n.id)) continue;
+      const p = positions[n.id];
+      if (!p) continue;
+      const dist = d(gridded, p);
+      if (dist <= tolM && (!nearest || dist < nearest.dist)) {
+        nearest = { snap: { kind: 'node', nodeId: n.id, pos: p }, dist };
+      }
+    }
+    if (nearest) return nearest.snap;
+  }
+  return { kind: 'grid', pos: gridded };
 }
 
 /** A grab on a bent pipe's body: the closest segment point within tolerance,

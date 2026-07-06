@@ -173,6 +173,57 @@ function Splitter({
   );
 }
 
+/** Iso viewing-octant flips (PLANFILE-iso-view.md, Joe's ask): one sign per
+ * world axis — Left/Right (z), Above/Below (y), Front/Back ("reverse", x).
+ * Each chip shows the CURRENT side and clicking flips to the other. */
+function IsoOctantChips() {
+  const isoOctant = useEditorStore((s) => s.isoOctant);
+  const flipIsoAxis = useEditorStore((s) => s.flipIsoAxis);
+  const chips: Array<{ axis: 'x' | 'y' | 'z'; label: string; other: string }> = [
+    {
+      axis: 'z',
+      label: isoOctant.z === 1 ? 'Left' : 'Right',
+      other: isoOctant.z === 1 ? 'Right' : 'Left',
+    },
+    {
+      axis: 'y',
+      label: isoOctant.y === 1 ? 'Above' : 'Below',
+      other: isoOctant.y === 1 ? 'Below' : 'Above',
+    },
+    {
+      axis: 'x',
+      label: isoOctant.x === 1 ? 'Front' : 'Back',
+      other: isoOctant.x === 1 ? 'Back' : 'Front',
+    },
+  ];
+  return (
+    <span style={{ display: 'inline-flex', gap: 3 }}>
+      {chips.map((c) => (
+        <button
+          key={c.axis}
+          type="button"
+          data-testid={`iso-flip-${c.axis}`}
+          title={`viewing from the ${c.label.toLowerCase()} — click for ${c.other.toLowerCase()}`}
+          onClick={() => flipIsoAxis(c.axis)}
+          style={{
+            border: 'none',
+            background: T.chip,
+            color: T.muted,
+            borderRadius: 6,
+            padding: '1px 8px',
+            font: `500 10px ${T.sans}`,
+            letterSpacing: '.05em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+          }}
+        >
+          {c.label}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function QuadView() {
   const current = useAppStore((s) => s.current);
   const quadMaximized = useEditorStore((s) => s.quadMaximized);
@@ -205,6 +256,7 @@ export function QuadView() {
           style={{
             display: 'flex',
             alignItems: 'center',
+            gap: 6,
             padding: '0 10px',
             borderBottom: `1px solid ${T.hairline}`,
             flex: 'none',
@@ -224,6 +276,7 @@ export function QuadView() {
           >
             Isometric
           </span>
+          <IsoOctantChips />
           <DepthChip panelId="iso" />
         </div>
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>

@@ -205,3 +205,17 @@ describe('quad layout state (PLANFILE-quad-panel-controls)', () => {
     expect(state().panelsVisible.top).toBe(false);
   });
 });
+
+describe('iso octant (PLANFILE-iso-view.md)', () => {
+  it('flipIsoAxis toggles one sign at a time', () => {
+    const state = () => useEditorStore.getState();
+    expect(state().isoOctant).toEqual({ x: 1, y: 1, z: 1 });
+    state().flipIsoAxis('y');
+    expect(state().isoOctant).toEqual({ x: 1, y: -1, z: 1 });
+    state().flipIsoAxis('z');
+    expect(state().isoOctant).toEqual({ x: 1, y: -1, z: -1 });
+    state().flipIsoAxis('y');
+    expect(state().isoOctant).toEqual({ x: 1, y: 1, z: -1 });
+    state().flipIsoAxis('z');
+  });
+});

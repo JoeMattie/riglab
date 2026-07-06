@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2, Vec3 } from '../../schema';
 import {
+  DEFAULT_ISO_OCTANT,
+  isoFrame,
   PANEL_FRAME,
   panelDepthOf,
   panelToWorld,
@@ -98,6 +100,45 @@ describe('the isometric frame (PLANFILE-iso-view.md)', () => {
     const p = projectToPanel({ x: 0, y: 1, z: 0 }, f);
     expect(p.x).toBeCloseTo(0, 12);
     expect(p.y).toBeGreaterThan(0);
+  });
+});
+
+describe('isoFrame octants (PLANFILE-iso-view.md)', () => {
+  const dot = (a: Vec3, b: Vec3) => a.x * b.x + a.y * b.y + a.z * b.z;
+  const SIGNS = [1, -1] as const;
+
+  it('every octant frame is orthonormal, right-handed, and keeps world-up upward', () => {
+    for (const x of SIGNS) {
+      for (const y of SIGNS) {
+        for (const z of SIGNS) {
+          const f = isoFrame({ x, y, z });
+          for (const ax of [f.xAxis, f.yAxis, f.zAxis]) {
+            expect(Math.hypot(ax.x, ax.y, ax.z)).toBeCloseTo(1, 12);
+          }
+          expect(dot(f.xAxis, f.yAxis)).toBeCloseTo(0, 12);
+          expect(dot(f.yAxis, f.zAxis)).toBeCloseTo(0, 12);
+          expect(dot(f.zAxis, f.xAxis)).toBeCloseTo(0, 12);
+          // viewer sits in the chosen octant
+          expect(Math.sign(f.zAxis.x)).toBe(x);
+          expect(Math.sign(f.zAxis.y)).toBe(y);
+          expect(Math.sign(f.zAxis.z)).toBe(z);
+          // world +y never renders downward, in any octant
+          const up = projectToPanel({ x: 0, y: 1, z: 0 }, f);
+          expect(up.y).toBeGreaterThan(0);
+          // round-trip
+          const w: Vec3 = { x: 0.3, y: 1.1, z: -0.7 };
+          const back = panelToWorld(projectToPanel(w, f), f, panelDepthOf(w, f));
+          expect(back.x).toBeCloseTo(w.x, 12);
+          expect(back.y).toBeCloseTo(w.y, 12);
+          expect(back.z).toBeCloseTo(w.z, 12);
+        }
+      }
+    }
+  });
+
+  it('frame identity is stable per octant, and the default IS PANEL_FRAME.iso', () => {
+    expect(isoFrame({ x: 1, y: -1, z: 1 })).toBe(isoFrame({ x: 1, y: -1, z: 1 }));
+    expect(isoFrame(DEFAULT_ISO_OCTANT)).toBe(PANEL_FRAME.iso);
   });
 });
 
