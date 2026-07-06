@@ -1,7 +1,10 @@
 // The floating tool pill (design handoff §2): labeled rows in captioned
 // groups with single-key shortcuts, draggable by its grip handle (wireframe
-// 1c's "drag to move" pill). Replaces Toolbar.tsx.
-import { useEffect } from 'react';
+// 1c's "drag to move" pill). Replaces Toolbar.tsx. Collapsible to an
+// icons-only rail via the header chevron; the collapsed flag is a workspace
+// pref (prefs.ts), unlike the transient drag offset.
+import { useEffect, useState } from 'react';
+import { getToolPillCollapsedPref, setToolPillCollapsedPref } from '../../persistence/prefs';
 import { type Tool, useEditorStore } from '../../state/editorStore';
 import { ToolIcon, type ToolIconName } from './icons';
 import { GripHandle, usePillDrag } from './pillDrag';
@@ -64,6 +67,14 @@ export function ToolPill() {
   // drag-to-move offset from the default dock (transient, like the card's)
   const drag = usePillDrag();
   const { offset } = drag;
+  // collapsed-to-icons is a workspace pref (like night mode) and survives reloads
+  const [collapsed, setCollapsed] = useState(getToolPillCollapsedPref);
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      setToolPillCollapsedPref(!c);
+      return !c;
+    });
+  };
 
   // single-key shortcuts (V P L F R E B T N); Esc returns to Select.
   // Skipped while typing and for modifier chords (⌘Z etc.).
@@ -96,7 +107,7 @@ export function ToolPill() {
         left: Math.max(0, EDGE + offset.x),
         // docked bottom-left, above the transport strip (~40px pill + EDGE)
         bottom: Math.max(0, EDGE + 56 - offset.y),
-        width: 158,
+        width: collapsed ? 56 : 158,
         padding: 8,
         display: 'flex',
         flexDirection: 'column',
@@ -104,21 +115,56 @@ export function ToolPill() {
         zIndex: 40,
       }}
     >
-      <GripHandle testid="tool-pill-handle" drag={drag} />
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        {/* grid wrapper keeps the grip's hit area at full remaining width */}
+        <div style={{ flex: 1, display: 'grid' }}>
+          <GripHandle testid="tool-pill-handle" drag={drag} />
+        </div>
+        <button
+          type="button"
+          data-testid="tool-pill-collapse"
+          title={collapsed ? 'expand tool labels' : 'collapse to icons'}
+          aria-label={collapsed ? 'expand tool labels' : 'collapse to icons'}
+          onClick={toggleCollapsed}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: T.ghost,
+            cursor: 'pointer',
+            padding: '0 1px 2px',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true">
+            <path
+              d={collapsed ? 'M5.2 3.5 L8.8 7 L5.2 10.5' : 'M8.8 3.5 L5.2 7 L8.8 10.5'}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.7}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
       {GROUPS.map((g) => (
         <div key={g.caption ?? 'main'} style={{ display: 'contents' }}>
-          {g.caption && (
-            <div
-              style={{
-                ...captionStyle,
-                font: `500 10px ${T.sans}`,
-                letterSpacing: '.09em',
-                padding: '8px 8px 3px',
-              }}
-            >
-              {g.caption}
-            </div>
-          )}
+          {g.caption &&
+            (collapsed ? (
+              <div style={{ height: 1, background: T.hairline, margin: '4px 5px' }} />
+            ) : (
+              <div
+                style={{
+                  ...captionStyle,
+                  font: `500 10px ${T.sans}`,
+                  letterSpacing: '.09em',
+                  padding: '8px 8px 3px',
+                }}
+              >
+                {g.caption}
+              </div>
+            ))}
           {g.items.map((t) => {
             const active = tool === t.id;
             return (
@@ -126,17 +172,18 @@ export function ToolPill() {
                 type="button"
                 key={t.id}
                 data-testid={`tool-${t.id}`}
-                title={t.title}
+                title={collapsed ? `${t.label} (${t.kbd}) — ${t.title}` : t.title}
                 onClick={() => setTool(t.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: collapsed ? 'center' : undefined,
                   gap: 9,
                   border: 'none',
                   background: active ? T.accentTint : 'transparent',
                   color: active ? T.accentText : T.text,
                   borderRadius: 8,
-                  padding: '6px 8px',
+                  padding: collapsed ? '6px 0' : '6px 8px',
                   font: `${active ? 500 : 400} 13px ${T.sans}`,
                   cursor: 'pointer',
                   textAlign: 'left',
@@ -153,16 +200,18 @@ export function ToolPill() {
                 >
                   <ToolIcon name={t.id as ToolIconName} />
                 </span>
-                {t.label}
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    font: `500 10.5px ${T.mono}`,
-                    color: active ? T.focus : T.ghost,
-                  }}
-                >
-                  {t.kbd}
-                </span>
+                {!collapsed && t.label}
+                {!collapsed && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      font: `500 10.5px ${T.mono}`,
+                      color: active ? T.focus : T.ghost,
+                    }}
+                  >
+                    {t.kbd}
+                  </span>
+                )}
               </button>
             );
           })}

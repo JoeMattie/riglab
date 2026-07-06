@@ -92,6 +92,33 @@ export function setQuadLayoutPref(pref: QuadLayoutPref): void {
   else s.setItem(QUAD_LAYOUT_KEY, raw);
 }
 
+// ── Tool pill collapsed-to-icons ────────────────────────────────────────────
+// Workspace pref like night/quad layout: survives reloads and project
+// switches, never enters undo history. Uses the guarded accessor because
+// component tests render without a working localStorage.
+
+const TOOL_PILL_COLLAPSED_KEY = 'rig-lab.toolPillCollapsed';
+
+export function getToolPillCollapsedPref(): boolean {
+  const s = safeStorage();
+  return (
+    (s instanceof Map
+      ? (s.get(TOOL_PILL_COLLAPSED_KEY) ?? null)
+      : s.getItem(TOOL_PILL_COLLAPSED_KEY)) === '1'
+  );
+}
+
+export function setToolPillCollapsedPref(collapsed: boolean): void {
+  const s = safeStorage();
+  if (s instanceof Map) {
+    if (collapsed) s.set(TOOL_PILL_COLLAPSED_KEY, '1');
+    else s.delete(TOOL_PILL_COLLAPSED_KEY);
+  } else {
+    if (collapsed) s.setItem(TOOL_PILL_COLLAPSED_KEY, '1');
+    else s.removeItem(TOOL_PILL_COLLAPSED_KEY);
+  }
+}
+
 export function getLastProjectId(): string | null {
   return localStorage.getItem(LAST_PROJECT_KEY);
 }

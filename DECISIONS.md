@@ -2267,3 +2267,18 @@ hook), so only ProjectList changed. The editor's empty-state example list
 (open/close/selection against the real store over fake-indexeddb, which
 needed an in-memory localStorage stub — vitest's jsdom has none, same issue
 prefs.ts's safeStorage works around) and a scripted built-app check.
+
+### DECISION: tool pill collapses to an icons-only rail (2026-07-06)
+Joe asked for the tool pill to be collapsible/expandable down to just icons.
+A chevron button in the pill header (next to the grip) toggles a collapsed
+mode: 56px-wide rail of centered icon buttons, group captions replaced by
+hairline dividers, kbd hints hidden, and each button's tooltip gains the
+label and shortcut (`Polyline (L) — …`) since the text is gone. Testids and
+shortcuts are unchanged, so nothing else had to move. The collapsed flag is
+persisted as a workspace pref (`rig-lab.toolPillCollapsed` via prefs.ts's
+guarded accessor, like night/quad layout) — deliberately unlike the pill's
+drag offset, which stays session-transient: where the pill sits is incidental,
+how much room it takes is a preference. Covered by a component test
+(collapse hides labels/captions, icons still switch tools, remount restores
+the pref) and a scripted built-app check (collapse, persistence across
+reload, expand back).

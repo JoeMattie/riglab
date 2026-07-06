@@ -108,6 +108,25 @@ describe('ToolPill', () => {
     expect(pill.style.bottom).not.toBe(before.bottom);
   });
 
+  it('collapses to icons and back; the collapsed flag survives a remount', () => {
+    render(<ToolPill />);
+    expect(screen.getByText('Polyline')).toBeTruthy();
+    expect(screen.getByText('Draw')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('tool-pill-collapse'));
+    // labels, captions, and kbd hints are gone; icon buttons still switch tools
+    expect(screen.queryByText('Polyline')).toBeNull();
+    expect(screen.queryByText('Draw')).toBeNull();
+    expect(screen.queryByText('V')).toBeNull();
+    fireEvent.click(screen.getByTestId('tool-polyline'));
+    expect(useEditorStore.getState().tool).toBe('polyline');
+    // collapsed is a workspace pref: a fresh mount comes up collapsed
+    cleanup();
+    render(<ToolPill />);
+    expect(screen.queryByText('Polyline')).toBeNull();
+    fireEvent.click(screen.getByTestId('tool-pill-collapse'));
+    expect(screen.getByText('Polyline')).toBeTruthy();
+  });
+
   it('shortcuts are ignored while typing and for modifier chords', () => {
     render(
       <>
