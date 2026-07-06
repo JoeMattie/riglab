@@ -38,15 +38,27 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+/** pipe definitions start collapsed (Joe's request) — expand one by its
+ * header before reaching into its fields */
+const expandPipe = (index: number) =>
+  fireEvent.click(screen.getAllByTestId('pipe-row-toggle')[index]!);
+
 describe('MaterialsPanel', () => {
-  it('renders a row per pipe, with no approximate badge (removed by decision)', () => {
+  it('renders a row per pipe, collapsed by default, with no approximate badge', () => {
     render(<MaterialsPanel />);
     expect(screen.getAllByTestId('pipe-row')).toHaveLength(5);
     expect(screen.queryByTestId('material-approx-badge')).toBeNull();
+    // collapsed: no editable fields until a header is clicked
+    expect(screen.queryAllByTestId('pipe-density')).toHaveLength(0);
+    expandPipe(0);
+    expect(screen.getAllByTestId('pipe-density')).toHaveLength(1);
+    expandPipe(0); // collapses again
+    expect(screen.queryAllByTestId('pipe-density')).toHaveLength(0);
   });
 
   it('numeric edit writes through and clears the approximate flag', () => {
     render(<MaterialsPanel />);
+    expandPipe(0);
     const paDensity = screen.getAllByTestId('pipe-density')[0]!; // PA is first
     fireEvent.change(paDensity, { target: { value: '0.42' } });
     fireEvent.blur(paDensity);
@@ -60,7 +72,8 @@ describe('MaterialsPanel', () => {
     // TO over TI: ID 23.3 mm − OD 22 mm = 1.3 mm → slip
     expect(screen.getByTestId('nesting-cell-TO-TI').getAttribute('data-fit')).toBe('slip');
     // measure TO's ID at 22.3 mm → clearance 0.3 mm → snug
-    const toId = screen.getAllByTestId('pipe-id')[2]!; // pipes order: PA, PB, TO, ...
+    expandPipe(2); // pipes order: PA, PB, TO, ...
+    const toId = screen.getAllByTestId('pipe-id')[0]!;
     fireEvent.change(toId, { target: { value: '0.0223' } });
     fireEvent.blur(toId);
     expect(screen.getByTestId('nesting-cell-TO-TI').getAttribute('data-fit')).toBe('snug');
@@ -68,6 +81,8 @@ describe('MaterialsPanel', () => {
 
   it('disables delete for referenced materials, allows it for unreferenced ones', () => {
     render(<MaterialsPanel />);
+    expandPipe(0);
+    expandPipe(1);
     const pipeRows = screen.getAllByTestId('pipe-row');
     const deleteOf = (row: HTMLElement) =>
       row.querySelector('[data-testid="material-delete"]') as HTMLButtonElement;
@@ -77,11 +92,15 @@ describe('MaterialsPanel', () => {
     expect(doc().materials.pipes.some((p) => p.id === 'PB')).toBe(false);
   });
 
-  it('adds a new pipe row flagged approximate', () => {
+  it('adds a new pipe row flagged approximate, expanded for naming', () => {
     render(<MaterialsPanel />);
     fireEvent.click(screen.getByTestId('add-pipe'));
     expect(doc().materials.pipes).toHaveLength(6);
     expect(doc().materials.pipes[5]!.approximate).toBe(true);
+    // the fresh row is the only expanded one
+    const toggles = screen.getAllByTestId('pipe-row-toggle');
+    expect(toggles[5]!.getAttribute('aria-expanded')).toBe('true');
+    expect(toggles[0]!.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('edits bom settings and the generic density', () => {

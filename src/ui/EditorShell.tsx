@@ -23,12 +23,12 @@ import { copySelection, pasteClipboard } from './editor/clipboardActions';
 import { DofPill } from './editor/DofPill';
 import { pickRenderPositions } from './editor/forces';
 import { ProjectChip } from './editor/ProjectChip';
-import { RightDock } from './editor/RightDock';
+import { DesignWindow } from './editor/RightDock';
 import { publishedViews } from './editor/SketchCanvas';
 import { SnapChip } from './editor/SnapChip';
 import { ToolPill } from './editor/ToolPill';
 import { TransportPill } from './editor/TransportPill';
-import { EDGE, panelStyle, T } from './editor/theme';
+import { T } from './editor/theme';
 import { useGlobalSolve } from './editor/useGlobalSolve';
 import { PanelToggleChip } from './quad/PanelToggleChip';
 import { QuadView } from './quad/QuadView';
@@ -281,26 +281,10 @@ export function EditorShell() {
             left tool pill */}
         {controlsOpen && <ControlsDock left={196} />}
 
-        {/* design face: the tabbed inspector/checklist/materials/BOM dock
-            floats as a right-hand column (its feature scope is unchanged by
-            the overhaul — see DECISIONS.md) */}
-        {face === 'design' && (
-          <div
-            style={{
-              ...panelStyle,
-              position: 'absolute',
-              top: EDGE,
-              right: EDGE,
-              bottom: 76,
-              width: 384,
-              overflow: 'hidden',
-              display: 'flex',
-              zIndex: 30,
-            }}
-          >
-            <RightDock />
-          </div>
-        )}
+        {/* the design window (inspector/checklist/materials/BOM tabs):
+            a draggable, centered floating window opened by the top-bar
+            Design button — see DECISIONS.md */}
+        {face === 'design' && <DesignWindow />}
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { exportProjectJson, suggestedFileName } from '../../persistence/exportIm
 import { setUnitsPref } from '../../persistence/prefs';
 import type { UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
-import { type Face, useEditorStore } from '../../state/editorStore';
+import { useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
 import { copySelection, pasteClipboard } from './clipboardActions';
 import { ThemeIcon } from './icons';
@@ -42,29 +42,6 @@ export function ActionsChip() {
     updateCurrent((d) => ({ ...d, unitsPreference: units }));
     setUnitsPref(units);
   };
-
-  const segStyle = (active: boolean): React.CSSProperties => ({
-    border: 'none',
-    background: active ? T.raised : 'none',
-    borderRadius: 6,
-    padding: '3px 12px',
-    font: `${active ? 500 : 400} 12.5px ${T.sans}`,
-    color: active ? T.text : T.muted,
-    cursor: 'pointer',
-    boxShadow: active ? '0 1px 3px rgba(20,24,40,.12)' : 'none',
-  });
-
-  const segment = (value: Face, label: string) => (
-    <button
-      type="button"
-      data-testid={`face-${value}`}
-      aria-pressed={face === value}
-      onClick={() => setFace(value)}
-      style={segStyle(face === value)}
-    >
-      {label}
-    </button>
-  );
 
   const iconButton: React.CSSProperties = {
     border: 'none',
@@ -112,13 +89,27 @@ export function ActionsChip() {
         <ClipboardPasteIcon size={14} />
       </button>
       <span style={dividerStyle} />
-      <span
-        data-testid="face-toggle"
-        style={{ display: 'inline-flex', background: T.chip, borderRadius: 8, padding: 2 }}
+      {/* Design opens the floating design window (a toggle, not a mode
+          switch between sketch and design — Joe's request); the ✕ on the
+          window or clicking again closes it */}
+      <button
+        type="button"
+        data-testid="face-design"
+        aria-pressed={face === 'design'}
+        title={face === 'design' ? 'close the design window' : 'open the design window'}
+        onClick={() => setFace(face === 'design' ? 'sketch' : 'design')}
+        style={{
+          border: 'none',
+          background: face === 'design' ? T.accentTint : T.chip,
+          color: face === 'design' ? T.accentText : T.muted,
+          borderRadius: 8,
+          padding: '3px 12px',
+          font: `${face === 'design' ? 500 : 400} 12.5px ${T.sans}`,
+          cursor: 'pointer',
+        }}
       >
-        {segment('sketch', 'Sketch')}
-        {segment('design', 'Design')}
-      </span>
+        Design
+      </button>
       <span style={dividerStyle} />
       <button
         type="button"

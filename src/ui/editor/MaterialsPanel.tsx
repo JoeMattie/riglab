@@ -4,6 +4,7 @@
 // badge — seed values are published catalog figures); editing a number
 // clears it (materialsOps rule). The matrix is recomputed live from OD/ID,
 // never stored.
+import { useState } from 'react';
 import type { NestingClass } from '../../bom';
 import { nestingMatrix } from '../../bom';
 import type { FittingType, PipeSizingSystem } from '../../schema';
@@ -139,7 +140,17 @@ const FIT_STYLE: Record<NestingClass, string> = {
 export function MaterialsPanel() {
   const doc = useAppStore((s) => s.current);
   const updateCurrent = useAppStore((s) => s.updateCurrent);
+  // each pipe definition is collapsible and STARTS COLLAPSED (Joe's request):
+  // the header reads name + size; expanding reveals the editable fields.
+  // A freshly added pipe opens so it can be named immediately.
+  const [expandedPipes, setExpandedPipes] = useState<ReadonlySet<string>>(new Set());
   if (!doc) return null;
+  const togglePipe = (id: string) =>
+    setExpandedPipes((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const units = doc.unitsPreference;
   const lu = lengthUnit(units);
@@ -163,63 +174,106 @@ export function MaterialsPanel() {
   return (
     <div data-testid="materials-panel" className="flex flex-col text-sm">
       <Section title="Pipes">
-        {db.pipes.map((p) => (
-          <RowChrome
-            key={p.id}
-            testId="pipe-row"
-            references={materialReferenceCount(doc, p.id)}
-            onDelete={() => remove('pipes', p.id)}
-          >
-            <TextField value={p.name} onCommit={(v) => patch('pipes', p.id, { name: v })} />
-            <div className="mt-1 grid grid-cols-3 gap-1.5">
-              <Labeled label="system">
-                <EnumSelect<PipeSizingSystem>
-                  value={p.sizingSystem}
-                  options={pipeSizingSystemSchema.options}
-                  onChange={(v) => patch('pipes', p.id, { sizingSystem: v })}
-                />
-              </Labeled>
-              <Labeled label="size">
-                <TextField
-                  value={p.nominalSize}
-                  onCommit={(v) => patch('pipes', p.id, { nominalSize: v })}
-                />
-              </Labeled>
-              <Labeled label="kg/m">
-                <NumberField
-                  value={p.linearDensityKgPerM}
-                  min={0}
-                  testId="pipe-density"
-                  onCommit={(v) => patch('pipes', p.id, { linearDensityKgPerM: v })}
-                />
-              </Labeled>
-              <Labeled label={`OD (${lu})`}>
-                <LengthField
-                  valueM={p.outerDiameterM}
-                  minM={1e-4}
-                  units={units}
-                  testId="pipe-od"
-                  onCommitM={(v) => patch('pipes', p.id, { outerDiameterM: v })}
-                />
-              </Labeled>
-              <Labeled label={`ID (${lu})`}>
-                <LengthField
-                  valueM={p.innerDiameterM}
-                  minM={1e-4}
-                  units={units}
-                  testId="pipe-id"
-                  onCommitM={(v) => patch('pipes', p.id, { innerDiameterM: v })}
-                />
-              </Labeled>
+        {db.pipes.map((p) => {
+          const open = expandedPipes.has(p.id);
+          const references = materialReferenceCount(doc, p.id);
+          return (
+            <div key={p.id} className="mb-1.5 rounded-md border" data-testid="pipe-row">
+              <button
+                type="button"
+                data-testid="pipe-row-toggle"
+                aria-expanded={open}
+                className="flex w-full items-center gap-2 rounded-md p-2 text-left"
+                onClick={() => togglePipe(p.id)}
+              >
+                <span className="text-muted-foreground text-xs">{open ? '▾' : '▸'}</span>
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                <span className="shrink-0 text-muted-foreground text-xs">
+                  {p.nominalSize} {p.sizingSystem}
+                </span>
+              </button>
+              {open && (
+                <div className="flex items-start gap-2 px-2 pb-2">
+                  <div className="min-w-0 flex-1">
+                    <TextField value={p.name} onCommit={(v) => patch('pipes', p.id, { name: v })} />
+                    <div className="mt-1 grid grid-cols-3 gap-1.5">
+                      <Labeled label="system">
+                        <EnumSelect<PipeSizingSystem>
+                          value={p.sizingSystem}
+                          options={pipeSizingSystemSchema.options}
+                          onChange={(v) => patch('pipes', p.id, { sizingSystem: v })}
+                        />
+                      </Labeled>
+                      <Labeled label="size">
+                        <TextField
+                          value={p.nominalSize}
+                          onCommit={(v) => patch('pipes', p.id, { nominalSize: v })}
+                        />
+                      </Labeled>
+                      <Labeled label="kg/m">
+                        <NumberField
+                          value={p.linearDensityKgPerM}
+                          min={0}
+                          testId="pipe-density"
+                          onCommit={(v) => patch('pipes', p.id, { linearDensityKgPerM: v })}
+                        />
+                      </Labeled>
+                      <Labeled label={`OD (${lu})`}>
+                        <LengthField
+                          valueM={p.outerDiameterM}
+                          minM={1e-4}
+                          units={units}
+                          testId="pipe-od"
+                          onCommitM={(v) => patch('pipes', p.id, { outerDiameterM: v })}
+                        />
+                      </Labeled>
+                      <Labeled label={`ID (${lu})`}>
+                        <LengthField
+                          valueM={p.innerDiameterM}
+                          minM={1e-4}
+                          units={units}
+                          testId="pipe-id"
+                          onCommitM={(v) => patch('pipes', p.id, { innerDiameterM: v })}
+                        />
+                      </Labeled>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 shrink-0 px-1 text-muted-foreground"
+                    disabled={references > 0}
+                    title={
+                      references > 0
+                        ? `in use by ${references} element${references > 1 ? 's' : ''}`
+                        : 'delete'
+                    }
+                    data-testid="material-delete"
+                    onClick={() => remove('pipes', p.id)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              )}
             </div>
-          </RowChrome>
-        ))}
+          );
+        })}
         <Button
           type="button"
           variant="outline"
           size="sm"
           data-testid="add-pipe"
-          onClick={() => add('pipes')}
+          onClick={() => {
+            let newId = '';
+            updateCurrent((cur) => {
+              const r = addMaterialRow(cur, 'pipes');
+              newId = r.rowId;
+              return r.doc;
+            });
+            // a fresh pipe opens for immediate naming
+            if (newId) setExpandedPipes((s) => new Set(s).add(newId));
+          }}
         >
           + pipe
         </Button>

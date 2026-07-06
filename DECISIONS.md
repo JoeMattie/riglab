@@ -2412,3 +2412,17 @@ lives in its own effect with identity-stable deps (registered once per
 mount), and clearSelection returns the same state when already empty so no
 effect churns on a no-op clear. Verified by scripted built-app checks (ESC
 mid-drag and mid-polyline leave the element count unchanged).
+
+### DECISION: Design is a window, not a mode; pipe definitions collapse (2026-07-06)
+Joe asked for the design surface to be a draggable, wider, screen-centered
+window opened by a "Design" BUTTON — not a Sketch/Design mode switch — and
+for each pipe definition in the pipes menu to be collapsible and start
+collapsed. The ActionsChip segmented control is gone; a single Design toggle
+opens DesignWindow (RightDock wrapped in a 620px, horizontally-centered,
+grip-draggable floating panel with a ✕). Internally the `face` lens SURVIVES
+— design-only inspector/checklist behavior keys off it — but it is now
+derived from the window being open (button/✕ flip it), so the user-facing
+mode is gone. MaterialsPanel pipe rows render a name+size header row that
+expands to the editable fields; a freshly added pipe opens for naming.
+Covered by component tests (toggle, window close, collapsed-by-default,
+add-expands) and a scripted built-app check (centered, draggable, collapse).

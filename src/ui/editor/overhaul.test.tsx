@@ -20,6 +20,7 @@ import { DimensionChips } from './DimensionChips';
 import { DofPill } from './DofPill';
 import { JointPopover } from './JointPopover';
 import { ProjectChip } from './ProjectChip';
+import { DesignWindow } from './RightDock';
 import { SelectionCard } from './SelectionCard';
 import { SnapChip } from './SnapChip';
 import { ToolPill } from './ToolPill';
@@ -85,6 +86,28 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+describe('Design window', () => {
+  it('the top-bar Design button toggles the design face on and off', () => {
+    render(<ActionsChip />);
+    const btn = screen.getByTestId('face-design');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(btn);
+    expect(useEditorStore.getState().face).toBe('design');
+    fireEvent.click(screen.getByTestId('face-design'));
+    expect(useEditorStore.getState().face).toBe('sketch');
+  });
+
+  it('renders centered/draggable with tabs; ✕ returns to sketch', () => {
+    useEditorStore.setState({ face: 'design' });
+    render(<DesignWindow />);
+    expect(screen.getByTestId('design-window')).toBeTruthy();
+    expect(screen.getByTestId('design-window-handle')).toBeTruthy();
+    expect(screen.getByTestId('right-tab-materials')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('design-window-close'));
+    expect(useEditorStore.getState().face).toBe('sketch');
+  });
+});
 
 describe('SnapChip', () => {
   it('toggles each snap source in the store, defaulting all on', () => {

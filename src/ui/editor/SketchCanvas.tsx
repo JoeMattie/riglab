@@ -1483,8 +1483,6 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     constraintsOn,
     updateCurrent,
     clearSelection,
-    setPendingConnect,
-    resetForceDrafts,
   ]);
 
   if (!doc || !mech) {
