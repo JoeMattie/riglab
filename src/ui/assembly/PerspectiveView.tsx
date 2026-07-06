@@ -9,6 +9,7 @@ import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
 import { Plane, Vector3 } from 'three';
 import type { BalanceQuery } from '../../analysis';
+import { pivotArcPoints } from '../../design/pivotArc';
 import type { Vec3 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
@@ -341,6 +342,23 @@ export function Scene3D({ scene }: { scene: CompoundScene }) {
         selectedColor={C.accent}
         onSelect={onSelect}
       />
+
+      {/* hinge-plane arcs: aligned to each pivot's axis, so the plane the
+          pivot works in reads directly in 3D (Joe's ask) — the same helper
+          the ortho panels project */}
+      {doc?.mechanism.elements.map((el) => {
+        if (el.type !== 'pivot') return null;
+        const arc = pivotArcPoints(doc.mechanism, el, scene.positions, 0.035, 20);
+        if (!arc) return null;
+        return (
+          <Line
+            key={`arc-${el.id}`}
+            points={arc.map(tuple)}
+            color={selectedSet.has(el.id) ? C.accent : '#8ab'}
+            lineWidth={1.5}
+          />
+        );
+      })}
 
       {/* node handles: click-select joints, drag in the camera-facing plane */}
       <NodeHandles scene={scene} />

@@ -16,7 +16,9 @@ describe('projectToPanel', () => {
   it('side panel is the world x-y plane; top panel is x-z', () => {
     const w = { x: 1, y: 2, z: 3 };
     expect(projectToPanel(w, PANEL_FRAME.side)).toEqual({ x: 1, y: 2 });
-    expect(projectToPanel(w, PANEL_FRAME.top)).toEqual({ x: 1, y: 3 });
+    // top looks DOWN from above: screen-up = −z, so the top panel's bottom
+    // matches the front panel's left (wearer-left)
+    expect(projectToPanel(w, PANEL_FRAME.top)).toEqual({ x: 1, y: -3 });
     // front panel: screen-right is −z, screen-up is y
     expect(projectToPanel(w, PANEL_FRAME.front)).toEqual({ x: -3, y: 2 });
   });

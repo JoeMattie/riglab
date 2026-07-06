@@ -82,6 +82,7 @@ beforeEach(() => {
     pendingConnect: null,
     dof: { dof: 1, classification: 'mechanism' },
     violated: [],
+    snapPrefs: { grid: true, ends: true, pipes: true },
   });
 });
 
@@ -127,6 +128,35 @@ describe('SnapChip', () => {
     expect(screen.getByTestId('snap-toggle-grid').getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(screen.getByTestId('snap-toggle-grid'));
     expect(useEditorStore.getState().snapPrefs.grid).toBe(true);
+  });
+
+  it('Shift+G/E/P toggle grid/ends/pipes; unshifted and typing are ignored', () => {
+    render(<SnapChip />);
+    fireEvent.keyDown(window, { key: 'G', shiftKey: true });
+    expect(useEditorStore.getState().snapPrefs.grid).toBe(false);
+    fireEvent.keyDown(window, { key: 'E', shiftKey: true });
+    expect(useEditorStore.getState().snapPrefs.ends).toBe(false);
+    fireEvent.keyDown(window, { key: 'P', shiftKey: true });
+    expect(useEditorStore.getState().snapPrefs.pipes).toBe(false);
+    // an unshifted 'g' does NOT toggle (that would fight the tool shortcuts)
+    fireEvent.keyDown(window, { key: 'g' });
+    expect(useEditorStore.getState().snapPrefs.grid).toBe(false);
+    // Shift+G again flips it back on
+    fireEvent.keyDown(window, { key: 'G', shiftKey: true });
+    expect(useEditorStore.getState().snapPrefs.grid).toBe(true);
+  });
+
+  it('ignores the snap shortcuts while typing in a field', () => {
+    render(
+      <>
+        <input data-testid="field" />
+        <SnapChip />
+      </>,
+    );
+    const field = screen.getByTestId('field');
+    field.focus();
+    fireEvent.keyDown(field, { key: 'E', shiftKey: true });
+    expect(useEditorStore.getState().snapPrefs.ends).toBe(true);
   });
 });
 
@@ -641,7 +671,7 @@ describe('JointPopover hinge controls (v7)', () => {
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     renderPopover();
     fireEvent.click(screen.getByTestId('axis-preset-top'));
-    expect(pivot()).toMatchObject({ joint: { kind: 'hinge', axis: { x: 0, y: -1, z: 0 } } });
+    expect(pivot()).toMatchObject({ joint: { kind: 'hinge', axis: { x: 0, y: 1, z: 0 } } });
   });
 
   it('numeric axis entry normalizes before writing the joint', () => {

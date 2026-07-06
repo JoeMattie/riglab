@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import { groupDragNodeIds, translatedTargets } from '../../design/groupDrag';
 import { elementIdsInRect, normalizedRect } from '../../design/marquee';
+import { pivotArcPoints } from '../../design/pivotArc';
 import type { Mechanism, PivotElement, PivotJoint, SliderElement, Vec2, Vec3 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
@@ -1897,6 +1898,27 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
                 />
               );
             })}
+
+          {/* hinge-plane arcs: a thin arc swept between a pivot's pipes IN its
+              hinge plane (Joe's ask), so the plane the pivot works in reads at
+              a glance. The 3D arc is projected like everything else — a true
+              circular arc when the panel faces the hinge axis, foreshortened
+              to a slit edge-on. Radius scales with zoom (≈18px). */}
+          {mech.elements.map((el) => {
+            if (el.type !== 'pivot') return null;
+            const arc = pivotArcPoints(mech, el, renderPositions, 18 / view.scale, 20);
+            if (!arc) return null;
+            return (
+              <Line
+                key={`arc-${el.id}`}
+                points={flat(arc.map((p) => projectToPanel(p, frame)))}
+                stroke={selectedSet.has(el.id) ? '#d80' : '#8ab'}
+                strokeWidth={1.2}
+                lineCap="round"
+                listening={false}
+              />
+            );
+          })}
 
           {/* dashed ghost of the pre-drag pose during an endpoint length edit */}
           {endpointDrag && (

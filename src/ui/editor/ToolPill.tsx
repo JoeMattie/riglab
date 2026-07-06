@@ -77,10 +77,11 @@ export function ToolPill() {
   };
 
   // single-key shortcuts (V P L F R E B T N); Esc returns to Select.
-  // Skipped while typing and for modifier chords (⌘Z etc.).
+  // Skipped while typing and for modifier chords (⌘Z etc., and Shift chords —
+  // Shift+G/E/P drive the snap toggles).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
         return;

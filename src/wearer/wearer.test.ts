@@ -54,7 +54,8 @@ describe('panel projections', () => {
     expect(projectPoint(orientationFrame('side-right'), p)).toEqual({ x: -0.1, y: 1.2 });
     expect(projectPoint(orientationFrame('front'), p)).toEqual({ x: -0.2, y: 1.2 });
     expect(projectPoint(orientationFrame('back'), p)).toEqual({ x: 0.2, y: 1.2 });
-    expect(projectPoint(orientationFrame('top'), p)).toEqual({ x: 0.1, y: 0.2 });
+    // top looks DOWN from above: screen-up = −z (wearer-right)
+    expect(projectPoint(orientationFrame('top'), p)).toEqual({ x: 0.1, y: -0.2 });
   });
 
   it('accepts an arbitrary (non-axis-aligned) plane basis', () => {

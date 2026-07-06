@@ -37,8 +37,12 @@ const FRAMES: Record<ViewOrientation, OrientationFrame> = {
   // viewed from in front (+x), wearer-left appears screen-left (−z → +x norm)
   front: { xAxis: V(0, 0, -1), yAxis: V(0, 1, 0), zAxis: V(1, 0, 0) },
   back: { xAxis: V(0, 0, 1), yAxis: V(0, 1, 0), zAxis: V(-1, 0, 0) },
-  // plan view looking down: screen-right → front (+x), screen-up → left (+z)
-  top: { xAxis: V(1, 0, 0), yAxis: V(0, 0, 1), zAxis: V(0, -1, 0) },
+  // plan view looking DOWN from above (normal +y toward the viewer):
+  // screen-right → front (+x), screen-up → wearer-RIGHT (−z), so the top
+  // view's bottom edge matches the front view's left (wearer-left, +z) —
+  // the old frame had the normal at −y (a bottom view) and read vertically
+  // mirrored against the front panel (Joe's report)
+  top: { xAxis: V(1, 0, 0), yAxis: V(0, 0, -1), zAxis: V(0, 1, 0) },
   free: { xAxis: V(0, 0, -1), yAxis: V(0, 1, 0), zAxis: V(1, 0, 0) },
 };
 

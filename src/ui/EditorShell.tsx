@@ -16,6 +16,7 @@ import { deleteElement, duplicateElement } from '../state/docOps';
 import { DEFAULT_CLIP_NAME, useEditorStore } from '../state/editorStore';
 import { useThemeStore } from '../state/themeStore';
 import { computeSkeleton, REST_POSE } from '../wearer';
+import { pivotArcPoints } from '../design/pivotArc';
 import { buildPipeModel } from './assembly/pipeModel';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';
@@ -219,6 +220,19 @@ export function EditorShell() {
         pipeCount: model.pipeCount,
         fittingCount: model.fittingCount,
       };
+    };
+    // scripted-verification seam: hinge-plane arcs per pivot (3D world
+    // points), so a browser check can assert arcs exist for hinges and are
+    // absent for spherical/welded joints without reading the canvas
+    hook.getPivotArcs = () => {
+      const doc = useAppStore.getState().current;
+      if (!doc) return [];
+      const positions = currentRenderPositions();
+      return doc.mechanism.elements.flatMap((el) => {
+        if (el.type !== 'pivot') return [];
+        const arc = pivotArcPoints(doc.mechanism, el, positions, 0.05, 8);
+        return [{ id: el.id, kind: el.joint.kind, arc }];
+      });
     };
   }, []);
 
