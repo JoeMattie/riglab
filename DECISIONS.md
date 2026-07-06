@@ -2505,3 +2505,18 @@ gains the grip + measured clamp. selectionCardHost is now unused by the
 canvas (kept for its unit test). Covered by component tests (portal-to-body,
 fixed, grip drag for both) and a scripted built-app check (selection card
 portals, on-screen at the right edge, drags).
+
+### DECISION: shift-drag aligns a point to others' primary axes (2026-07-06)
+Joe: holding Shift while dragging should snap to the primary axis when close,
+so points line up easily as long as grid snap is off. `axisAlign` (snapping.ts)
+independently snaps a dragged point's x onto the nearest other point sharing
+its column and its y onto the nearest sharing its row, each within the node
+snap tolerance — landing on a vertical or horizontal alignment with any other
+point (or exactly on it when both lock). Applied in the free node drag and the
+endpoint drag when Shift is held AND Grid snap is off (grid rounding would
+fight the alignment); a dashed guide line draws to each locked point. This
+layers on the existing Shift plane-lock (out-of-plane, constraints-on) — the
+two are complementary alignment aids. Body drag is left free (translating a
+whole selection has no single point to align). Covered by axisAlign unit
+tests and a scripted built-app check (drag a point into another's column with
+Shift → world x locks exactly, own row preserved).

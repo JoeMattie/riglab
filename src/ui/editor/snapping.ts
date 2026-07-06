@@ -190,3 +190,42 @@ export function findBentLinkHit(world: Vec2, ctx: SnapContext): BentLinkHit | nu
   }
   return best?.hit ?? null;
 }
+
+/** Horizontal/vertical alignment to other points (shift-drag "line up",
+ * Joe's request). Independently snaps `p`'s x to the nearest other point
+ * sharing (nearly) its column and its y to the nearest sharing its row,
+ * each within `tolM` — so a dragged point locks onto another point's
+ * vertical or horizontal line (or both, landing exactly on it). `guides`
+ * report which point each axis locked to, for drawing the alignment line.
+ * All in panel-2D coordinates. */
+export interface AxisAlign {
+  pos: Vec2;
+  /** the point p's x snapped to (its full position), or null */
+  xGuide: Vec2 | null;
+  /** the point p's y snapped to, or null */
+  yGuide: Vec2 | null;
+}
+
+export function axisAlign(p: Vec2, others: readonly Vec2[], tolM: number): AxisAlign {
+  let xGuide: Vec2 | null = null;
+  let yGuide: Vec2 | null = null;
+  let bestXd = tolM;
+  let bestYd = tolM;
+  for (const o of others) {
+    const dx = Math.abs(p.x - o.x);
+    if (dx < bestXd) {
+      bestXd = dx;
+      xGuide = o;
+    }
+    const dy = Math.abs(p.y - o.y);
+    if (dy < bestYd) {
+      bestYd = dy;
+      yGuide = o;
+    }
+  }
+  return {
+    pos: { x: xGuide ? xGuide.x : p.x, y: yGuide ? yGuide.y : p.y },
+    xGuide,
+    yGuide,
+  };
+}

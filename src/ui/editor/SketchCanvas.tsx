@@ -59,6 +59,7 @@ import { pinchStep, wheelZoomFactor } from './gesture';
 import { JointPopover } from './JointPopover';
 import { SelectionCard } from './SelectionCard';
 import {
+  axisAlign,
   dedupConsecutive,
   findBentLinkHit,
   findSnap,
@@ -232,6 +233,13 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [hoverSnap, setHoverSnap] = useState<Snap | null>(null);
+  /** shift-drag alignment guides (panel 2D): the point being aligned and the
+   * other points its x / y locked onto, for the dashed guide lines */
+  const [alignGuides, setAlignGuides] = useState<{
+    at: Vec2;
+    xGuide: Vec2 | null;
+    yGuide: Vec2 | null;
+  } | null>(null);
   const [dragNode, setDragNode] = useState<{ nodeId: string; depthM: number } | null>(null);
   /** tear-off state for a drag that started on a wearer-connected node
    * (skeleton-bound, anchor-attached, or plain grounded): the node holds its
@@ -541,6 +549,29 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const to3D = useCallback(
     (p: Vec2, depthM: number): Vec3 => panelToWorld(p, frame, depthM),
     [frame],
+  );
+
+  /** Shift-drag primary-axis alignment (Joe's request): snap a dragged
+   * point's x / y onto other points sharing that column / row, so it lines
+   * up easily. Excludes the moving nodes; also publishes the guide lines.
+   * Returns the panel-2D aligned point (unchanged when no other point is
+   * within tolerance). */
+  const alignToAxes = useCallback(
+    (p: Vec2, movingIds: ReadonlySet<string>): Vec2 => {
+      if (!mech) return p;
+      const others: Vec2[] = [];
+      for (const n of mech.nodes) {
+        if (movingIds.has(n.id)) continue;
+        const q = projected[n.id];
+        if (q) others.push(q);
+      }
+      const r = axisAlign(p, others, SNAP_TOL_PX / view.scale);
+      setAlignGuides(
+        r.xGuide || r.yGuide ? { at: r.pos, xGuide: r.xGuide, yGuide: r.yGuide } : null,
+      );
+      return r.pos;
+    },
+    [mech, projected, view.scale],
   );
 
   /** The document-space (Vec3) position a snap stands for. Node/onPipe snaps
@@ -996,8 +1027,15 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       if (!other) return;
       const snap = snapAt(screen, new Set([endpointDrag.nodeId]), endpointDrag.incidentElementIds);
       // a 'grid' snap carries the grid-rounded point (or the raw pointer
-      // when Grid is toggled off) — lift it either way
-      const pos: Vec3 = vec3OfSnap(snap, endpointDrag.depthM);
+      // when Grid is toggled off) — lift it either way. Shift held with Grid
+      // off aligns the free endpoint's x/y onto other points (line-up).
+      let pos: Vec3;
+      if (snap.kind === 'grid' && e.evt.shiftKey && !snapPrefs.grid) {
+        pos = to3D(alignToAxes(snap.pos, new Set([endpointDrag.nodeId])), endpointDrag.depthM);
+      } else {
+        pos = vec3OfSnap(snap, endpointDrag.depthM);
+        setAlignGuides(null);
+      }
       const snapped = snap.kind !== 'grid' || snapPrefs.grid;
       updateCurrent((cur) => moveNodes(cur, { [endpointDrag.nodeId]: pos }));
       setEndpointDrag({
@@ -1046,10 +1084,17 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       setHoverSnap(bindSnap);
       // panel-plane-constrained target: the pointer moves the node in this
       // panel's plane at the node's own out-of-plane depth; a plain-grid
-      // fall-through carries the grid-rounded point (raw when Grid is off)
+      // fall-through carries the grid-rounded point (raw when Grid is off).
+      // Shift held with Grid off: align x/y onto other points (line-up).
+      let planar2 = dropSnap.kind === 'grid' ? dropSnap.pos : world2;
+      if (e.evt.shiftKey && !snapPrefs.grid && !bindSnap) {
+        planar2 = alignToAxes(planar2, new Set([dragNode.nodeId]));
+      } else {
+        setAlignGuides(null);
+      }
       const target: Vec3 = bindSnap
         ? vec3OfSnap(bindSnap, dragNode.depthM)
-        : to3D(dropSnap.kind === 'grid' ? dropSnap.pos : world2, dragNode.depthM);
+        : to3D(planar2, dragNode.depthM);
       // constraints off: the node moves directly — incident pipe lengths
       // follow the drawn geometry (no solve, no length lock)
       if (!constraintsOn) {
@@ -1130,6 +1175,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
 
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
+    setAlignGuides(null); // shift-drag guides clear on release
     // a pan release must not fall through to the tool handlers (an active
     // draft would otherwise commit a stroke at the release point)
     const wasPanning = panRef.current !== null;
@@ -1879,6 +1925,27 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
             }
             return null;
           })}
+
+          {/* shift-drag alignment guides: a dashed line from the aligned
+              point to the other point it locked its x / y onto */}
+          {alignGuides?.xGuide && (
+            <Line
+              points={flat([alignGuides.at, alignGuides.xGuide])}
+              stroke="#e07"
+              strokeWidth={1}
+              dash={[4, 4]}
+              listening={false}
+            />
+          )}
+          {alignGuides?.yGuide && (
+            <Line
+              points={flat([alignGuides.at, alignGuides.yGuide])}
+              stroke="#e07"
+              strokeWidth={1}
+              dash={[4, 4]}
+              listening={false}
+            />
+          )}
 
           {/* binding leader lines */}
           {silhouette &&

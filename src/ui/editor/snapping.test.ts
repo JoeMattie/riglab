@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { mech, node } from '../../bom/testHelpers';
 import type { BentLinkElement, LinkElement, SkeletonPoint, Vec2, WearerAnchor } from '../../schema';
 import type { Silhouette } from '../../wearer';
-import { dedupConsecutive, findBentLinkHit, findSnap, isCoincidentFinish } from './snapping';
+import {
+  axisAlign,
+  dedupConsecutive,
+  findBentLinkHit,
+  findSnap,
+  isCoincidentFinish,
+} from './snapping';
 
 // Guards for Konva's time-based dblclick (fires for any two clicks within its
 // window, regardless of position). Regression coverage for the premature-finish
@@ -288,5 +294,45 @@ describe('findSnap skeleton binding points', () => {
       },
     );
     expect(snap.kind).toBe('node');
+  });
+});
+
+// Shift-drag alignment to other points (Joe's request): x and y snap
+// independently to the nearest other point sharing that axis, within tol.
+describe('axisAlign', () => {
+  it('snaps x to a point in the same column and y to one in the same row', () => {
+    const others = [
+      { x: 1, y: 0 }, // shares p's column (x≈1)
+      { x: 0, y: 2 }, // shares p's row (y≈2)
+    ];
+    const r = axisAlign({ x: 1.01, y: 1.99 }, others, 0.05);
+    expect(r.pos).toEqual({ x: 1, y: 2 });
+    expect(r.xGuide).toEqual({ x: 1, y: 0 });
+    expect(r.yGuide).toEqual({ x: 0, y: 2 });
+  });
+
+  it('leaves an axis free when nothing is within tolerance', () => {
+    const r = axisAlign({ x: 5, y: 5 }, [{ x: 5.02, y: 9 }], 0.05);
+    expect(r.pos).toEqual({ x: 5.02, y: 5 }); // x locked, y free
+    expect(r.yGuide).toBeNull();
+  });
+
+  it('picks the NEAREST aligned point per axis', () => {
+    const r = axisAlign(
+      { x: 0, y: 0 },
+      [
+        { x: 0.04, y: 9 },
+        { x: 0.01, y: 9 },
+      ],
+      0.05,
+    );
+    expect(r.pos.x).toBeCloseTo(0.01, 9);
+  });
+
+  it('is a no-op with no others', () => {
+    const r = axisAlign({ x: 3, y: 4 }, [], 0.05);
+    expect(r.pos).toEqual({ x: 3, y: 4 });
+    expect(r.xGuide).toBeNull();
+    expect(r.yGuide).toBeNull();
   });
 });
