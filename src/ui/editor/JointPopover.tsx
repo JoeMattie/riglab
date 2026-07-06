@@ -18,8 +18,10 @@ import {
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { PANEL_FRAME } from '../quad/panelProject';
+import { useMenuDrag, useOnscreenPosition } from './floatingMenu';
 import { JointGlyph, type JointGlyphName } from './icons';
 import { REALIZATION_OPTIONS } from './infopanel/fields';
+import { GripHandle } from './pillDrag';
 import { captionStyle, menuStyle, rowStyle, T } from './theme';
 import { toScreen, type ViewTransform } from './viewTransform';
 
@@ -400,11 +402,18 @@ function JointMenu({
 }) {
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
-  const ref = useRef<HTMLDivElement>(null);
+  const drag = useMenuDrag();
+
+  const members = memberCountAtNode(mech, nodeId);
+  const kindNow = jointKindAtNode(mech, nodeId);
+  // measured clamp keeps the WHOLE menu on-screen (its height varies with
+  // the pivot controls / realization column); re-measures as the joint kind
+  // changes the layout, or the user drags it
+  const { ref, left, top } = useOnscreenPosition(anchor, drag.offset, [kindNow, members]);
 
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
-  }, []);
+  }, [ref]);
 
   // the menu stays open while options are clicked (state edits read back
   // live); it closes on ✕, Escape, or any pointerdown OUTSIDE it — the
@@ -417,8 +426,7 @@ function JointMenu({
     return () => document.removeEventListener('pointerdown', onDown);
   }, [setOpenPopover]);
 
-  const members = memberCountAtNode(mech, nodeId);
-  const kind = jointKindAtNode(mech, nodeId);
+  const kind = kindNow;
   const current: JointChoice = kind === 'end' ? 'pivot' : kind;
   const pivot = mech.elements.find(
     (e): e is PivotElement => e.type === 'pivot' && e.nodeId === nodeId,
@@ -487,7 +495,6 @@ function JointMenu({
   const twoCol = showRealizations || showPivotControls;
 
   const width = twoCol ? 396 : WIDTH + 26;
-  const pos = clampedPos(anchor, width, 340);
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: keyboard roving-focus container, not an interactive control
     <div
@@ -497,9 +504,10 @@ function JointMenu({
         if (e.key === 'Escape') setOpenPopover(null);
         onMenuKeyDown(e);
       }}
-      style={{ ...menuStyle, position: 'fixed', ...pos, width, zIndex: 60 }}
+      style={{ ...menuStyle, position: 'fixed', left, top, width, zIndex: 60 }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px 6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 6px' }}>
+        <GripHandle testid="joint-popover-handle" drag={drag} vertical />
         <span style={captionStyle}>Joint · node {nodeId.slice(0, 4)}</span>
         <button
           type="button"

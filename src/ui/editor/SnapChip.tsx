@@ -60,7 +60,7 @@ export function SnapChip() {
       >
         Snap
       </span>
-      {TOGGLES.map(({ key, label, title }) => (
+      {TOGGLES.map(({ key, label, hint, title }) => (
         <button
           key={key}
           type="button"
@@ -68,9 +68,20 @@ export function SnapChip() {
           aria-pressed={snapPrefs[key]}
           title={title}
           onClick={() => toggleSnapPref(key)}
-          style={toggleChipStyle(snapPrefs[key])}
+          style={{
+            ...toggleChipStyle(snapPrefs[key]),
+            display: 'inline-flex',
+            gap: 5,
+            alignItems: 'center',
+          }}
         >
           {label}
+          <span
+            aria-hidden
+            style={{ font: `500 9px ${T.mono}`, opacity: 0.65, letterSpacing: '.02em' }}
+          >
+            {hint}
+          </span>
         </button>
       ))}
     </div>

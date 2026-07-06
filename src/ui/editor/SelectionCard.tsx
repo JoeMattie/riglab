@@ -1,9 +1,12 @@
-// The floating selection card (design handoff §7): docks beside the current
+// The floating selection card (design handoff §7): opens beside the current
 // selection on the canvas. Pipes get the hi-fi rows (length + lock, End A/B
 // joint chips, Split/Reverse/Delete); every other element type embeds the
 // existing inspector body, and multi-select embeds the bulk surface — so no
-// §8.2a capability is lost by removing the docked sketch-face panel.
-import { useRef, useState } from 'react';
+// §8.2a capability is lost by removing the docked sketch-face panel. Like the
+// joint popover it portals to document.body at fixed page coords, clamps so
+// the whole card is on-screen, and drags by its grip (Joe's request).
+import { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { elementNodeIds } from '../../design/elementInfo';
 import { elementTypeLabel } from '../../design/resolution';
 import type { Mechanism, MechanismElement, Project, Vec2 } from '../../schema';
@@ -18,11 +21,13 @@ import {
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { lengthToDisplay, lengthUnit } from '../units';
+import { pageOrigin, useMenuDrag, useOnscreenPosition } from './floatingMenu';
 import { JointGlyph, LockIcon } from './icons';
 import { useDiagnosticsShim } from './infopanel/diagnosticsShim';
 import { ElementInspector } from './infopanel/ElementInspector';
 import { MultiInspector } from './infopanel/MultiInspector';
 import { jointKindAtNode } from './JointPopover';
+import { GripHandle } from './pillDrag';
 import { MENU_SHADOW, T } from './theme';
 import { toScreen, type ViewTransform } from './viewTransform';
 
@@ -33,13 +38,14 @@ export function SelectionCard({
   mech,
   view,
   positions,
-  size,
+  container,
 }: {
   doc: Project;
   mech: Mechanism;
   view: ViewTransform;
   positions: Record<string, Vec2>;
-  size: { w: number; h: number };
+  /** hosting panel's DOM element — its page offset anchors the portaled card */
+  container: HTMLElement | null;
 }) {
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const clearSelection = useEditorStore((s) => s.clearSelection);
@@ -47,39 +53,37 @@ export function SelectionCard({
   const updateCurrent = useAppStore((s) => s.updateCurrent);
   const diagnostics = useDiagnosticsShim();
   // drag-to-move (hi-fi §7: "card is draggable"): a manual offset from the
-  // computed dock position, reset whenever the selection changes so a fresh
-  // selection docks beside itself again
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; base: { x: number; y: number } } | null>(
-    null,
-  );
-  const selectionKey = selectedElementIds.join('|');
-  const prevKeyRef = useRef(selectionKey);
-  if (prevKeyRef.current !== selectionKey) {
-    prevKeyRef.current = selectionKey;
-    if (offset.x !== 0 || offset.y !== 0) setOffset({ x: 0, y: 0 });
-  }
-
-  // the design face docks the full inspector on the right; the floating card
-  // is the sketch face's contextual replacement for it
-  if (face !== 'sketch') return null;
+  // computed open position, reset whenever the selection changes so a fresh
+  // selection opens beside itself again
+  const drag = useMenuDrag();
 
   const selected = selectedElementIds
     .map((id) => mech.elements.find((e) => e.id === id))
     .filter((e): e is MechanismElement => e !== undefined);
-  if (selected.length === 0) return null;
 
-  // dock beside the selection: right edge of its bounding box, clamped
+  // open beside the selection: page coords = panel origin + its screen box
+  const origin = pageOrigin(container);
   const pts = selected
     .flatMap((el) => elementNodeIds(el, mech))
     .map((id) => positions[id])
     .filter((p): p is Vec2 => !!p)
     .map((p) => toScreen(view, p));
-  const maxX = pts.length ? Math.max(...pts.map((p) => p.x)) : size.w / 2;
-  const minY = pts.length ? Math.min(...pts.map((p) => p.y)) : size.h / 2;
+  const maxX = pts.length ? Math.max(...pts.map((p) => p.x)) : 0;
+  const minY = pts.length ? Math.min(...pts.map((p) => p.y)) : 0;
   // 48px clearance keeps the card off the dimension chips beside the pipe
-  const left = Math.max(8, Math.min(maxX + 48 + offset.x, size.w - WIDTH - 8));
-  const top = Math.max(8, Math.min(minY - 10 + offset.y, size.h - 260));
+  const anchor = { x: origin.x + maxX + 48, y: origin.y + minY - 10 };
+  // a fresh selection opens beside itself again — drop any prior drag offset
+  const selectionKey = selectedElementIds.join('|');
+  const prevKeyRef = useRef(selectionKey);
+  if (prevKeyRef.current !== selectionKey) {
+    prevKeyRef.current = selectionKey;
+    if (drag.offset.x !== 0 || drag.offset.y !== 0) drag.reset();
+  }
+  const { ref, left, top } = useOnscreenPosition(anchor, drag.offset, [selectionKey, face]);
+
+  // the design face docks the full inspector; the floating card is the sketch
+  // face's contextual replacement (hooks above run unconditionally first)
+  if (face !== 'sketch' || selected.length === 0) return null;
 
   const single = selected.length === 1 ? selected[0]! : null;
   // a selected pivot gets NO floating card (Joe's request): the combined
@@ -91,11 +95,12 @@ export function SelectionCard({
     ? `${elementTypeLabel(single.type)[0]!.toUpperCase()}${elementTypeLabel(single.type).slice(1)} · ${single.id.slice(0, 4)}`
     : `${selected.length} elements`;
 
-  return (
+  return createPortal(
     <div
+      ref={ref}
       data-testid="selection-card"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left,
         top,
         width: WIDTH,
@@ -103,37 +108,22 @@ export function SelectionCard({
         border: `1px solid ${T.border}`,
         borderRadius: 12,
         boxShadow: MENU_SHADOW,
-        zIndex: 20,
+        zIndex: 60,
         fontFamily: T.sans,
         fontSize: 13.5,
         color: T.text,
       }}
     >
       <div
-        title="drag to move the card"
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-          e.currentTarget.setPointerCapture?.(e.pointerId);
-          dragRef.current = { startX: e.clientX, startY: e.clientY, base: offset };
-        }}
-        onPointerMove={(e) => {
-          const d = dragRef.current;
-          if (!d) return;
-          setOffset({ x: d.base.x + e.clientX - d.startX, y: d.base.y + e.clientY - d.startY });
-        }}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
           padding: '10px 12px 8px',
           borderBottom: `1px solid ${T.hairline}`,
-          cursor: 'grab',
         }}
       >
-        <span style={{ width: 9, height: 9, borderRadius: 2, background: T.selected }} />
+        <GripHandle testid="selection-card-handle" drag={drag} vertical />
         <span style={{ fontWeight: 600, fontSize: 13 }}>{title}</span>
         <button
           type="button"
@@ -232,7 +222,8 @@ export function SelectionCard({
           Delete
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

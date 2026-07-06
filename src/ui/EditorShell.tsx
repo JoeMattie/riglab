@@ -10,13 +10,13 @@
 // and equilibrium for every panel.
 import { useEffect } from 'react';
 import { massInventory } from '../analysis';
+import { pivotArcPoints } from '../design/pivotArc';
 import { EXAMPLES } from '../examples';
 import { useAppStore } from '../state/appStore';
 import { deleteElement, duplicateElement } from '../state/docOps';
 import { DEFAULT_CLIP_NAME, useEditorStore } from '../state/editorStore';
 import { useThemeStore } from '../state/themeStore';
 import { computeSkeleton, REST_POSE } from '../wearer';
-import { pivotArcPoints } from '../design/pivotArc';
 import { buildPipeModel } from './assembly/pipeModel';
 import { ControlsDock } from './controls/ControlsDock';
 import { ActionsChip } from './editor/ActionsChip';

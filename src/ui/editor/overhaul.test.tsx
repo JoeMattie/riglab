@@ -328,6 +328,23 @@ describe('JointPopover', () => {
       />,
     );
 
+  it('portals to the page body (fixed) and drags by its grip', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    const pop = screen.getByTestId('joint-popover');
+    expect(pop.parentElement).toBe(document.body);
+    expect(pop.style.position).toBe('fixed');
+    const before = { left: pop.style.left, top: pop.style.top };
+    const handle = screen.getByTestId('joint-popover-handle');
+    fireEvent.pointerDown(handle, { clientX: 500, clientY: 400, pointerId: 1 });
+    // drag toward mid-window so the result clears the window-edge clamp on at
+    // least one axis (jsdom lays the menu out at zero size, so the clamp pins
+    // whichever axis started against a margin)
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 250, pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(pop.style.left !== before.left || pop.style.top !== before.top).toBe(true);
+  });
+
   it('weld re-realizes the joint, stays open, and shows as current afterwards', () => {
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
     const r = renderPopover();
@@ -597,7 +614,7 @@ describe('SelectionCard', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
-        size={{ w: 800, h: 600 }}
+        container={null}
       />,
     );
 
@@ -607,6 +624,23 @@ describe('SelectionCard', () => {
     expect(screen.getByTestId('card-length').textContent).toContain('5 m');
     fireEvent.click(screen.getByTestId('card-end-b'));
     expect(useEditorStore.getState().openPopover).toEqual({ kind: 'joint', nodeId: 'n2' });
+  });
+
+  it('portals to the page body (fixed) and drags by its grip', () => {
+    useEditorStore.setState({ selectedElementIds: ['L1'] });
+    renderCard();
+    const cardEl = screen.getByTestId('selection-card');
+    // portaled: a direct child of document.body, position fixed
+    expect(cardEl.parentElement).toBe(document.body);
+    expect(cardEl.style.position).toBe('fixed');
+    const before = { left: cardEl.style.left, top: cardEl.style.top };
+    const handle = screen.getByTestId('selection-card-handle');
+    fireEvent.pointerDown(handle, { clientX: 500, clientY: 400, pointerId: 1 });
+    // drag toward mid-window (see the joint-popover drag test for why one
+    // axis may stay pinned in jsdom)
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 250, pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(cardEl.style.left !== before.left || cardEl.style.top !== before.top).toBe(true);
   });
 
   it('lock row pins the length; Delete removes the selection as one entry', () => {
@@ -703,7 +737,7 @@ describe('SelectionCard mirror-duplicate (v7)', () => {
         mech={mech0()}
         view={view()}
         positions={positions()}
-        size={{ w: 800, h: 600 }}
+        container={null}
       />,
     );
     const before = mech0().elements.length;

@@ -2488,3 +2488,20 @@ isCoincidentFinish caveat the polyline/rope finishers guard — Konva's
 dblclick is time-based, so two rapid dblclicks at different nodes fired a
 spurious third event that double-toggled an anchor (caught by the four-bar
 e2e spec).
+
+### DECISION: both canvas menus portal, clamp fully on-screen, and drag (2026-07-06)
+Joe: the config menu shown on single-click select (SelectionCard) should
+behave like the right-click joint menu — not placed over an adjacent panel —
+and both menus should open fully on-screen and have drag handles. The
+SelectionCard now portals to document.body at fixed page coords (was
+position:absolute docked in the nearest OTHER viewport via selectionCardHost,
+which could clip at a panel edge) and opens from the ACTIVE panel beside the
+selection. A shared `floatingMenu.ts` gives both menus (a) `useOnscreenPosition`
+— measures the mounted menu and clamps its fixed position so the WHOLE thing
+is visible (variable-height menus need the real height, not the joint menu's
+old 340px estimate), and (b) `useMenuDrag` + a GripHandle in the header. The
+joint popover keeps its modeless open/close (✕, Escape, outside-click) and
+gains the grip + measured clamp. selectionCardHost is now unused by the
+canvas (kept for its unit test). Covered by component tests (portal-to-body,
+fixed, grip drag for both) and a scripted built-app check (selection card
+portals, on-screen at the right edge, drags).

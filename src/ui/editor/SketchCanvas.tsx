@@ -52,7 +52,6 @@ import {
   projectPositions,
   projectToPanel,
 } from '../quad/panelProject';
-import { selectionCardHost } from '../quad/quadLayout';
 import { M_PER_IN } from '../units';
 import { DimensionChips, type EndpointDragReadout } from './DimensionChips';
 import { carriesForceLabel, forceLabelAnchor, formatForce, pickRenderPositions } from './forces';
@@ -2239,19 +2238,24 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
           frame={frame}
         />
       )}
-      {/* the selection card opens in the nearest OTHER viewport so it never
-          covers the geometry being worked on (selectionCardHost); it hides
-          during any drag, in any panel (dragNodeId covers cross-panel drags,
-          the local states cover this panel's endpoint drags) */}
-      {(panelId === 'iso'
-        ? activePanel === 'iso'
-        : selectionCardHost(activePanel, panelsVisible, quadMaximized) === panelId) &&
+      {/* the selection card opens beside the selection in the ACTIVE panel,
+          portaled to the page and clamped fully on-screen like the joint
+          popover (Joe's request); it hides during any drag, in any panel
+          (dragNodeId covers cross-panel drags, the local states cover this
+          panel's endpoint drags) */}
+      {isActive &&
         tool === 'select' &&
         !endpointDrag &&
         !dragNode &&
         !bodyDrag &&
         dragNodeId === null && (
-          <SelectionCard doc={doc} mech={mech} view={view} positions={projected} size={size} />
+          <SelectionCard
+            doc={doc}
+            mech={mech}
+            view={view}
+            positions={projected}
+            container={containerRef.current}
+          />
         )}
     </div>
   );
