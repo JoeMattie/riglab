@@ -520,10 +520,16 @@ function JointMenu({
 
   // the menu stays open while options are clicked (state edits read back
   // live); it closes on ✕, Escape, or any pointerdown OUTSIDE it — the
-  // portal floats over the whole page, so listen at the document
+  // portal floats over the whole page, so listen at the document. Pointerdowns
+  // on a SKETCH CANVAS are exempt: that surface has the enlarged angle-limit
+  // arc whose handles must stay grabbable (SketchCanvas's own mousedown
+  // closes the menu for genuine empty-canvas clicks; Joe's request).
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpenPopover(null);
+      const target = e.target as HTMLElement;
+      if (!ref.current || ref.current.contains(target)) return;
+      if (target.closest('[data-testid^="sketch-canvas-"]')) return;
+      setOpenPopover(null);
     };
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);

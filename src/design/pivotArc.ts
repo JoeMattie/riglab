@@ -39,6 +39,56 @@ function memberDir(
   return at && other ? unit(sub(other, at)) : null;
 }
 
+/** The in-plane frame the hinge angle is measured in (for the interactive
+ * angle-limit handles): `ref` is the θ=0 direction (the straight continuation
+ * of angleLimit.memberA through the pivot), `e2 = axis × ref` is the +θ
+ * direction, both unit and in the hinge plane. `center` is the pivot node.
+ * A hinge angle θ maps to the world point center + radius·(cosθ·ref +
+ * sinθ·e2). Null unless the pivot is a hinge with a resolvable memberA. */
+export interface PivotAngleFrame {
+  center: Vec3;
+  axis: Vec3;
+  ref: Vec3;
+  e2: Vec3;
+}
+
+export function pivotAngleFrame(
+  mech: Mechanism,
+  pivot: PivotElement,
+  positions: Record<string, Vec3>,
+): PivotAngleFrame | null {
+  if (pivot.joint.kind !== 'hinge' || !pivot.angleLimit) return null;
+  const center = positions[pivot.nodeId];
+  const axis = unit(pivot.joint.axis);
+  if (!center || !axis) return null;
+  const mDir = memberDir(mech, pivot.angleLimit.memberA, pivot.nodeId, positions);
+  if (!mDir) return null;
+  // continuation of memberA = −(direction toward memberA's far node),
+  // projected into the hinge plane
+  const cont = { x: -mDir.x, y: -mDir.y, z: -mDir.z };
+  const ref = unit(
+    sub(cont, {
+      x: axis.x * dot(cont, axis),
+      y: axis.y * dot(cont, axis),
+      z: axis.z * dot(cont, axis),
+    }),
+  );
+  if (!ref) return null;
+  const e2 = cross(axis, ref); // unit (axis ⟂ ref, both unit)
+  return { center, axis, ref, e2 };
+}
+
+/** World point on the angle circle at hinge angle θ (radians), radius r. */
+export function pivotAnglePoint(f: PivotAngleFrame, radiusM: number, theta: number): Vec3 {
+  const c = Math.cos(theta);
+  const s = Math.sin(theta);
+  return {
+    x: f.center.x + radiusM * (c * f.ref.x + s * f.e2.x),
+    y: f.center.y + radiusM * (c * f.ref.y + s * f.e2.y),
+    z: f.center.z + radiusM * (c * f.ref.z + s * f.e2.z),
+  };
+}
+
 /** Weld groups: members welded to each other move as ONE side of the arc. */
 function weldGroups(pivot: PivotElement): string[][] {
   const root = new Map<string, string>(pivot.memberIds.map((id) => [id, id]));

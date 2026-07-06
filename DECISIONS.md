@@ -2562,3 +2562,22 @@ playback and returns to the rest pose, with a "Rest ⇧R" button beside the
 clip/pose selector in the transport pill (goToRest = clear clip + tS0 + stop
 + drop the live pose). ToolPill already ignores Shift chords, so R (rope)
 doesn't collide.
+
+### DECISION: interactive angle-limit handles on the enlarged arc (2026-07-06)
+Joe: enabling "angle limited" on a hinge should enlarge the arc (while the
+menu is open) and put draggable min/max handles on it to set the angle, and
+dragging must not close the menu. While the joint popover targets a hinge
+pivot with an angleLimit, that pivot's arc renders at a large radius
+(ANGLE_EDIT_RADIUS_PX = 92px) with two pink handles at the min and max angles
+(degree labels + radial guide lines); the ordinary small arc is suppressed
+for it. New pivotArc helpers `pivotAngleFrame` (the θ=0 ref = memberA
+continuation, +θ = axis×ref) and `pivotAnglePoint` place the handles and are
+exact when the hinge axis faces the view. Grabbing a handle (SketchCanvas
+onMouseDown, before the popover-dismiss) starts an angleDrag; the pointer's
+angle in the hinge frame becomes the new min/max (clamped so min ≤ max keeps
+each handle's identity) via setPivotAngleLimit; release keeps the menu open.
+The menu stays open because its document outside-close now ignores
+pointerdowns landing on a sketch canvas — SketchCanvas's own mousedown still
+closes it for genuine empty-canvas clicks. Covered by pivotArc unit tests and
+a scripted built-app check (enlarge, drag max handle wider, menu stays open,
+empty click closes).

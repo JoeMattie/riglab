@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import { groupDragNodeIds, translatedTargets } from '../../design/groupDrag';
 import { elementIdsInRect, normalizedRect } from '../../design/marquee';
-import { pivotArcPoints } from '../../design/pivotArc';
+import { pivotAngleFrame, pivotAnglePoint, pivotArcPoints } from '../../design/pivotArc';
 import type { Mechanism, PivotElement, PivotJoint, SliderElement, Vec2, Vec3 } from '../../schema';
 import { solve } from '../../solver';
 import { useAppStore } from '../../state/appStore';
@@ -32,6 +32,7 @@ import {
   releaseNodeConnection,
   setElasticRestLength,
   setNodeKind,
+  setPivotAngleLimit,
 } from '../../state/docOps';
 import { type OrthoPanelId, useEditorStore } from '../../state/editorStore';
 import { useThemeStore } from '../../state/themeStore';
@@ -85,6 +86,9 @@ const SNAP_TOL_PX = 14;
  * its snap point — comfortably beyond the snap tolerance so a small jiggle
  * cannot disconnect anything (PLANFILE-wearer-attachments-and-floor, B). */
 const TEAR_OFF_PX = SNAP_TOL_PX * 2;
+/** Enlarged pivot-arc radius (px) while its joint menu is open, so the
+ * draggable min/max angle handles have room (Joe's request). */
+const ANGLE_EDIT_RADIUS_PX = 92;
 
 /** Screen-space triangle-wave points hinting a coil, between two endpoints. */
 function zigzag(a: Vec2, b: Vec2, segments = 9, ampPx = 5): number[] {
@@ -209,6 +213,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const snapPrefs = useEditorStore((s) => s.snapPrefs);
   const equilibrium = useEditorStore((s) => s.equilibrium);
   const setOpenPopover = useEditorStore((s) => s.setOpenPopover);
+  const openPopover = useEditorStore((s) => s.openPopover);
   const focusElementId = useEditorStore((s) => s.focusElementId);
   const setFocusElement = useEditorStore((s) => s.setFocusElement);
   const workDepthM = useEditorStore((s) => s.panelDepths[panelId]);
@@ -251,6 +256,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     axis: Vec2;
     startWorld: Vec2;
   } | null>(null);
+  /** dragging a min/max handle on an angle-limited pivot's (enlarged) arc
+   * while its joint menu is open (Joe's request) — the node and which end */
+  const [angleDrag, setAngleDrag] = useState<{ nodeId: string; which: 'min' | 'max' } | null>(null);
   const [dragNode, setDragNode] = useState<{ nodeId: string; depthM: number } | null>(null);
   /** tear-off state for a drag that started on a wearer-connected node
    * (skeleton-bound, anchor-attached, or plain grounded): the node holds its
@@ -483,6 +491,19 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       restEffM: elasticRestEffM(el),
     };
   }, [mech, selectedElementIds, projected]);
+
+  /** the angle-limited pivot whose joint menu is open in THIS panel — its arc
+   * enlarges and gains draggable min/max handles (Joe's request). Null unless
+   * the joint popover targets a hinge pivot with an angleLimit. */
+  const angleEditPivot = useMemo(() => {
+    if (!mech || openPopover?.kind !== 'joint') return null;
+    const el = mech.elements.find(
+      (e) => e.type === 'pivot' && e.nodeId === openPopover.nodeId && e.angleLimit,
+    );
+    if (el?.type !== 'pivot' || !el.angleLimit) return null;
+    const frame3 = pivotAngleFrame(mech, el, renderPositions);
+    return frame3 ? { el, frame3, limit: el.angleLimit } : null;
+  }, [mech, openPopover, renderPositions]);
 
   // DOF-pill click-to-zoom: consume the one-shot focus request by centering
   // the element's bounding box (padded) and selecting it. Every panel zooms;
@@ -740,6 +761,24 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     prevMouseDownScreenRef.current = mouseDownScreenRef.current;
     mouseDownScreenRef.current = screen;
     setActivePanel(panelId);
+    // grab an angle-limit handle on the enlarged arc, if any — this keeps the
+    // joint menu OPEN (returns before the popover dismiss below; the menu's
+    // own outside-close ignores canvas pointerdowns for exactly this reason)
+    if (angleEditPivot && e.evt.button === 0) {
+      const R = ANGLE_EDIT_RADIUS_PX / view.scale;
+      for (const which of ['min', 'max'] as const) {
+        const theta = which === 'min' ? angleEditPivot.limit.minRad : angleEditPivot.limit.maxRad;
+        const hs = toScreen(
+          view,
+          projectToPanel(pivotAnglePoint(angleEditPivot.frame3, R, theta), frame),
+        );
+        if (Math.hypot(screen.x - hs.x, screen.y - hs.y) <= SNAP_TOL_PX + 4) {
+          beginGesture();
+          setAngleDrag({ nodeId: angleEditPivot.el.nodeId, which });
+          return;
+        }
+      }
+    }
     // canvas mousedown dismisses floating popovers and inline edits
     const editor = useEditorStore.getState();
     if (editor.openPopover) editor.setOpenPopover(null);
@@ -973,6 +1012,26 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       // grabbed canvas point glued to the cursor with no incremental drift
       const grabbed = panRef.current;
       setView((v) => panTo(v, grabbed, screen));
+      return;
+    }
+
+    if (angleDrag && angleEditPivot) {
+      // drag a min/max handle: the pointer's angle in the hinge frame becomes
+      // the new limit (clamped so min ≤ max keeps each handle's identity)
+      const f = angleEditPivot.frame3;
+      const c2 = projectToPanel(f.center, frame);
+      const ref2 = projectToPanel(f.ref, frame);
+      const e22 = projectToPanel(f.e2, frame);
+      const w2 = toWorld(view, screen);
+      const vx = w2.x - c2.x;
+      const vy = w2.y - c2.y;
+      const theta = Math.atan2(vx * e22.x + vy * e22.y, vx * ref2.x + vy * ref2.y);
+      const { minRad, maxRad } = angleEditPivot.limit;
+      const next =
+        angleDrag.which === 'min'
+          ? { minRad: Math.min(theta, maxRad), maxRad }
+          : { minRad, maxRad: Math.max(theta, minRad) };
+      updateCurrent((cur) => setPivotAngleLimit(cur, angleDrag.nodeId, next));
       return;
     }
 
@@ -1235,6 +1294,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
     setAlignGuides(null); // shift-drag guides clear on release
+    if (angleDrag) {
+      setAngleDrag(null);
+      endGesture();
+      return; // the joint menu stays open (Joe's request)
+    }
     if (elasticDrag) {
       setElasticDrag(null);
       endGesture();
@@ -2036,6 +2100,9 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               to a slit edge-on. Radius scales with zoom (≈18px). */}
           {mech.elements.map((el) => {
             if (el.type !== 'pivot') return null;
+            // the pivot being angle-edited draws its ENLARGED arc + handles
+            // separately below — skip it here
+            if (angleEditPivot && el.id === angleEditPivot.el.id) return null;
             const arc = pivotArcPoints(mech, el, renderPositions, 28 / view.scale, 24);
             if (!arc) return null;
             return (
@@ -2049,6 +2116,71 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               />
             );
           })}
+
+          {/* enlarged, editable angle-limit arc while the joint menu is open:
+              a wide wedge with draggable min/max handles (Joe's request) */}
+          {angleEditPivot &&
+            (() => {
+              const R = ANGLE_EDIT_RADIUS_PX / view.scale;
+              const arc = pivotArcPoints(mech, angleEditPivot.el, renderPositions, R, 40);
+              const handle = (which: 'min' | 'max') => {
+                const theta =
+                  which === 'min' ? angleEditPivot.limit.minRad : angleEditPivot.limit.maxRad;
+                const p = S(
+                  projectToPanel(pivotAnglePoint(angleEditPivot.frame3, R, theta), frame),
+                );
+                const deg = Math.round((theta * 180) / Math.PI);
+                return (
+                  <Group key={`ah-${which}`}>
+                    <Line
+                      points={flat([
+                        projectToPanel(angleEditPivot.frame3.center, frame),
+                        projectToPanel(pivotAnglePoint(angleEditPivot.frame3, R, theta), frame),
+                      ])}
+                      stroke="#d0459a"
+                      strokeWidth={1}
+                      dash={[3, 3]}
+                      listening={false}
+                    />
+                    <Circle
+                      x={p.x}
+                      y={p.y}
+                      radius={9}
+                      fill="#d0459a"
+                      stroke={C.nodeFill}
+                      strokeWidth={2}
+                    />
+                    <Text
+                      x={p.x + 11}
+                      y={p.y - 7}
+                      text={`${deg}°`}
+                      fontSize={12}
+                      fontStyle="bold"
+                      fill="#d0459a"
+                      shadowColor={C.halo}
+                      shadowBlur={2}
+                      shadowOpacity={1}
+                      listening={false}
+                    />
+                  </Group>
+                );
+              };
+              return (
+                <Group>
+                  {arc && (
+                    <Line
+                      points={flat(arc.map((p) => projectToPanel(p, frame)))}
+                      stroke="#d0459a"
+                      strokeWidth={2}
+                      lineCap="round"
+                      listening={false}
+                    />
+                  )}
+                  {handle('min')}
+                  {handle('max')}
+                </Group>
+              );
+            })()}
 
           {/* dashed ghost of the pre-drag pose during an endpoint length edit */}
           {endpointDrag && (

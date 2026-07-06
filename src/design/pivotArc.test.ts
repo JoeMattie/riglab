@@ -4,7 +4,7 @@
 // have no single plane (spherical, fully welded, single-member).
 import { describe, expect, it } from 'vitest';
 import type { LinkElement, PivotElement, PivotJoint, Vec3 } from '../schema';
-import { pivotArcPoints } from './pivotArc';
+import { pivotAngleFrame, pivotAnglePoint, pivotArcPoints } from './pivotArc';
 import { mech, node } from './testFixtures';
 
 const hingeZ: PivotJoint = { kind: 'hinge', axis: { x: 0, y: 0, z: 1 } };
@@ -163,3 +163,27 @@ describe('pivotArcPoints — angle limit wedge', () => {
     expect(Math.sign(first.y)).not.toBe(Math.sign(last.y)); // spans across −x
   });
 });
+
+describe('pivotAngleFrame / pivotAnglePoint (interactive handles)', () => {
+  it('θ=0 points along memberA continuation; +θ turns toward axis×ref', () => {
+    // memberA (L1) toward −x from pivot → continuation is +x = ref; axis +z.
+    const { m, pivot, pos } = elbow(hingeZ, [], { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 });
+    pivot.angleLimit = { memberA: 'L1', memberB: 'L2', minRad: -0.5, maxRad: 0.5 };
+    const f = pivotAngleFrame(m, pivot, pos)!;
+    expect(f).not.toBeNull();
+    // ref ≈ +x (continuation of L1 which points −x)
+    expect(f.ref.x).toBeCloseTo(1, 9);
+    // θ=0 handle sits at center + r·ref = (0.2, 0, 0)
+    const p0 = pivotAnglePoint(f, 0.2, 0);
+    expect(p0).toMatchObject({ x: expect.closeTo(0.2, 9), y: expect.closeTo(0, 9), z: expect.closeTo(0, 9) });
+    // +90° about +z turns +x → +y
+    const p90 = pivotAnglePoint(f, 0.2, Math.PI / 2);
+    expect(p90.x).toBeCloseTo(0, 9);
+    expect(p90.y).toBeCloseTo(0.2, 9);
+  });
+
+  it('is null without an angle limit', () => {
+    const { m, pivot, pos } = elbow(hingeZ);
+    expect(pivotAngleFrame(m, pivot, pos)).toBeNull();
+  });
+})
