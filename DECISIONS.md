@@ -2520,3 +2520,18 @@ two are complementary alignment aids. Body drag is left free (translating a
 whole selection has no single point to align). Covered by axisAlign unit
 tests and a scripted built-app check (drag a point into another's column with
 Shift → world x locks exactly, own row preserved).
+
+### DECISION: elastic rest-length midpoint drag handle (2026-07-06)
+Joe: a selected elastic gets a draggable control at its middle to adjust the
+rest length, auto-adjusting pretension. The elastic force model is
+f = stiffness·(len − restLengthM) + pretensionN, with the effective
+(zero-force) rest length restEff = restLengthM − pretensionN/stiffness. The
+handle scrubs restEff: `setElasticRestLength(doc, id, restEffM)` keeps the
+drawn natural `restLengthM` fixed and stores the shortfall below it as
+preload `pretensionN` (tension-only, clamped ≥ 0) — so "the rest length" the
+user drags is restEff and "pretension auto-adjusts accordingly" is literal;
+installed tension is unchanged whether expressed via restLengthM or
+pretensionN. A green midpoint handle (shown only for a single selected
+elastic) scrubs along the A→B axis — toward B lengthens rest (less tension),
+toward A shortens it — with a live tension readout. Covered by docOps tests
+(setElasticRestLength / elasticRestEffM) and a scripted built-app check.

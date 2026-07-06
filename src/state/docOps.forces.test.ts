@@ -9,7 +9,9 @@ import {
   addTorsionCable,
   DEFAULT_ELASTIC_STIFFNESS_N_PER_M,
   type EndSpec,
+  elasticRestEffM,
   removeInputChannel,
+  setElasticRestLength,
   setInputChannel,
 } from './docOps';
 
@@ -55,6 +57,54 @@ describe('addElastic', () => {
     expect(el.restLengthM).toBeCloseTo(0.5, 9);
     expect(el.stiffnessNPerM).toBe(DEFAULT_ELASTIC_STIFFNESS_N_PER_M);
     expect(el.tensionOnly).toBe(true);
+  });
+});
+
+describe('setElasticRestLength / elasticRestEffM (midpoint drag handle)', () => {
+  const makeElastic = () =>
+    addElastic(createEmptyProject('p', 'p'), newNode(0, 0), newNode(0, 0.5));
+
+  it('shortening the effective rest below natural stores the shortfall as pretension', () => {
+    const { doc, elementId } = makeElastic();
+    const k = DEFAULT_ELASTIC_STIFFNESS_N_PER_M;
+    const next = setElasticRestLength(doc, elementId, 0.4); // 0.1 m of stretch
+    const el = mechOf(next).elements.find((e) => e.id === elementId)!;
+    if (el.type !== 'elastic') throw new Error('not an elastic');
+    expect(el.restLengthM).toBeCloseTo(0.5, 9); // natural length unchanged
+    expect(el.pretensionN).toBeCloseTo(k * 0.1, 6);
+    // effective rest reads back the dragged value
+    expect(elasticRestEffM(el)).toBeCloseTo(0.4, 9);
+  });
+
+  it('installed tension is the same whether via rest length or pretension', () => {
+    // at the drawn span 0.5, natural rest 0.5 → 0 tension; drag rest to 0.3
+    const { doc, elementId } = makeElastic();
+    const k = DEFAULT_ELASTIC_STIFFNESS_N_PER_M;
+    const el = mechOf(setElasticRestLength(doc, elementId, 0.3)).elements.find(
+      (e) => e.id === elementId,
+    )!;
+    if (el.type !== 'elastic') throw new Error('not an elastic');
+    const span = 0.5;
+    const tension = k * (span - el.restLengthM) + (el.pretensionN ?? 0);
+    expect(tension).toBeCloseTo(k * (span - 0.3), 6); // = stiffness·(span − restEff)
+  });
+
+  it('a rest ≥ natural is slack — no pretension', () => {
+    const { doc, elementId } = makeElastic();
+    const el = mechOf(setElasticRestLength(doc, elementId, 0.9)).elements.find(
+      (e) => e.id === elementId,
+    )!;
+    if (el.type !== 'elastic') throw new Error('not an elastic');
+    expect(el.pretensionN).toBeUndefined();
+    expect(elasticRestEffM(el)).toBeCloseTo(0.5, 9); // clamped to natural
+  });
+
+  it('ignores non-elastic ids (the elastic is untouched)', () => {
+    const { doc, elementId } = makeElastic();
+    const after = setElasticRestLength(doc, 'nope', 0.1);
+    const el = mechOf(after).elements.find((e) => e.id === elementId)!;
+    if (el.type !== 'elastic') throw new Error('not an elastic');
+    expect(el.pretensionN).toBeUndefined();
   });
 });
 

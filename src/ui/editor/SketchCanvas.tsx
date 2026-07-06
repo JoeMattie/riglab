@@ -26,9 +26,11 @@ import {
   canAttachNodes,
   canAttachNodeToLink,
   deleteElement,
+  elasticRestEffM,
   groundNodeAtAnchor,
   moveNodes,
   releaseNodeConnection,
+  setElasticRestLength,
   setNodeKind,
 } from '../../state/docOps';
 import { type OrthoPanelId, useEditorStore } from '../../state/editorStore';
@@ -239,6 +241,15 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     at: Vec2;
     xGuide: Vec2 | null;
     yGuide: Vec2 | null;
+  } | null>(null);
+  /** scrubbing a selected elastic's midpoint handle to set its rest length
+   * (Joe's request): the element, the rest-eff at grab, the panel-2D axis
+   * unit A→B, and the grab point (world 2D) — along-axis drag scrubs rest */
+  const [elasticDrag, setElasticDrag] = useState<{
+    id: string;
+    startRestEff: number;
+    axis: Vec2;
+    startWorld: Vec2;
   } | null>(null);
   const [dragNode, setDragNode] = useState<{ nodeId: string; depthM: number } | null>(null);
   /** tear-off state for a drag that started on a wearer-connected node
@@ -452,6 +463,26 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
     () => projectPositions(renderPositions, frame),
     [renderPositions, frame],
   );
+
+  /** midpoint rest-length handle for a SINGLE selected elastic: its panel-2D
+   * midpoint, the unit A→B axis, and the current effective rest length. Null
+   * unless exactly one elastic is selected and both ends are resolved. */
+  const elasticHandle = useMemo(() => {
+    if (!mech || selectedElementIds.length !== 1) return null;
+    const el = mech.elements.find((e) => e.id === selectedElementIds[0]);
+    if (el?.type !== 'elastic') return null;
+    const a = projected[el.nodeA];
+    const b = projected[el.nodeB];
+    if (!a || !b) return null;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const axis = len > 1e-9 ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: 1, y: 0 };
+    return {
+      id: el.id,
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      axis,
+      restEffM: elasticRestEffM(el),
+    };
+  }, [mech, selectedElementIds, projected]);
 
   // DOF-pill click-to-zoom: consume the one-shot focus request by centering
   // the element's bounding box (padded) and selecting it. Every panel zooms;
@@ -726,6 +757,22 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
 
     if (tool === 'select') {
       marqueeCommittedRef.current = false;
+      // a selected elastic shows a midpoint handle that scrubs its rest
+      // length (Joe's request) — grab it before anything else
+      if (elasticHandle) {
+        const midScreen = toScreen(view, elasticHandle.mid);
+        if (Math.hypot(screen.x - midScreen.x, screen.y - midScreen.y) <= SNAP_TOL_PX) {
+          beginGesture();
+          setHoverSnap(null);
+          setElasticDrag({
+            id: elasticHandle.id,
+            startRestEff: elasticHandle.restEffM,
+            axis: elasticHandle.axis,
+            startWorld: toWorld(view, screen),
+          });
+          return;
+        }
+      }
       if (snap.kind === 'node') {
         adoptDepth(snap);
         const depthM = depthOfSnap(snap, workDepthM);
@@ -926,6 +973,18 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
       // grabbed canvas point glued to the cursor with no incremental drift
       const grabbed = panRef.current;
       setView((v) => panTo(v, grabbed, screen));
+      return;
+    }
+
+    if (tool === 'select' && elasticDrag) {
+      // scrub the elastic's rest length by the along-axis drag; dragging
+      // toward node B lengthens rest (less tension), toward A shortens it
+      const world2 = toWorld(view, screen);
+      const along =
+        (world2.x - elasticDrag.startWorld.x) * elasticDrag.axis.x +
+        (world2.y - elasticDrag.startWorld.y) * elasticDrag.axis.y;
+      const restEff = elasticDrag.startRestEff + along;
+      updateCurrent((cur) => setElasticRestLength(cur, elasticDrag.id, restEff));
       return;
     }
 
@@ -1176,6 +1235,11 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
   const onMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const screen = stagePointer(e);
     setAlignGuides(null); // shift-drag guides clear on release
+    if (elasticDrag) {
+      setElasticDrag(null);
+      endGesture();
+      return;
+    }
     // a pan release must not fall through to the tool handlers (an active
     // draft would otherwise commit a stroke at the release point)
     const wasPanning = panRef.current !== null;
@@ -2228,6 +2292,49 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               />
             );
           })}
+
+          {/* selected-elastic midpoint handle: drag along the axis to scrub
+              the rest length (Joe's request); a live tension readout shows
+              while dragging */}
+          {elasticHandle &&
+            (() => {
+              const m = S(elasticHandle.mid);
+              const el = mech.elements.find((x) => x.id === elasticHandle.id);
+              const tensionN =
+                el?.type === 'elastic'
+                  ? el.stiffnessNPerM *
+                    Math.max(
+                      0,
+                      seg3(renderPositions[el.nodeA], renderPositions[el.nodeB]) -
+                        elasticRestEffM(el),
+                    )
+                  : 0;
+              return (
+                <Group>
+                  <Circle
+                    x={m.x}
+                    y={m.y}
+                    radius={8}
+                    fill="#2a8a4a"
+                    stroke={C.nodeFill}
+                    strokeWidth={2}
+                  />
+                  {elasticDrag && (
+                    <Text
+                      x={m.x + 12}
+                      y={m.y - 8}
+                      text={`${tensionN.toFixed(1)} N`}
+                      fontSize={11}
+                      fill="#2a8a4a"
+                      shadowColor={C.halo}
+                      shadowBlur={2}
+                      shadowOpacity={1}
+                      listening={false}
+                    />
+                  )}
+                </Group>
+              );
+            })()}
 
           {/* white endpoint handles on the selected pipe (drag = length edit) */}
           {selectedEndpointNodes.map(({ nodeId, locked }) => {

@@ -979,6 +979,30 @@ export function setLinkLength(doc: Project, elementId: string, lengthM: number):
   });
 }
 
+/** Set an elastic's EFFECTIVE rest length (the midpoint drag handle, Joe's
+ * request): the length at which the spring would sit at zero force. The
+ * geometry (nodeA/nodeB) and the natural `restLengthM` stay put — the
+ * shortfall below the natural length is stored as preload `pretensionN`
+ * (tension-only, so clamped ≥ 0), which is exactly what "auto-adjusts the
+ * pretension accordingly" means. Installed tension at span S is
+ * stiffness·(S − restEff): unchanged whether expressed via restLengthM or
+ * pretensionN. `restEffM` clamps to (0, restLengthM]; a value ≥ restLengthM
+ * is slack (pretension 0). No-op for non-elastic ids. */
+export function setElasticRestLength(doc: Project, elementId: string, restEffM: number): Project {
+  return mapElements(doc, (el) => {
+    if (el.id !== elementId || el.type !== 'elastic') return el;
+    const restEff = Math.max(1e-3, Math.min(restEffM, el.restLengthM));
+    const pretensionN = el.stiffnessNPerM * (el.restLengthM - restEff);
+    return { ...el, pretensionN: pretensionN > 1e-9 ? pretensionN : undefined };
+  });
+}
+
+/** An elastic's current effective rest length — inverse of
+ * setElasticRestLength, for the drag handle's live position. */
+export function elasticRestEffM(el: ElasticElement): number {
+  return el.restLengthM - (el.pretensionN ?? 0) / el.stiffnessNPerM;
+}
+
 // ── interface-overhaul ops (dimension chips + joint popover) ────────────────
 
 /** Pin/unpin a link/telescope length (the dimension-chip lock). Locked
