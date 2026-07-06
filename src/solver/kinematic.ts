@@ -319,6 +319,47 @@ class DragC {
   }
 }
 
+/** Transient shift-drag plane lock (SolveInputs.planeLocks): holds a node on
+ * a view plane while the geometry resolves. It rides WITH an island's real
+ * constraints — projected in the drag loop and the settle, appended after
+ * them so each sweep ends on-plane — but lives OUTSIDE the global
+ * `constraints` list, so it never contributes to residual/DOF/violated
+ * reporting (like DragC, it is a UI gesture, not document geometry). */
+class PlaneLockC implements KConstraint {
+  readonly elementId = '__planeLock__';
+  readonly mobilityEqualities = 0;
+  constructor(
+    readonly p: P,
+    private readonly point: Vec3,
+    /** unit normal */
+    private readonly normal: Vec3,
+  ) {}
+
+  private offset(): number {
+    return (
+      (this.p.x - this.point.x) * this.normal.x +
+      (this.p.y - this.point.y) * this.normal.y +
+      (this.p.z - this.point.z) * this.normal.z
+    );
+  }
+
+  project(omega = 1): void {
+    if (this.p.w === 0) return;
+    const d = this.offset() * omega;
+    this.p.x -= d * this.normal.x;
+    this.p.y -= d * this.normal.y;
+    this.p.z -= d * this.normal.z;
+  }
+
+  violation(): number {
+    return this.p.w === 0 ? 0 : Math.abs(this.offset());
+  }
+
+  parts(): P[] {
+    return [this.p];
+  }
+}
+
 function dist(a: Vec3, b: Vec3): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
 }
@@ -526,6 +567,21 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
       ([id, target]) => new DragC(get(id), { x: target.x, y: Math.max(0, target.y), z: target.z }),
     );
 
+  // shift-drag plane locks: normalized here so callers can pass any nonzero
+  // normal; joined to their particle's island below, after the real
+  // constraints, and never added to the global `constraints` reporting list
+  const planeLocks: PlaneLockC[] = Object.entries(inputs.planeLocks ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .filter(([id]) => particles.has(id) && userIds.has(id))
+    .map(([id, pl]) => {
+      const len = Math.hypot(pl.normal.x, pl.normal.y, pl.normal.z) || 1;
+      return new PlaneLockC(get(id), pl.point, {
+        x: pl.normal.x / len,
+        y: pl.normal.y / len,
+        z: pl.normal.z / len,
+      });
+    });
+
   // ── island decomposition ────────────────────────────────────────────────
   // Gauss–Seidel corrections propagate only through FREE particles: held
   // particles (anchors / driven / pinned axis virtuals) absorb no motion, so
@@ -582,6 +638,9 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
   }
   for (const d of drags) {
     if (d.p.w > 0) islandFor(findRoot(d.p.id)).drags.push(d);
+  }
+  for (const pl of planeLocks) {
+    if (pl.p.w > 0) islandFor(findRoot(pl.p.id)).constraints.push(pl);
   }
   for (const p of particles.values()) {
     if (p.w === 0) continue;

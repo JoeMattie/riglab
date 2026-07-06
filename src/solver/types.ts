@@ -12,6 +12,12 @@ export interface SolveInputs {
   channelValues: Record<string, number>;
   /** transient drag targets keyed by node id (kinematic drag, §5.1) */
   dragTargets?: Record<string, Vec3>;
+  /** Transient drag-time plane locks keyed by node id (shift-drag in an
+   * ortho panel): the node is projected onto its plane every iteration —
+   * with and after the geometry — so the drag cannot pull it out of the
+   * view plane while lengths/joints still resolve. Like dragTargets, a UI
+   * gesture: excluded from residual/DOF/violated reporting. Kinematic only. */
+  planeLocks?: Record<string, { point: Vec3; normal: Vec3 }>;
   /** Prescribed positions for kind-'anchor' nodes attached to the wearer
    * (anchorBindings): the pack frame / body carries the ground point through
    * pose and clip playback. Applied in both modes; entries for non-anchor
