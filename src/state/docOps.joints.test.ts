@@ -15,6 +15,8 @@ import {
   setLengthLocked,
   setNodeJoint,
   setNodePivotJoint,
+  setPivotAngleLimit,
+  setPivotAxisLocked,
   splitLinkAtMidpoint,
 } from './docOps';
 
@@ -146,6 +148,35 @@ describe('setNodeJoint', () => {
   it('weld is a no-op on an end node with fewer than 2 members', () => {
     const doc = setNodeJoint(project(), 'n1', 'weld');
     expect(m0(doc).elements.some((e) => e.type === 'pivot')).toBe(false);
+  });
+});
+
+describe('setPivotAxisLocked / setPivotAngleLimit', () => {
+  it('locks and clears the hinge axis flag (hinge only)', () => {
+    let doc = setNodeJoint(project(), 'n2', 'pivot'); // hinge pivot at n2
+    doc = setPivotAxisLocked(doc, 'n2', true);
+    expect(pivotOf(doc)!.axisLocked).toBe(true);
+    doc = setPivotAxisLocked(doc, 'n2', false);
+    expect(pivotOf(doc)!.axisLocked).toBeUndefined();
+  });
+
+  it('does not lock a spherical pivot', () => {
+    let doc = setNodeJoint(project(), 'n2', 'pivot');
+    doc = setNodePivotJoint(doc, 'n2', { kind: 'spherical' });
+    doc = setPivotAxisLocked(doc, 'n2', true);
+    expect(pivotOf(doc)!.axisLocked).toBeUndefined();
+  });
+
+  it('sets an angle limit between the first two members and clears it', () => {
+    let doc = setNodeJoint(project(), 'n2', 'pivot');
+    doc = setPivotAngleLimit(doc, 'n2', { minRad: 0.6, maxRad: -0.6 });
+    const lim = pivotOf(doc)!.angleLimit!;
+    expect(lim.memberA).toBe('L1');
+    expect(lim.memberB).toBe('L2');
+    expect(lim.minRad).toBeCloseTo(-0.6, 9); // sorted
+    expect(lim.maxRad).toBeCloseTo(0.6, 9);
+    doc = setPivotAngleLimit(doc, 'n2', null);
+    expect(pivotOf(doc)!.angleLimit).toBeUndefined();
   });
 });
 

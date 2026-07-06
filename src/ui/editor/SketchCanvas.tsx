@@ -2036,7 +2036,7 @@ export function SketchCanvas({ panelId }: { panelId: OrthoPanelId }) {
               to a slit edge-on. Radius scales with zoom (≈18px). */}
           {mech.elements.map((el) => {
             if (el.type !== 'pivot') return null;
-            const arc = pivotArcPoints(mech, el, renderPositions, 18 / view.scale, 20);
+            const arc = pivotArcPoints(mech, el, renderPositions, 28 / view.scale, 24);
             if (!arc) return null;
             return (
               <Line

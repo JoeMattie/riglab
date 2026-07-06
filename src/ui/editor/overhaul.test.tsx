@@ -679,6 +679,44 @@ describe('JointPopover hinge controls (v7)', () => {
       />,
     );
 
+  it('locks the hinge axis and sets/clears an angle limit', () => {
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r = renderPopover();
+    fireEvent.click(screen.getByTestId('joint-pivot')); // materialize hinge
+    r.unmount();
+    const pivot = () =>
+      mech0().elements.find((e) => e.type === 'pivot') as
+        | Extract<ReturnType<typeof mech0>['elements'][number], { type: 'pivot' }>
+        | undefined;
+
+    // axis lock
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r2 = renderPopover();
+    expect(screen.getByTestId('axis-lock-toggle').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByTestId('axis-lock-toggle'));
+    expect(pivot()?.axisLocked).toBe(true);
+    r2.unmount();
+
+    // angle limit: enable, then edit min/max
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r3 = renderPopover();
+    fireEvent.click(screen.getByTestId('angle-limit-toggle'));
+    expect(pivot()?.angleLimit).toMatchObject({ memberA: 'L1', memberB: 'L2' });
+    r3.unmount();
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    const r4 = renderPopover();
+    const minInput = screen.getByTestId('angle-min') as HTMLInputElement;
+    fireEvent.change(minInput, { target: { value: '-30' } });
+    fireEvent.blur(minInput);
+    expect(pivot()?.angleLimit?.minRad).toBeCloseTo((-30 * Math.PI) / 180, 6);
+    r4.unmount();
+    // clear
+    useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
+    renderPopover();
+    fireEvent.click(screen.getByTestId('angle-limit-toggle'));
+    expect(pivot()?.angleLimit).toBeUndefined();
+  });
+
   it('a pivot node shows hinge/spherical controls; spherical writes the joint', () => {
     // materialize a pivot at n2 (hinge ⊥ side panel = +z)
     useEditorStore.setState({ openPopover: { kind: 'joint', nodeId: 'n2' } });
@@ -771,6 +809,36 @@ describe('TransportPill', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(chip);
     expect(useEditorStore.getState().constraintsOn).toBe(false);
+  });
+
+  it('the Rest button and Shift+R return to the rest pose', () => {
+    useEditorStore.setState({
+      playback: {
+        clipName: 'walk',
+        controlClipName: null,
+        playing: true,
+        tS: 2,
+        speed: 1,
+        amplitude: 1,
+      },
+      posePositions: {},
+    });
+    render(<TransportPill />);
+    fireEvent.click(screen.getByTestId('rest-pose'));
+    let pb = useEditorStore.getState().playback;
+    expect(pb.clipName).toBeNull();
+    expect(pb.playing).toBe(false);
+    expect(pb.tS).toBe(0);
+    expect(useEditorStore.getState().posePositions).toBeNull();
+
+    // Shift+R does the same from anywhere
+    useEditorStore.setState({
+      playback: { ...pb, clipName: 'walk', playing: true, tS: 1 },
+    });
+    fireEvent.keyDown(window, { key: 'R', shiftKey: true });
+    pb = useEditorStore.getState().playback;
+    expect(pb.clipName).toBeNull();
+    expect(pb.playing).toBe(false);
   });
 
   it('the inputs popover adds and locks channels', () => {

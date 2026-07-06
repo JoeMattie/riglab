@@ -125,6 +125,11 @@ export const pivotElementSchema = z.object({
   memberIds: z.array(idSchema).min(1),
   /** pairs of member element ids rigidly welded to each other */
   welds: z.array(z.tuple([idSchema, idSchema])),
+  /** hinge only: lock the axis DIRECTION world-fixed to the drawn axis during
+   * simulation, so a free-pivot hinge keeps its members in the axis plane
+   * instead of coning out (opt-in — ungrounded hinges physically carry their
+   * axis with the members). Ignored for spherical joints. */
+  axisLocked: z.boolean().optional(),
   /** relative angle = signed deviation from the straight continuation of
    * memberA through the pivot into memberB (0 = straight, like a knee) */
   angleLimit: z

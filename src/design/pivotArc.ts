@@ -83,6 +83,28 @@ export function pivotArcPoints(
   const axis = unit(pivot.joint.axis);
   if (!axis) return null;
 
+  const inPlane = (d: Vec3): Vec3 | null =>
+    unit(sub(d, { x: axis.x * dot(d, axis), y: axis.y * dot(d, axis), z: axis.z * dot(d, axis) }));
+
+  // ── angle-limited pivot: draw the ALLOWED WEDGE from min to max, anchored
+  //    on the straight continuation of memberA (0 = straight, hinge.ts) ─────
+  if (pivot.angleLimit) {
+    const mDir = memberDir(mech, pivot.angleLimit.memberA, pivot.nodeId, positions);
+    const ref = mDir ? inPlane({ x: -mDir.x, y: -mDir.y, z: -mDir.z }) : null; // continuation
+    if (ref) {
+      const e2 = cross(axis, ref);
+      return sweep(
+        center,
+        ref,
+        e2,
+        radiusM,
+        pivot.angleLimit.minRad,
+        pivot.angleLimit.maxRad,
+        segments,
+      );
+    }
+  }
+
   const groups = weldGroups(pivot);
   if (groups.length < 2) return null;
 
@@ -90,11 +112,8 @@ export function pivotArcPoints(
   const planeDirs = (ids: string[]): Vec3[] =>
     ids.flatMap((id) => {
       const d = memberDir(mech, id, pivot.nodeId, positions);
-      if (!d) return [];
-      const inPlane = unit(
-        sub(d, { x: axis.x * dot(d, axis), y: axis.y * dot(d, axis), z: axis.z * dot(d, axis) }),
-      );
-      return inPlane ? [inPlane] : [];
+      const p = d ? inPlane(d) : null;
+      return p ? [p] : [];
     });
   const dirsA = planeDirs(groups[0]!);
   const dirsB = planeDirs(groups[1]!);
@@ -114,15 +133,28 @@ export function pivotArcPoints(
   const theta = Math.atan2(dot(cross(best.a, best.b), axis), best.cos);
   if (Math.abs(theta) < 1e-6) return null; // collinear — nothing to sweep
   const e2 = cross(axis, best.a);
+  return sweep(center, best.a, e2, radiusM, 0, theta, segments);
+}
+
+/** Circular arc: center + radius·(cos·base + sin·perp), from angle t0 to t1. */
+function sweep(
+  center: Vec3,
+  base: Vec3,
+  perp: Vec3,
+  radiusM: number,
+  t0: number,
+  t1: number,
+  segments: number,
+): Vec3[] {
   const pts: Vec3[] = [];
   for (let i = 0; i <= segments; i++) {
-    const t = (i / segments) * theta;
+    const t = t0 + (i / segments) * (t1 - t0);
     const c = Math.cos(t);
     const s = Math.sin(t);
     pts.push({
-      x: center.x + radiusM * (c * best.a.x + s * e2.x),
-      y: center.y + radiusM * (c * best.a.y + s * e2.y),
-      z: center.z + radiusM * (c * best.a.z + s * e2.z),
+      x: center.x + radiusM * (c * base.x + s * perp.x),
+      y: center.y + radiusM * (c * base.y + s * perp.y),
+      z: center.z + radiusM * (c * base.z + s * perp.z),
     });
   }
   return pts;

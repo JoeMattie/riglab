@@ -11,7 +11,7 @@ import { materialsDbSchema } from './materials';
 import { type Mechanism, mechanismSchema } from './mechanism';
 import { seedMaterialsDb } from './seedMaterials';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** Parametric mannequin dimensions (§7); segment lengths derive from height
  * via standard anthropometry in src/wearer/. */

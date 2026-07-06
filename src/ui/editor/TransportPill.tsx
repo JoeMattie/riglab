@@ -4,7 +4,7 @@
 // so the per-mechanism gravity chip is gone; equilibrium stays explicit.
 // Replaces TransportBar.tsx and ForcesPanel.tsx (the input-channel rows and
 // solver status move into the inputs popover / inline status).
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { InputChannel, UnitsPreference } from '../../schema';
 import { useAppStore } from '../../state/appStore';
 import { addInputChannel, removeInputChannel, setInputChannel } from '../../state/docOps';
@@ -173,6 +173,27 @@ export function TransportPill() {
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [playback.playing, clip, setPlayback]);
+
+  // return to the rest pose: stop playback, clear the clip and any live pose
+  const goToRest = useCallback(() => {
+    setPlayback({ clipName: null, tS: 0, playing: false });
+    setPosePositions(null);
+  }, [setPlayback, setPosePositions]);
+
+  // Shift+R returns to rest pose from anywhere (Joe's request); skipped while
+  // typing and for other modifier chords
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() !== 'r') return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      e.preventDefault();
+      goToRest();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToRest]);
 
   const mech = doc?.mechanism ?? null;
   if (!doc || !mech) return null;
@@ -401,6 +422,21 @@ export function TransportPill() {
             style={{ ...miniButtonStyle, fontWeight: 400 }}
           >
             {playback.clipName ?? 'rest pose'} ▾
+          </button>
+          {/* return to rest pose (also the ⇧R global hotkey, Joe's request) */}
+          <button
+            type="button"
+            data-testid="rest-pose"
+            title="return to rest pose (Shift+R)"
+            onClick={goToRest}
+            disabled={playback.clipName === null && !playback.playing}
+            style={{
+              ...miniButtonStyle,
+              fontWeight: 400,
+              opacity: playback.clipName === null && !playback.playing ? 0.5 : 1,
+            }}
+          >
+            Rest <span style={{ font: `500 9px ${T.mono}`, opacity: 0.65 }}>⇧R</span>
           </button>
           <button
             type="button"

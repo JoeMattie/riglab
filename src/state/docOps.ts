@@ -1200,6 +1200,40 @@ export function setNodePivotJoint(doc: Project, nodeId: string, joint: PivotJoin
   });
 }
 
+/** Lock/unlock a hinge pivot's axis DIRECTION during simulation (joint-menu
+ * toggle, Joe's request). No-op unless a pivot with a hinge joint lives at
+ * the node. `false` clears the flag so the field stays absent. */
+export function setPivotAxisLocked(doc: Project, nodeId: string, locked: boolean): Project {
+  return mapElements(doc, (el) =>
+    el.type === 'pivot' && el.nodeId === nodeId && el.joint.kind === 'hinge'
+      ? { ...el, axisLocked: locked || undefined }
+      : el,
+  );
+}
+
+/** Set or clear a hinge pivot's angle limit (joint-menu min/max, Joe's
+ * request). The limit is measured between the first two members about the
+ * hinge axis (0 = straight continuation). `null` clears it. Radians in;
+ * no-op unless a hinge pivot with ≥2 members lives at the node. */
+export function setPivotAngleLimit(
+  doc: Project,
+  nodeId: string,
+  limit: { minRad: number; maxRad: number } | null,
+): Project {
+  return mapElements(doc, (el) => {
+    if (el.type !== 'pivot' || el.nodeId !== nodeId || el.joint.kind !== 'hinge') return el;
+    if (limit === null) {
+      const { angleLimit: _drop, ...rest } = el;
+      return rest;
+    }
+    const [memberA, memberB] = el.memberIds;
+    if (!memberA || !memberB) return el;
+    const minRad = Math.min(limit.minRad, limit.maxRad);
+    const maxRad = Math.max(limit.minRad, limit.maxRad);
+    return { ...el, angleLimit: { memberA, memberB, minRad, maxRad } };
+  });
+}
+
 /** Disconnect a junction: every incident element beyond the first gets its
  * own copy of the node (same position), and joint elements (pivot/slider) at
  * the node are removed. Skeleton bindings stay on the original node. */

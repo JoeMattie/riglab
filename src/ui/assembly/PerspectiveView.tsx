@@ -348,7 +348,7 @@ export function Scene3D({ scene }: { scene: CompoundScene }) {
           the ortho panels project */}
       {doc?.mechanism.elements.map((el) => {
         if (el.type !== 'pivot') return null;
-        const arc = pivotArcPoints(doc.mechanism, el, scene.positions, 0.035, 20);
+        const arc = pivotArcPoints(doc.mechanism, el, scene.positions, 0.055, 24);
         if (!arc) return null;
         return (
           <Line

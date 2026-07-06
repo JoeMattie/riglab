@@ -846,6 +846,42 @@ class FloorC implements EqConstraint {
   addForces(): void {}
 }
 
+/** Equilibrium twin of kinematic's AxisPinC: keeps a locked-axis hinge's free
+ * virtual on the drawn world axis so the hinge plane is honored under load
+ * (Joe's request). A hard placement — zero mobility, no reported force. */
+class AxisPinC implements EqConstraint {
+  readonly elementId: string;
+  lambda = 0;
+  readonly mobility = 0;
+  constructor(
+    elementId: string,
+    private readonly virtual: Particle,
+    private readonly pivot: Particle,
+    private readonly axis: Vec3,
+    private readonly h: number,
+  ) {
+    this.elementId = elementId;
+  }
+
+  reset(): void {}
+
+  project(): void {
+    if (this.virtual.held) return;
+    this.virtual.x = this.pivot.x + this.axis.x * this.h;
+    this.virtual.y = this.pivot.y + this.axis.y * this.h;
+    this.virtual.z = this.pivot.z + this.axis.z * this.h;
+  }
+
+  violation(): number {
+    const dx = this.virtual.x - (this.pivot.x + this.axis.x * this.h);
+    const dy = this.virtual.y - (this.pivot.y + this.axis.y * this.h);
+    const dz = this.virtual.z - (this.pivot.z + this.axis.z * this.h);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  addForces(): void {}
+}
+
 function build(mechanism: Mechanism, inputs: SolveInputs): Built {
   const density = inputs.linkDensityKgPerM ?? 0;
   const masses = accumulateMasses(mechanism, density, inputs.elementLinearDensityKgPerM ?? {});
@@ -1022,6 +1058,13 @@ function build(mechanism: Mechanism, inputs: SolveInputs): Built {
                 tie.rest,
                 mob(plan.virtualId, tie.nodeId),
               ),
+            );
+          }
+          // honor an explicitly locked hinge axis under load too (opt-in;
+          // pinned/grounded virtuals are already on the frame-fixed axis)
+          if (!plan.pinned && el.axisLocked) {
+            constraints.push(
+              new AxisPinC(el.id, virtual, get(plan.pivotNodeId), plan.axis, plan.h),
             );
           }
         }

@@ -140,3 +140,26 @@ describe('pivotArcPoints', () => {
     for (const p of pts) expect(p.z).toBeCloseTo(0, 9);
   });
 });
+
+describe('pivotArcPoints — angle limit wedge', () => {
+  it('draws the allowed [min,max] wedge anchored on memberA continuation', () => {
+    // memberA along +x (A at +x), memberB along +y; axis +z.
+    // continuation of memberA = pivot − A direction = −(+x) = −x is the θ=0
+    // reference for memberB. A ±45° limit sweeps the wedge about −x.
+    const { m, pivot, pos } = elbow(hingeZ);
+    pivot.angleLimit = { memberA: 'L1', memberB: 'L2', minRad: -Math.PI / 4, maxRad: Math.PI / 4 };
+    const pts = pivotArcPoints(m, pivot, pos, 0.2, 16)!;
+    expect(pts).not.toBeNull();
+    for (const p of pts) {
+      expect(Math.abs(p.z)).toBeCloseTo(0, 9); // stays in the hinge plane
+      expect(Math.hypot(p.x, p.y)).toBeCloseTo(0.2, 9); // on the radius
+    }
+    // endpoints are the min and max: at θ=−45° and θ=+45° about −x
+    const first = pts[0]!;
+    const last = pts[pts.length - 1]!;
+    // −x rotated by ∓45° in the z-plane lands in the third/second quadrant
+    expect(first.x).toBeLessThan(0);
+    expect(last.x).toBeLessThan(0);
+    expect(Math.sign(first.y)).not.toBe(Math.sign(last.y)); // spans across −x
+  });
+});

@@ -49,6 +49,9 @@ export const migrations: Record<number, Migration> = {
   // concatenated; the assembly layer (instances/bindings) dissolves into
   // groups, anchor bindings, and project-level masses.
   6: migrateV6ToV7,
+  // v7 → v8: pivots gained OPTIONAL axisLocked (absent = free hinge axis, the
+  // prior behavior), so v7 documents are already valid v8 documents — stamp.
+  7: (doc) => doc,
 };
 
 // ---------------------------------------------------------------------------

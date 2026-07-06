@@ -15,6 +15,8 @@ import {
   releaseNodeConnection,
   setNodeJoint,
   setNodePivotJoint,
+  setPivotAngleLimit,
+  setPivotAxisLocked,
 } from '../../state/docOps';
 import { useEditorStore } from '../../state/editorStore';
 import { PANEL_FRAME } from '../quad/panelProject';
@@ -287,18 +289,6 @@ export function PivotJointControls({ pivot }: { pivot: PivotElement }) {
     apply({ kind: 'hinge', axis: { x: x / len, y: y / len, z: z / len } });
   };
 
-  const segStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    border: 'none',
-    borderRadius: 6,
-    padding: '3px 0',
-    cursor: 'pointer',
-    fontSize: 11.5,
-    fontFamily: T.sans,
-    background: active ? T.accentTint : T.chip,
-    color: active ? T.accentText : T.muted,
-  });
-
   const isPreset = (j: PivotJoint): boolean =>
     axis !== null &&
     j.kind === 'hinge' &&
@@ -377,11 +367,124 @@ export function PivotJointControls({ pivot }: { pivot: PivotElement }) {
               />
             ))}
           </div>
+          {/* lock the axis DIRECTION world-fixed so the hinge plane is
+              honored during simulation (Joe's request) */}
+          <button
+            type="button"
+            data-testid="axis-lock-toggle"
+            aria-pressed={pivot.axisLocked === true}
+            onClick={() =>
+              updateCurrent((cur) => setPivotAxisLocked(cur, pivot.nodeId, !pivot.axisLocked))
+            }
+            style={{
+              ...segStyle(pivot.axisLocked === true),
+              width: '100%',
+              padding: '4px 0',
+            }}
+          >
+            {pivot.axisLocked ? '🔒 Axis locked' : 'Lock axis'}
+          </button>
+          <AngleLimitControls pivot={pivot} />
         </>
       )}
     </div>
   );
 }
+
+const DEG = 180 / Math.PI;
+
+/** Segmented-control button style shared by the hinge/axis controls. */
+const segStyle = (active: boolean): React.CSSProperties => ({
+  flex: 1,
+  border: 'none',
+  borderRadius: 6,
+  padding: '3px 0',
+  cursor: 'pointer',
+  fontSize: 11.5,
+  fontFamily: T.sans,
+  background: active ? T.accentTint : T.chip,
+  color: active ? T.accentText : T.muted,
+});
+
+/** Min/max hinge-angle limit editor (Joe's request): a toggle that
+ * enables/clears the limit and two degree inputs, measured about the axis
+ * between the pivot's first two members (0 = straight continuation). */
+function AngleLimitControls({ pivot }: { pivot: PivotElement }) {
+  const updateCurrent = useAppStore((s) => s.updateCurrent);
+  const lim = pivot.angleLimit;
+  const [draft, setDraft] = useState<{ min: string; max: string } | null>(null);
+  const shown = draft ?? {
+    min: lim ? String(Math.round(lim.minRad * DEG)) : '-45',
+    max: lim ? String(Math.round(lim.maxRad * DEG)) : '45',
+  };
+
+  const commit = (next: { min: string; max: string }) => {
+    setDraft(null);
+    const min = Number.parseFloat(next.min);
+    const max = Number.parseFloat(next.max);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+    updateCurrent((cur) =>
+      setPivotAngleLimit(cur, pivot.nodeId, { minRad: min / DEG, maxRad: max / DEG }),
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <button
+        type="button"
+        data-testid="angle-limit-toggle"
+        aria-pressed={lim !== undefined}
+        onClick={() =>
+          updateCurrent((cur) =>
+            lim
+              ? setPivotAngleLimit(cur, pivot.nodeId, null)
+              : setPivotAngleLimit(cur, pivot.nodeId, {
+                  minRad: -45 / DEG,
+                  maxRad: 45 / DEG,
+                }),
+          )
+        }
+        style={{ ...segStyle(lim !== undefined), width: '100%', padding: '4px 0' }}
+      >
+        {lim ? 'Angle limited' : 'Limit angle'}
+      </button>
+      {lim && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 11, color: T.muted }}>min</span>
+          <input
+            data-testid="angle-min"
+            value={shown.min}
+            onChange={(e) => setDraft({ ...shown, min: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && commit({ ...shown, min: e.currentTarget.value })}
+            onBlur={(e) => commit({ ...shown, min: e.target.value })}
+            style={angleInputStyle}
+          />
+          <span style={{ fontSize: 11, color: T.muted }}>max</span>
+          <input
+            data-testid="angle-max"
+            value={shown.max}
+            onChange={(e) => setDraft({ ...shown, max: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && commit({ ...shown, max: e.currentTarget.value })}
+            onBlur={(e) => commit({ ...shown, max: e.target.value })}
+            style={angleInputStyle}
+          />
+          <span style={{ fontSize: 11, color: T.muted }}>°</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const angleInputStyle: React.CSSProperties = {
+  width: 0,
+  flex: 1,
+  border: `1px solid ${T.border}`,
+  borderRadius: 5,
+  padding: '2px 4px',
+  font: `500 11.5px ${T.mono}`,
+  color: T.text,
+  background: T.raised,
+};
 
 /** The combined joint menu (Joe's request): attachment state on top, joint
  * types on the left, the pivot's hinge controls and the realization picker

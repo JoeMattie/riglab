@@ -209,10 +209,10 @@ function hingeAxis(pivot: PivotElement): { x: number; y: number; z: number } {
 }
 
 describe('v6 → v7 migration', () => {
-  it('migrates the full fixture chain 1→7 into a valid compound project', () => {
+  it('migrates the full fixture chain 1→latest into a valid compound project', () => {
     // migrateToLatest validates against projectSchema and throws on failure
     const migrated = migrateToLatest(fixtureProjectV1());
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.mechanism.id).toBe('fixture-project-mechanism');
     expect(migrated.mechanism.name).toBe('Fixture');
     // instance-node attachment binding unified n1@inst-2 into n7@inst-1

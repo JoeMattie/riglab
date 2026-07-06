@@ -2535,3 +2535,30 @@ pretensionN. A green midpoint handle (shown only for a single selected
 elastic) scrubs along the A→B axis — toward B lengthens rest (less tension),
 toward A shortens it — with a live tension readout. Covered by docOps tests
 (setElasticRestLength / elasticRestEffM) and a scripted built-app check.
+
+### DECISION: opt-in hinge axis lock, pivot angle limits, rest-pose hotkey (2026-07-06)
+Three related pivot/transport requests from Joe.
+
+**Axis lock honored in simulation.** A free-pivot hinge previously coned out
+of its plane during a drag/settle (the virtual axis particle is free; only
+GROUNDED hinges pinned the axis). A blanket world-fix broke legitimate
+out-of-plane creature motion (the splayed-legs walk is genuinely 3D), so the
+lock is OPT-IN: PivotElement gains `axisLocked?: boolean` (schemaVersion
+7→8, no-op migration; examples regenerated). When set, a new `AxisPinC`
+(both kinematic and equilibrium solvers) keeps the free virtual on the drawn
+world axis so the members stay in its plane. A "Lock axis" toggle sits in the
+joint menu's hinge controls.
+
+**Angle limits in the joint menu + on the arc.** The solver already enforced
+`angleLimit` (AngleLimitC) — the gap was UI. The joint menu gains a "Limit
+angle" toggle and min/max degree inputs (setPivotAngleLimit, measured between
+the pivot's first two members, 0 = straight). pivotArcPoints, when a limit is
+set, draws the ALLOWED WEDGE from min to max anchored on memberA's
+continuation instead of the current member-to-member angle — so the arc shows
+the constraint. Arcs are also larger (2D 28px, 3D 0.055 m).
+
+**Shift+R → rest pose.** A global Shift+R (skipped while typing) stops
+playback and returns to the rest pose, with a "Rest ⇧R" button beside the
+clip/pose selector in the transport pill (goToRest = clear clip + tS0 + stop
++ drop the live pose). ToolPill already ignores Shift chords, so R (rope)
+doesn't collide.

@@ -319,6 +319,44 @@ class DragC {
   }
 }
 
+/** Axis-direction lock for a hinge with an explicitly-set axis: keeps the
+ * virtual axis particle at pivot + drawnAxis·h in WORLD space (co-moving with
+ * the pivot), so the members rotate only about the drawn axis direction
+ * instead of the axis coning out of plane. Honors a "locked axis" during
+ * simulation (Joe's request) without grounding the pivot. Weight-0 (pinned)
+ * virtuals are already placed there by hingePlan; this covers the free case. */
+class AxisPinC implements KConstraint {
+  readonly elementId: string;
+  readonly mobilityEqualities = 0;
+  constructor(
+    elementId: string,
+    private readonly virtual: P,
+    private readonly pivot: P,
+    private readonly axis: Vec3,
+    private readonly h: number,
+  ) {
+    this.elementId = elementId;
+  }
+
+  project(): void {
+    if (this.virtual.w === 0) return;
+    this.virtual.x = this.pivot.x + this.axis.x * this.h;
+    this.virtual.y = this.pivot.y + this.axis.y * this.h;
+    this.virtual.z = this.pivot.z + this.axis.z * this.h;
+  }
+
+  violation(): number {
+    const dx = this.virtual.x - (this.pivot.x + this.axis.x * this.h);
+    const dy = this.virtual.y - (this.pivot.y + this.axis.y * this.h);
+    const dz = this.virtual.z - (this.pivot.z + this.axis.z * this.h);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  parts(): P[] {
+    return [this.virtual, this.pivot];
+  }
+}
+
 /** Transient shift-drag plane lock (SolveInputs.planeLocks): holds a node on
  * a view plane while the geometry resolves. It rides WITH an island's real
  * constraints — projected in the drag loop and the settle, appended after
@@ -500,6 +538,17 @@ export function solveKinematic(mechanism: Mechanism, inputs: SolveInputs): Solve
                 tie.rest,
                 mob(plan.virtualId, tie.nodeId),
               ),
+            );
+          }
+          // honor an explicitly LOCKED axis during simulation: keep the free
+          // virtual on the drawn world axis so the members stay in its plane
+          // instead of coning out (Joe's request). Opt-in — an ungrounded
+          // hinge physically carries its axis with the members, which the
+          // creature rigs rely on. Pinned (grounded) virtuals are already on
+          // the frame-fixed axis via hingePlan.
+          if (!plan.pinned && el.axisLocked) {
+            constraints.push(
+              new AxisPinC(el.id, virtual, get(plan.pivotNodeId), plan.axis, plan.h),
             );
           }
           // angle limits are hinge-only (measured about the axis)
