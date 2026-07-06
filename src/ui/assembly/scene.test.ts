@@ -10,6 +10,9 @@ import {
   mannequinTubes,
   mechanismPrimitives,
   mechanismSegments,
+  PACK_FRAME_RADIUS_M,
+  packFrameSegments,
+  packFrameTubes,
 } from './scene';
 
 describe('elementPolylines', () => {
@@ -79,6 +82,39 @@ describe('mechanismSegments + mannequinBones', () => {
     const tubes = mannequinTubes(frame);
     expect(tubes).toHaveLength(mannequinBones(frame).length);
     for (const t of tubes) expect(t.radiusM).toBe(MANNEQUIN_RADIUS_M);
+  });
+
+  it('draws the pack frame: a closed hip rectangle plus two shoulder rails', () => {
+    const frame = computeSkeleton(
+      { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 },
+      REST_POSE,
+    );
+    const segs = packFrameSegments(frame);
+    expect(segs).toHaveLength(6);
+    const A = frame.anchors;
+    // the four rectangle edges chain front-L → front-R → back-R → back-L → front-L
+    expect(segs.slice(0, 4)).toEqual([
+      [A.hipRectFrontL, A.hipRectFrontR],
+      [A.hipRectFrontR, A.hipRectBackR],
+      [A.hipRectBackR, A.hipRectBackL],
+      [A.hipRectBackL, A.hipRectFrontL],
+    ]);
+    // back rails run from the back corners up to the shoulders
+    expect(segs[4]).toEqual([A.hipRectBackL, A.shoulderL]);
+    expect(segs[5]).toEqual([A.hipRectBackR, A.shoulderR]);
+  });
+
+  it('renders the pack frame as tubes slimmer than the mannequin bones', () => {
+    const frame = computeSkeleton(
+      { heightM: 1.75, shoulderWidthM: 0.46, hipWidthM: 0.36 },
+      REST_POSE,
+    );
+    const tubes = packFrameTubes(frame);
+    expect(tubes).toHaveLength(packFrameSegments(frame).length);
+    for (const t of tubes) {
+      expect(t.radiusM).toBe(PACK_FRAME_RADIUS_M);
+      expect(t.radiusM).toBeLessThan(MANNEQUIN_RADIUS_M);
+    }
   });
 
   it('adds sketch-figure balls: head + 8 joints + 2 fists + 2 feet', () => {

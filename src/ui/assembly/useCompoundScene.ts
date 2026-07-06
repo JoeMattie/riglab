@@ -10,7 +10,7 @@ import { useAppStore } from '../../state/appStore';
 import { useEditorStore } from '../../state/editorStore';
 import { computeSkeleton, getClip, headRadiusM, REST_POSE, samplePose } from '../../wearer';
 import { pickRenderPositions } from '../editor/forces';
-import { mannequinBalls, mannequinTubes, mechanismPrimitives } from './scene';
+import { mannequinBalls, mannequinTubes, mechanismPrimitives, packFrameTubes } from './scene';
 
 export function useCompoundScene(pivot: BalanceQuery) {
   const project = useAppStore((s) => s.current);
@@ -41,6 +41,7 @@ export function useCompoundScene(pivot: BalanceQuery) {
     const prims = mechanismPrimitives(mech.elements, positions, project.materials.pipes);
     const mannequin = mannequinTubes(frame);
     const mannequinJoints = mannequinBalls(frame, headRadiusM(project.wearer));
+    const packFrame = packFrameTubes(frame);
 
     // mounted controls (§4.4) ride their attach point — a yoke on handR
     // follows the hand through the walk clip
@@ -63,6 +64,7 @@ export function useCompoundScene(pivot: BalanceQuery) {
       frame,
       mannequin,
       mannequinJoints,
+      packFrame,
       prims,
       controlMounts,
       masses: inventory.masses,

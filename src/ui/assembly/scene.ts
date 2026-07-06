@@ -188,6 +188,35 @@ export function mannequinBalls(frame: SkeletonFrame, headRadiusM: number): BallP
   ];
 }
 
+/** Schematic pack frame rails are slimmer than mannequin bones so the frame
+ * reads as gear on the figure, not another limb. */
+export const PACK_FRAME_RADIUS_M = 0.011;
+
+/** Schematic pack frame in world space: the hip rectangle plus back rails up
+ * to the shoulders — the same strokes the 2D silhouette draws in its
+ * underlay (projection.ts), so both renders read as the same gear. */
+export function packFrameSegments(frame: SkeletonFrame): Segment[] {
+  const A = frame.anchors;
+  return [
+    [A.hipRectFrontL, A.hipRectFrontR],
+    [A.hipRectFrontR, A.hipRectBackR],
+    [A.hipRectBackR, A.hipRectBackL],
+    [A.hipRectBackL, A.hipRectFrontL],
+    [A.hipRectBackL, A.shoulderL],
+    [A.hipRectBackR, A.shoulderR],
+  ];
+}
+
+/** Pack frame rails as capsule tubes for the perspective panel. */
+export function packFrameTubes(frame: SkeletonFrame): TubePrim[] {
+  return packFrameSegments(frame).map(([a, b]) => ({
+    a,
+    b,
+    radiusM: PACK_FRAME_RADIUS_M,
+    style: 'sketch' as const,
+  }));
+}
+
 /** Wearer mannequin bones in world space (§7 stick figure). */
 export function mannequinBones(frame: SkeletonFrame): Segment[] {
   const P = frame.points;

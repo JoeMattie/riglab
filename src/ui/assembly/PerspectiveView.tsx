@@ -309,6 +309,9 @@ export function Scene3D({ scene }: { scene: CompoundScene }) {
 
       {/* wearer mannequin (capsules, not 1-px lines — §8.3 visibility) */}
       <Tubes tubes={scene.mannequin} color={C.mannequin} />
+      {/* schematic pack frame: hip rectangle + back rails, same strokes as
+          the 2D underlay so anchored geometry reads against its mount */}
+      <Tubes tubes={scene.packFrame} color={C.mannequin} />
       {/* sketch-figure joints: head ball, ring joints, fists, feet */}
       {scene.mannequinJoints.map((b, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: primitives are positional per pose
