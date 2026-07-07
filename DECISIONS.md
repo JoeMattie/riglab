@@ -2669,3 +2669,21 @@ Both solve/converge at rest (DOF 24 either way — direction doesn't change DOF;
 the difference is behavioural under drag). NOT auto-grounding the hip: that
 restructures Joe's wearer bindings and is his modeling decision. The guard is
 surfaced as a reviewed one-click proposal in the UI, never a silent repair.
+
+### DECISION: removed the wall-clock perf test — it was blocking every deploy
+(2026-07-06.) `src/examples/perf.test.ts` asserted median-of-60 frame time
+`< 16 ms` on the example solves. Its own earlier entry above already recorded
+that this "cannot be made CI-stable": under parallel-test-worker contention on
+the shared GitHub runner the median lands at ~16.0–16.1 ms, so `npm test`
+failed on every push to main, and because the `deploy` job `needs: ci`, the
+Cloudflare Pages deploy never ran (main sat un-deployed across several
+commits). The prior entry left this as an open review item for Joe; his call
+(2026-07-06) is to remove the test outright rather than keep a flaky gate,
+widen a meaningless threshold, or isolate a pool. Rationale: it is a
+wall-clock micro-benchmark, not solver-correctness math — it verifies nothing
+about behavior and is inherently non-deterministic on shared CI hardware,
+which the CLAUDE.md "CI green at every commit" rule cannot tolerate. Solver
+correctness stays covered by the acceptance suite; perf is now tracked as a
+manual measurement (the numbers already recorded in this file), not an
+automated gate. If a perf regression guard is wanted later, it should run in
+an isolated single-worker pool with a headroom'd budget, off the deploy path.
